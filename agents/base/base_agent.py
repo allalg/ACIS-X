@@ -45,6 +45,8 @@ class BaseAgent(ABC):
     REGISTRY_TOPIC = "acis.registry"
     HEARTBEAT_INTERVAL_SECONDS = 30
     OVERLOAD_COOLDOWN_SECONDS = 60
+    LAG_DETECTION_THRESHOLD = 5000
+    LAG_DETECTION_COOLDOWN_SECONDS = 120
 
     def __init__(
         self,
@@ -112,6 +114,15 @@ class BaseAgent(ABC):
 
         # Overload event cooldown tracking
         self._last_overload_event: Optional[datetime] = None
+
+        # Lag detection tracking
+        self._partition_offsets: Dict[str, Dict[int, int]] = {}  # topic -> {partition -> offset}
+        self._partition_high_watermarks: Dict[str, Dict[int, int]] = {}  # topic -> {partition -> high_watermark}
+        self._last_lag_detection_event: Optional[datetime] = None
+
+        # Latency tracking (circular buffer of last 100 latencies)
+        self._latencies_ms: List[float] = []
+        self._max_latency_samples = 100
 
     @staticmethod
     def _generate_instance_id(agent_name: str) -> str:
@@ -249,6 +260,29 @@ class BaseAgent(ABC):
     def _handle_message(self, message: Any) -> None:
         """Handle a single Kafka message with validation and idempotency."""
         try:
+            # Extract message metadata for lag detection
+            topic = getattr(message, 'topic', None)
+            partition = getattr(message, 'partition', None)
+            offset = getattr(message, 'offset', None)
+            high_watermark = getattr(message, 'high_watermark', None)
+
+            # Track offsets for lag calculation
+            if topic and partition is not None and offset is not None:
+                with self._metrics_lock:
+                    if topic not in self._partition_offsets:
+                        self._partition_offsets[topic] = {}
+                    self._partition_offsets[topic][partition] = offset
+
+                    if high_watermark is not None:
+                        if topic not in self._partition_high_watermarks:
+                            self._partition_high_watermarks[topic] = {}
+                        self._partition_high_watermarks[topic][partition] = high_watermark
+
+                        # Calculate lag for this partition
+                        lag = high_watermark - offset
+                        if lag > self.LAG_DETECTION_THRESHOLD:
+                            self._check_and_emit_lag_detected(topic, partition, lag)
+
             # Parse and validate event
             event = self._validate_event(message.value)
             if event is None:
@@ -263,6 +297,10 @@ class BaseAgent(ABC):
             # Set correlation context
             self._current_correlation_id = event.correlation_id
 
+            # Track latency (event age)
+            processing_start = datetime.utcnow()
+            latency_ms = (processing_start - event.event_time).total_seconds() * 1000
+
             # Process with retry logic
             retry_count = 0
             while retry_count <= self.max_retries:
@@ -271,6 +309,10 @@ class BaseAgent(ABC):
                     self._mark_processed(event.event_id)
                     with self._metrics_lock:
                         self._events_processed += 1
+                        # Track latency
+                        self._latencies_ms.append(latency_ms)
+                        if len(self._latencies_ms) > self._max_latency_samples:
+                            self._latencies_ms.pop(0)
                     self.kafka_client.commit(message)
                     break
 
@@ -474,6 +516,19 @@ class BaseAgent(ABC):
         with self._metrics_lock:
             self._queue_depth = depth
 
+    def _get_events_per_second(self) -> Optional[float]:
+        """Calculate events per second throughput."""
+        uptime = self._get_uptime_seconds()
+        if uptime == 0:
+            return None
+        return round(self._events_processed / uptime, 2)
+
+    def _get_latency_ms(self) -> Optional[float]:
+        """Get average latency from recent samples."""
+        if not self._latencies_ms:
+            return None
+        return round(sum(self._latencies_ms) / len(self._latencies_ms), 2)
+
     def collect_metrics(self) -> Dict[str, Any]:
         """Collect all current metrics."""
         with self._metrics_lock:
@@ -487,6 +542,8 @@ class BaseAgent(ABC):
                 "uptime_seconds": self._get_uptime_seconds(),
                 "error_count": self._error_count,
                 "restart_count": self._restart_count,
+                "events_per_second": self._get_events_per_second(),
+                "latency_ms": self._get_latency_ms(),
             }
 
     # -------------------------------------------------------------------------
@@ -532,8 +589,8 @@ class BaseAgent(ABC):
                 "error_count": metrics["error_count"],
                 "restart_count": metrics["restart_count"],
                 "events_processed": metrics["events_processed"],
-                "events_per_second": None,  # Can be calculated over time
-                "latency_ms": None,
+                "events_per_second": metrics["events_per_second"],
+                "latency_ms": metrics["latency_ms"],
                 "uptime_seconds": metrics["uptime_seconds"],
             },
             "replica_count": self.replica_count,
@@ -580,7 +637,8 @@ class BaseAgent(ABC):
             # Throughput metrics
             "events_processed": metrics["events_processed"],
             "events_failed": metrics["events_failed"],
-            "events_per_second": None,  # Can be calculated
+            "events_per_second": metrics["events_per_second"],
+            "latency_ms": metrics["latency_ms"],
 
             # Uptime
             "uptime_seconds": metrics["uptime_seconds"],
@@ -707,6 +765,55 @@ class BaseAgent(ABC):
                 f"Agent {self.agent_name} overloaded: {decision_rule}, "
                 f"recommended action: {recommended_action}"
             )
+
+    def _check_and_emit_lag_detected(
+        self,
+        topic: str,
+        partition: int,
+        lag: int,
+    ) -> None:
+        """Check lag threshold and emit lag.detected event if needed."""
+        # Check cooldown first to prevent event spam
+        now = datetime.utcnow()
+        if self._last_lag_detection_event is not None:
+            elapsed = (now - self._last_lag_detection_event).total_seconds()
+            if elapsed < self.LAG_DETECTION_COOLDOWN_SECONDS:
+                return  # Still in cooldown period
+
+        # Emit lag detected event
+        lag_payload = {
+            "agent_id": self._get_agent_id(),
+            "agent_type": self.agent_type,
+            "agent_name": self.agent_name,
+            "instance_id": self.instance_id,
+            "host": self.host,
+            "topic": topic,
+            "partition": partition,
+            "lag": lag,
+            "threshold": self.LAG_DETECTION_THRESHOLD,
+            "consumer_group": self.group_id,
+            "detected_at": now.isoformat(),
+            "replica_count": self.replica_count,
+            "max_replicas": self.max_replicas,
+            "replica_index": self.replica_index,
+        }
+
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type="lag.detected",
+            entity_id=self.agent_name,
+            payload=lag_payload,
+            correlation_id=None,
+            metadata={"environment": "production"},
+        )
+
+        # Update cooldown timestamp
+        self._last_lag_detection_event = now
+
+        logger.warning(
+            f"Agent {self.agent_name} lag detected: {lag} on {topic}[{partition}] "
+            f"(threshold: {self.LAG_DETECTION_THRESHOLD})"
+        )
 
     # -------------------------------------------------------------------------
     # Registry

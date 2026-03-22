@@ -222,6 +222,10 @@ class AgentSpawnRequestPayload(BaseModel):
     requester: str = Field(..., description="Agent/service that requested spawn")
     priority: str = Field("normal", description="Spawn priority (low, normal, high, critical)")
 
+    # Source agent context (for tracking which agent triggered the spawn)
+    source_agent_id: Optional[str] = Field(None, description="Agent ID that triggered spawn request")
+    source_instance_id: Optional[str] = Field(None, description="Instance ID that triggered spawn request")
+
     # Scaling context
     replica_count: Optional[int] = Field(None, ge=0, description="Current replica count")
     max_replicas: Optional[int] = Field(None, ge=1, description="Maximum allowed replicas")
@@ -703,6 +707,8 @@ def create_spawn_request_event(
     host: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
     priority: str = "normal",
+    source_agent_id: Optional[str] = None,
+    source_instance_id: Optional[str] = None,
     replica_count: Optional[int] = None,
     max_replicas: Optional[int] = None,
     decision_rule: Optional[str] = None,
@@ -722,6 +728,8 @@ def create_spawn_request_event(
         reason=reason,
         requester=event_source,
         priority=priority,
+        source_agent_id=source_agent_id,
+        source_instance_id=source_instance_id,
         replica_count=replica_count,
         max_replicas=max_replicas,
         decision_rule=decision_rule,
