@@ -1,201 +1,121 @@
 """
-SelfHealingAgent - Production-level decision engine for ACIS-X.
+SelfHealingAgent - Event-driven recovery decision agent for ACIS-X.
 
-Monitors agent health across the system and emits command events
-for orchestration actions (restart, scale, spawn, shutdown).
-
-Subscribes to:
-    - acis.system (metrics, overload events)
-    - acis.agent.health (heartbeats, health status)
-    - acis.registry (agent registration/deregistration)
-
-Publishes commands to:
-    - acis.system (agent.restart.requested, agent.spawn.requested,
-                   agent.scale.requested, agent.shutdown.requested)
+Consumes monitoring and registry events, maintains in-memory recovery state,
+and publishes orchestration commands without directly controlling agents.
 """
 
 import logging
 import threading
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import (
-    Event,
-    SystemEventType,
-    RegistryEventType,
     AgentStatus,
+    Event,
+    RegistryEventType,
+    SystemEventType,
     create_restart_request_event,
-    create_spawn_request_event,
     create_scale_request_event,
+    create_spawn_request_event,
 )
 
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# Agent State Tracking
-# =============================================================================
-
 @dataclass
-class AgentState:
-    """Tracks the health and metrics state of a single agent."""
+class AgentRecoveryState:
+    """Tracks recovery-relevant state for one agent instance."""
 
     agent_id: str
     agent_name: str
     agent_type: Optional[str] = None
     instance_id: Optional[str] = None
     host: Optional[str] = None
+    consumer_group: Optional[str] = None
 
-    # Health tracking
-    last_heartbeat: Optional[datetime] = None
     status: str = AgentStatus.HEALTHY.value
     registered: bool = False
-    registered_at: Optional[datetime] = None
+    last_event_at: Optional[datetime] = None
+    last_heartbeat: Optional[datetime] = None
+    last_timeout_at: Optional[datetime] = None
+    last_degraded_at: Optional[datetime] = None
+    last_critical_at: Optional[datetime] = None
+    last_overloaded_at: Optional[datetime] = None
+    last_lag_at: Optional[datetime] = None
 
-    # Metrics
     cpu_percent: Optional[float] = None
     memory_percent: Optional[float] = None
-    error_count: int = 0
-    restart_count: int = 0
     consumer_lag: int = 0
-    queue_depth: int = 0
-    events_processed: int = 0
+    error_count: int = 0
+    latency_ms: Optional[float] = None
+    events_per_second: float = 0.0
 
-    # Replica info
+    replica_index: Optional[int] = None
     replica_count: Optional[int] = None
     max_replicas: Optional[int] = None
-    replica_index: Optional[int] = None
 
-    # Kafka context
-    consumer_group: Optional[str] = None
-    subscribed_topics: List[str] = field(default_factory=list)
+    candidate_fallbacks: List[str] = field(default_factory=list)
 
-    # Decision tracking (prevent duplicate actions)
     last_restart_requested: Optional[datetime] = None
-    last_scale_requested: Optional[datetime] = None
     last_spawn_requested: Optional[datetime] = None
+    last_scale_requested: Optional[datetime] = None
+    last_fallback_selected: Optional[datetime] = None
+    last_recovery_triggered: Optional[datetime] = None
+    last_placement_requested: Optional[datetime] = None
 
-    def update_from_heartbeat(self, payload: Dict[str, Any]) -> None:
-        """Update state from heartbeat event payload."""
-        self.last_heartbeat = datetime.utcnow()
-        self.status = payload.get("status", self.status)
+    def update_identity(self, payload: Dict[str, Any]) -> None:
+        """Refresh agent identity and placement-related metadata."""
         self.agent_type = payload.get("agent_type", self.agent_type)
         self.instance_id = payload.get("instance_id", self.instance_id)
         self.host = payload.get("host", self.host)
-
-        # Update metrics if present
-        metrics = payload.get("metrics", {})
-        if metrics:
-            self.cpu_percent = metrics.get("cpu_percent", self.cpu_percent)
-            self.memory_percent = metrics.get("memory_percent", self.memory_percent)
-            self.error_count = metrics.get("error_count", self.error_count) or 0
-            self.restart_count = metrics.get("restart_count", self.restart_count) or 0
-            self.consumer_lag = metrics.get("consumer_lag", self.consumer_lag) or 0
-            self.queue_depth = metrics.get("queue_depth", self.queue_depth) or 0
-            self.events_processed = metrics.get("events_processed", self.events_processed) or 0
-
-        # Update replica info
+        self.consumer_group = (
+            payload.get("consumer_group")
+            or payload.get("group_id")
+            or self.consumer_group
+        )
+        self.replica_index = payload.get("replica_index", self.replica_index)
         self.replica_count = payload.get("replica_count", self.replica_count)
         self.max_replicas = payload.get("max_replicas", self.max_replicas)
-        self.replica_index = payload.get("replica_index", self.replica_index)
 
-        # Update topics from details
-        details = payload.get("details", {})
-        if details:
-            self.subscribed_topics = details.get("subscribed_topics", self.subscribed_topics)
-            self.consumer_group = details.get("group_id", self.consumer_group)
-
-    def update_from_metrics(self, payload: Dict[str, Any]) -> None:
-        """Update state from metrics.updated event payload."""
-        self.cpu_percent = payload.get("cpu_percent", self.cpu_percent)
-        self.memory_percent = payload.get("memory_percent", self.memory_percent)
-        self.error_count = payload.get("error_count", self.error_count) or 0
-        self.restart_count = payload.get("restart_count", self.restart_count) or 0
-        self.consumer_lag = payload.get("consumer_lag", self.consumer_lag) or 0
-        self.queue_depth = payload.get("queue_depth", self.queue_depth) or 0
-        self.events_processed = payload.get("events_processed", self.events_processed) or 0
-
-        self.replica_count = payload.get("replica_count", self.replica_count)
-        self.max_replicas = payload.get("max_replicas", self.max_replicas)
-        self.replica_index = payload.get("replica_index", self.replica_index)
-        self.consumer_group = payload.get("consumer_group", self.consumer_group)
-
-    def update_from_registry(self, payload: Dict[str, Any], registered: bool) -> None:
-        """Update state from registry event payload."""
-        self.registered = registered
-        self.agent_type = payload.get("agent_type", self.agent_type)
-        self.instance_id = payload.get("instance_id", self.instance_id)
-        self.host = payload.get("host", self.host)
-        self.consumer_group = payload.get("group_id", self.consumer_group)
-
-        if registered:
-            self.registered_at = datetime.utcnow()
-
-        topics = payload.get("topics", {})
-        if topics and isinstance(topics, dict):
-            self.subscribed_topics = topics.get("consumes", self.subscribed_topics)
-
-        self.replica_count = payload.get("replica_count", self.replica_count)
-        self.max_replicas = payload.get("max_replicas", self.max_replicas)
-        self.replica_index = payload.get("replica_index", self.replica_index)
-
-
-# =============================================================================
-# SelfHealingAgent
-# =============================================================================
 
 class SelfHealingAgent(BaseAgent):
     """
-    Production-level self-healing agent for ACIS-X.
+    Recovery decision engine for ACIS-X.
 
-    Decision rules:
-        1. Missing heartbeat (timeout) → restart
-        2. Consumer lag > threshold → scale
-        3. CPU > 90% → scale
-        4. Error count > threshold → restart
-        5. Restart count > 3 → spawn new instance
-        6. Replica count < max_replicas AND lag high → spawn
-        7. Registry missing expected agent → spawn
+    Inputs:
+    - agent.health.degraded
+    - agent.health.critical
+    - agent.overloaded
+    - lag.detected
+    - agent.timeout
+    - registry agent lifecycle updates
 
-    Publishes command events to acis.system:
-        - agent.restart.requested
-        - agent.spawn.requested
-        - agent.scale.requested
-        - agent.shutdown.requested
+    Outputs:
+    - agent.restart.requested
+    - agent.spawn.requested
+    - agent.scale.requested
+    - placement.requested
+    - recovery.triggered
+    - fallback.agent.selected
     """
 
-    # -------------------------------------------------------------------------
-    # Configuration thresholds
-    # -------------------------------------------------------------------------
-
-    # Heartbeat timeout (seconds) - rule 1
-    HEARTBEAT_TIMEOUT_SECONDS = 90
-
-    # Consumer lag threshold - rules 2 and 6
-    LAG_THRESHOLD = 10000
-
-    # CPU threshold - rule 3
-    CPU_THRESHOLD = 90.0
-
-    # Error count threshold - rule 4
-    ERROR_THRESHOLD = 10
-
-    # Max restarts before spawning new - rule 5
-    MAX_RESTART_COUNT = 3
-
-    # Cooldown periods to prevent event spam (seconds)
+    DECISION_INTERVAL_SECONDS = 15
     RESTART_COOLDOWN_SECONDS = 120
-    SCALE_COOLDOWN_SECONDS = 300
-    SPAWN_COOLDOWN_SECONDS = 300
+    SPAWN_COOLDOWN_SECONDS = 180
+    SCALE_COOLDOWN_SECONDS = 180
+    FALLBACK_COOLDOWN_SECONDS = 120
+    RECOVERY_EVENT_COOLDOWN_SECONDS = 60
+    PLACEMENT_REQUEST_COOLDOWN_SECONDS = 180
 
-    # Decision evaluation interval (seconds)
-    DECISION_INTERVAL_SECONDS = 30
-
-    # Minimum time an agent must be registered before decisions apply
-    MIN_REGISTRATION_AGE_SECONDS = 60
+    DEGRADED_RESTART_DELAY_SECONDS = 30
+    LAG_SCALE_THRESHOLD = 5000
+    CRITICAL_LAG_THRESHOLD = 10000
+    SCALE_UP_STEP = 1
+    DEFAULT_MAX_REPLICAS = 3
+    MAX_RESTARTS_BEFORE_SPAWN = 2
 
     def __init__(
         self,
@@ -203,29 +123,19 @@ class SelfHealingAgent(BaseAgent):
         agent_version: str = "1.0.0",
         instance_id: Optional[str] = None,
         host: Optional[str] = None,
-        expected_agents: Optional[Set[str]] = None,
+        fallback_agents: Optional[Dict[str, List[str]]] = None,
     ):
-        """
-        Initialize SelfHealingAgent.
-
-        Args:
-            kafka_client: Kafka client for pub/sub
-            agent_version: Version string
-            instance_id: Optional instance ID (auto-generated if not provided)
-            host: Optional host identifier
-            expected_agents: Set of agent names that should always be running (for rule 7)
-        """
         super().__init__(
             agent_name="SelfHealingAgent",
             agent_version=agent_version,
             group_id="self-healing-group",
             subscribed_topics=["acis.system", "acis.agent.health", "acis.registry"],
             capabilities=[
-                "health_monitoring",
-                "decision_engine",
-                "restart_orchestration",
-                "scale_orchestration",
-                "spawn_orchestration",
+                "recovery_decisioning",
+                "restart_decisioning",
+                "spawn_decisioning",
+                "scale_decisioning",
+                "fallback_selection",
             ],
             kafka_client=kafka_client,
             agent_type="SelfHealingAgent",
@@ -233,569 +143,326 @@ class SelfHealingAgent(BaseAgent):
             host=host,
         )
 
-        # Agent state tracking: agent_id -> AgentState (keyed by agent_id for replica support)
-        self.agent_state: Dict[str, AgentState] = {}
+        self._states: Dict[str, AgentRecoveryState] = {}
         self._state_lock = threading.Lock()
-
-        # Expected agents that should always be running (rule 7)
-        self.expected_agents: Set[str] = expected_agents or set()
-
-        # Decision loop thread
         self._decision_thread: Optional[threading.Thread] = None
-
-        # Track our own actions to avoid acting on self
-        self._self_agent_names = {"SelfHealingAgent", self.agent_name}
-
-    # -------------------------------------------------------------------------
-    # BaseAgent abstract methods
-    # -------------------------------------------------------------------------
+        self._fallback_agents = fallback_agents or {}
 
     def subscribe(self) -> List[str]:
-        """Return topics to subscribe to."""
+        """Return subscribed Kafka topics."""
         return ["acis.system", "acis.agent.health", "acis.registry"]
 
-    def process_event(self, event: Event) -> None:
-        """Process incoming events and update agent state."""
-        event_type = event.event_type
-        payload = event.payload
-
-        # Route event to appropriate handler
-        if event_type == "agent.heartbeat":
-            self._handle_heartbeat(event)
-
-        elif event_type == "metrics.updated":
-            self._handle_metrics_updated(event)
-
-        elif event_type == "agent.overloaded":
-            self._handle_overloaded(event)
-
-        elif event_type == "registry.agent.registered":
-            self._handle_agent_registered(event)
-
-        elif event_type == "registry.agent.deregistered":
-            self._handle_agent_deregistered(event)
-
-        elif event_type == "agent.health.degraded":
-            self._handle_health_degraded(event)
-
-        elif event_type == "agent.health.critical":
-            self._handle_health_critical(event)
-
-        elif event_type == "agent.error":
-            self._handle_agent_error(event)
-
-        elif event_type == "agent.restart.completed":
-            self._handle_restart_completed(event)
-
-        # Ignore our own command events
-        elif event_type in (
-            "agent.restart.requested",
-            "agent.spawn.requested",
-            "agent.scale.requested",
-            "agent.shutdown.requested",
-        ):
-            pass  # Ignore command events we may have published
-
-        else:
-            logger.debug(f"Unhandled event type: {event_type}")
-
-    # -------------------------------------------------------------------------
-    # Lifecycle overrides
-    # -------------------------------------------------------------------------
-
     def start(self) -> None:
-        """Start agent and decision loop."""
+        """Start agent and periodic evaluation loop."""
         super().start()
-
-        # Start decision evaluation loop
         self._decision_thread = threading.Thread(
             target=self._decision_loop,
             daemon=True,
-            name=f"{self.agent_name}-decision-loop"
+            name=f"{self.agent_name}-decision",
         )
         self._decision_thread.start()
 
-        logger.info("SelfHealingAgent decision loop started")
-
     def stop(self) -> None:
-        """Stop agent and decision loop."""
+        """Stop agent and periodic evaluation loop."""
         super().stop()
-
         if self._decision_thread and self._decision_thread.is_alive():
             self._decision_thread.join(timeout=5)
 
-        logger.info("SelfHealingAgent stopped")
-
-    # -------------------------------------------------------------------------
-    # Event handlers
-    # -------------------------------------------------------------------------
-
-    def _handle_heartbeat(self, event: Event) -> None:
-        """Handle agent.heartbeat events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        # Skip self
-        if agent_name in self._self_agent_names:
+    def process_event(self, event: Event) -> None:
+        """Consume monitoring and registry events and emit recovery decisions."""
+        if event.event_source == self.agent_name:
             return
 
-        # Must have agent_id for proper replica tracking
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
+        event_type = event.event_type
 
-        with self._state_lock:
-            if agent_id not in self.agent_state:
-                self.agent_state[agent_id] = AgentState(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                )
-
-            self.agent_state[agent_id].update_from_heartbeat(payload)
-
-        logger.debug(f"Heartbeat received from {agent_name} (id: {agent_id})")
-
-    def _handle_metrics_updated(self, event: Event) -> None:
-        """Handle metrics.updated events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        # Skip self
-        if agent_name in self._self_agent_names:
-            return
-
-        # Must have agent_id for proper replica tracking
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id not in self.agent_state:
-                self.agent_state[agent_id] = AgentState(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                )
-
-            self.agent_state[agent_id].update_from_metrics(payload)
-
-        logger.debug(f"Metrics updated for {agent_name} (id: {agent_id})")
-
-    def _handle_overloaded(self, event: Event) -> None:
-        """Handle agent.overloaded events - may trigger immediate scale."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        # Skip self
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id not in self.agent_state:
-                self.agent_state[agent_id] = AgentState(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                )
-
-            state = self.agent_state[agent_id]
-            state.status = AgentStatus.OVERLOADED.value
-            state.cpu_percent = payload.get("cpu_percent", state.cpu_percent)
-            state.memory_percent = payload.get("memory_percent", state.memory_percent)
-            state.consumer_lag = payload.get("consumer_lag", state.consumer_lag) or 0
-            state.queue_depth = payload.get("queue_depth", state.queue_depth) or 0
-
-        logger.warning(f"Agent {agent_name} (id: {agent_id}) reported overloaded")
-
-        # Evaluate scaling decision immediately
-        self._evaluate_agent(agent_id)
-
-    def _handle_agent_registered(self, event: Event) -> None:
-        """Handle registry.agent.registered events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        # Skip self
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id not in self.agent_state:
-                self.agent_state[agent_id] = AgentState(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                )
-
-            self.agent_state[agent_id].update_from_registry(payload, registered=True)
-
-        logger.info(f"Agent {agent_name} (id: {agent_id}) registered")
-
-    def _handle_agent_deregistered(self, event: Event) -> None:
-        """Handle registry.agent.deregistered events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        # Skip self
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id in self.agent_state:
-                self.agent_state[agent_id].registered = False
-                self.agent_state[agent_id].status = AgentStatus.STOPPED.value
-
-        logger.info(f"Agent {agent_name} (id: {agent_id}) deregistered")
-
-        # Check if this is an expected agent that needs respawning (rule 7)
-        if agent_name in self.expected_agents:
-            self._evaluate_spawn_missing_agent(agent_name)
-
-    def _handle_health_degraded(self, event: Event) -> None:
-        """Handle agent.health.degraded events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id in self.agent_state:
-                self.agent_state[agent_id].status = AgentStatus.DEGRADED.value
-
-        logger.warning(f"Agent {agent_name} (id: {agent_id}) health degraded")
-
-    def _handle_health_critical(self, event: Event) -> None:
-        """Handle agent.health.critical events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id in self.agent_state:
-                self.agent_state[agent_id].status = AgentStatus.CRITICAL.value
-
-        logger.error(f"Agent {agent_name} (id: {agent_id}) health critical")
-
-        # Evaluate restart immediately
-        self._evaluate_agent(agent_id)
-
-    def _handle_agent_error(self, event: Event) -> None:
-        """Handle agent.error events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id in self.agent_state:
-                self.agent_state[agent_id].status = AgentStatus.ERROR.value
-                self.agent_state[agent_id].error_count += 1
-
-        logger.error(f"Agent {agent_name} (id: {agent_id}) error event received")
-
-    def _handle_restart_completed(self, event: Event) -> None:
-        """Handle agent.restart.completed events."""
-        payload = event.payload
-        agent_id = payload.get("agent_id")
-        agent_name = payload.get("agent_name", event.entity_id)
-
-        if agent_name in self._self_agent_names:
-            return
-
-        if not agent_id:
-            agent_id = f"agent_{agent_name}"
-
-        with self._state_lock:
-            if agent_id in self.agent_state:
-                state = self.agent_state[agent_id]
-                state.restart_count = payload.get("restart_count", state.restart_count + 1)
-                state.status = payload.get("status", AgentStatus.HEALTHY.value)
-
-        logger.info(f"Agent {agent_name} (id: {agent_id}) restart completed")
-
-    # -------------------------------------------------------------------------
-    # Decision loop
-    # -------------------------------------------------------------------------
+        if event_type == SystemEventType.AGENT_HEALTH_DEGRADED.value:
+            self._handle_degraded(event)
+        elif event_type == SystemEventType.AGENT_HEALTH_CRITICAL.value:
+            self._handle_critical(event)
+        elif event_type == SystemEventType.AGENT_OVERLOADED.value:
+            self._handle_overloaded(event)
+        elif event_type == SystemEventType.LAG_DETECTED.value:
+            self._handle_lag_detected(event)
+        elif event_type == SystemEventType.AGENT_TIMEOUT.value:
+            self._handle_timeout(event)
+        elif event_type in (
+            RegistryEventType.AGENT_REGISTERED.value,
+            RegistryEventType.AGENT_UPDATED.value,
+        ):
+            self._handle_registry_upsert(event)
+        elif event_type == RegistryEventType.AGENT_DEREGISTERED.value:
+            self._handle_registry_removed(event)
 
     def _decision_loop(self) -> None:
-        """Periodic decision evaluation for all tracked agents."""
-        logger.info("Decision loop started")
+        """Evaluate tracked states periodically for follow-up recovery actions."""
+        logger.info("SelfHealing decision loop started")
 
         while self._running:
             try:
-                self._evaluate_all_agents()
-                self._check_expected_agents()
-            except Exception as e:
-                logger.error(f"Error in decision loop: {e}")
+                self._evaluate_all_states()
+            except Exception as exc:
+                logger.error(f"SelfHealing decision loop error: {exc}")
 
-            # Wait for next evaluation cycle
             self._shutdown_event.wait(timeout=self.DECISION_INTERVAL_SECONDS)
 
-        logger.info("Decision loop stopped")
+        logger.info("SelfHealing decision loop stopped")
 
-    def _evaluate_all_agents(self) -> None:
-        """Evaluate decision rules for all tracked agents."""
+    def _handle_degraded(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
         with self._state_lock:
-            agent_ids = list(self.agent_state.keys())
+            state.status = AgentStatus.DEGRADED.value
+            state.last_event_at = event.event_time
+            state.last_degraded_at = event.event_time
+            state.update_identity(event.payload)
+            self._update_metrics_from_payload(state, event.payload.get("metrics") or event.payload)
+
+        self._evaluate_state(state.agent_id, trigger="degraded")
+
+    def _handle_critical(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.status = AgentStatus.CRITICAL.value
+            state.last_event_at = event.event_time
+            state.last_critical_at = event.event_time
+            state.update_identity(event.payload)
+            self._update_metrics_from_payload(state, event.payload.get("metrics") or event.payload)
+
+        self._evaluate_state(state.agent_id, trigger="critical")
+
+    def _handle_overloaded(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.status = AgentStatus.OVERLOADED.value
+            state.last_event_at = event.event_time
+            state.last_overloaded_at = event.event_time
+            state.update_identity(event.payload)
+            self._update_metrics_from_payload(state, event.payload)
+
+        self._evaluate_state(state.agent_id, trigger="overloaded")
+
+    def _handle_lag_detected(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.last_event_at = event.event_time
+            state.last_lag_at = event.event_time
+            state.update_identity(event.payload)
+            lag_value = event.payload.get("lag", event.payload.get("consumer_lag", state.consumer_lag))
+            state.consumer_lag = int(lag_value or 0)
+
+        self._evaluate_state(state.agent_id, trigger="lag")
+
+    def _handle_timeout(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.status = AgentStatus.TIMEOUT.value
+            state.last_event_at = event.event_time
+            state.last_timeout_at = event.event_time
+            state.update_identity(event.payload)
+
+        self._evaluate_state(state.agent_id, trigger="timeout")
+
+    def _handle_registry_upsert(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.registered = True
+            state.last_event_at = event.event_time
+            state.update_identity(event.payload)
+            payload_status = event.payload.get("status")
+            if payload_status and payload_status != "registered":
+                state.status = payload_status
+
+    def _handle_registry_removed(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.registered = False
+            state.last_event_at = event.event_time
+            state.status = AgentStatus.STOPPED.value
+
+    def _get_or_create_state(self, payload: Dict[str, Any], fallback_name: str) -> AgentRecoveryState:
+        """Look up or create a tracked state entry."""
+        agent_name = payload.get("agent_name", fallback_name)
+        agent_id = payload.get("agent_id") or f"agent_{agent_name}"
+
+        with self._state_lock:
+            if agent_id not in self._states:
+                self._states[agent_id] = AgentRecoveryState(
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                    candidate_fallbacks=list(self._fallback_agents.get(agent_name, [])),
+                )
+            return self._states[agent_id]
+
+    def _update_metrics_from_payload(self, state: AgentRecoveryState, payload: Dict[str, Any]) -> None:
+        """Refresh tracked metrics from event payload."""
+        if payload.get("cpu_percent") is not None:
+            state.cpu_percent = payload["cpu_percent"]
+        if payload.get("memory_percent") is not None:
+            state.memory_percent = payload["memory_percent"]
+        if payload.get("consumer_lag") is not None:
+            state.consumer_lag = int(payload["consumer_lag"] or 0)
+        if payload.get("lag") is not None:
+            state.consumer_lag = int(payload["lag"] or 0)
+        if payload.get("error_count") is not None:
+            state.error_count = int(payload["error_count"] or 0)
+        if payload.get("latency_ms") is not None:
+            state.latency_ms = payload["latency_ms"]
+        if payload.get("events_per_second") is not None:
+            state.events_per_second = float(payload["events_per_second"] or 0.0)
+
+    def _evaluate_all_states(self) -> None:
+        """Re-run decision logic across all tracked agents."""
+        with self._state_lock:
+            agent_ids = list(self._states.keys())
 
         for agent_id in agent_ids:
-            self._evaluate_agent(agent_id)
+            self._evaluate_state(agent_id, trigger="periodic")
 
-    def _evaluate_agent(self, agent_id: str) -> None:
-        """Evaluate all decision rules for a single agent."""
+    def _evaluate_state(self, agent_id: str, trigger: str) -> None:
+        """Apply recovery rules to a single tracked agent."""
         with self._state_lock:
-            if agent_id not in self.agent_state:
-                return
-            # Make a copy to avoid holding lock during I/O
-            state = self.agent_state[agent_id]
-
-            # FIX 4: Skip self (safety check)
-            if state.agent_name in self._self_agent_names:
+            state = self._states.get(agent_id)
+            if state is None or state.agent_name == self.agent_name:
                 return
 
-            state_snapshot = AgentState(
-                agent_id=state.agent_id,
-                agent_name=state.agent_name,
-                agent_type=state.agent_type,
-                instance_id=state.instance_id,
-                host=state.host,
-                last_heartbeat=state.last_heartbeat,
-                status=state.status,
-                registered=state.registered,
-                registered_at=state.registered_at,
-                cpu_percent=state.cpu_percent,
-                memory_percent=state.memory_percent,
-                error_count=state.error_count,
-                restart_count=state.restart_count,
-                consumer_lag=state.consumer_lag,
-                queue_depth=state.queue_depth,
-                events_processed=state.events_processed,
-                replica_count=state.replica_count,
-                max_replicas=state.max_replicas,
-                replica_index=state.replica_index,
-                consumer_group=state.consumer_group,
-                subscribed_topics=list(state.subscribed_topics),
-                last_restart_requested=state.last_restart_requested,
-                last_scale_requested=state.last_scale_requested,
-                last_spawn_requested=state.last_spawn_requested,
-            )
+            snapshot = AgentRecoveryState(**state.__dict__)
 
         now = datetime.utcnow()
 
-        # FIX 3: Skip agents without instance_id (registry not yet updated)
-        if not state_snapshot.instance_id:
+        if snapshot.status == AgentStatus.STOPPED.value:
             return
 
-        # Skip agents that just registered (give them time to stabilize)
-        if state_snapshot.registered_at:
-            age_seconds = (now - state_snapshot.registered_at).total_seconds()
-            if age_seconds < self.MIN_REGISTRATION_AGE_SECONDS:
-                return
+        if snapshot.status == AgentStatus.TIMEOUT.value or trigger == "timeout":
+            self._emit_recovery_triggered(snapshot, "restart", "TIMEOUT_DETECTED")
+            if self._can_restart(snapshot, now):
+                self._publish_restart(snapshot, "Timeout detected by monitoring", "TIMEOUT_DETECTED")
+            else:
+                self._maybe_publish_fallback(snapshot, "TIMEOUT_DETECTED")
+            return
 
-        # Rule 5: restart_count > 3 → spawn new (highest priority - agent is failing repeatedly)
-        if state_snapshot.restart_count > self.MAX_RESTART_COUNT:
-            if self._can_spawn(state_snapshot, now):
-                self._request_spawn(
-                    state_snapshot,
-                    reason=f"Agent exceeded max restart count ({state_snapshot.restart_count} > {self.MAX_RESTART_COUNT})",
-                    decision_rule="RESTART_COUNT_EXCEEDED",
-                )
-                return  # Don't issue other commands
+        if snapshot.status == AgentStatus.CRITICAL.value or trigger == "critical":
+            self._emit_recovery_triggered(snapshot, "restart", "CRITICAL_HEALTH")
+            if self._can_restart(snapshot, now):
+                self._publish_restart(snapshot, "Critical health condition reported", "CRITICAL_HEALTH")
+            else:
+                self._emit_recovery_triggered(snapshot, "spawn", "CRITICAL_HEALTH_ESCALATED")
+                self._publish_spawn_and_placement(snapshot, "Critical agent needs replacement capacity", "CRITICAL_HEALTH_ESCALATED")
+                self._maybe_publish_fallback(snapshot, "CRITICAL_HEALTH")
+            return
 
-        # Rule 1: Missing heartbeat → restart
-        if state_snapshot.last_heartbeat:
-            heartbeat_age = (now - state_snapshot.last_heartbeat).total_seconds()
-            if heartbeat_age > self.HEARTBEAT_TIMEOUT_SECONDS:
-                if self._can_restart(state_snapshot, now):
-                    self._request_restart(
-                        state_snapshot,
-                        reason=f"Heartbeat timeout ({heartbeat_age:.0f}s > {self.HEARTBEAT_TIMEOUT_SECONDS}s)",
-                        decision_rule="HEARTBEAT_TIMEOUT",
-                    )
-                    return
+        if snapshot.consumer_lag >= self.CRITICAL_LAG_THRESHOLD:
+            self._emit_recovery_triggered(snapshot, "scale", "CRITICAL_LAG")
+            if self._can_scale(snapshot, now):
+                self._publish_scale(snapshot, "Critical consumer lag detected", "CRITICAL_LAG", float(snapshot.consumer_lag))
+            else:
+                self._publish_spawn_and_placement(snapshot, "Lag remains critical during scale cooldown", "CRITICAL_LAG_ESCALATED")
+            return
 
-        # Rule 4: errors > threshold → restart
-        if state_snapshot.error_count > self.ERROR_THRESHOLD:
-            if self._can_restart(state_snapshot, now):
-                self._request_restart(
-                    state_snapshot,
-                    reason=f"Error count exceeded ({state_snapshot.error_count} > {self.ERROR_THRESHOLD})",
-                    decision_rule="ERROR_THRESHOLD_EXCEEDED",
-                )
-                return
+        if snapshot.status == AgentStatus.OVERLOADED.value or trigger == "overloaded":
+            self._emit_recovery_triggered(snapshot, "scale", "OVERLOADED_AGENT")
+            if self._can_scale(snapshot, now):
+                self._publish_scale(snapshot, "Overloaded agent requires more capacity", "OVERLOADED_AGENT", self._overload_signal(snapshot))
+            else:
+                self._maybe_publish_fallback(snapshot, "OVERLOADED_AGENT")
+            return
 
-        # Rule 6: replica_count < max_replicas AND lag high → spawn
-        if (
-            state_snapshot.replica_count is not None
-            and state_snapshot.max_replicas is not None
-            and state_snapshot.replica_count < state_snapshot.max_replicas
-            and state_snapshot.consumer_lag > self.LAG_THRESHOLD
-        ):
-            if self._can_spawn(state_snapshot, now):
-                self._request_spawn(
-                    state_snapshot,
-                    reason=f"High lag ({state_snapshot.consumer_lag}) with room to scale ({state_snapshot.replica_count}/{state_snapshot.max_replicas})",
-                    decision_rule="LAG_WITH_CAPACITY",
-                )
-                return
+        if snapshot.consumer_lag >= self.LAG_SCALE_THRESHOLD or trigger == "lag":
+            self._emit_recovery_triggered(snapshot, "scale", "LAG_DETECTED")
+            if self._can_scale(snapshot, now):
+                self._publish_scale(snapshot, "High lag detected by monitoring", "LAG_DETECTED", float(snapshot.consumer_lag))
+            return
 
-        # Rule 2: lag > threshold → scale
-        if state_snapshot.consumer_lag > self.LAG_THRESHOLD:
-            if self._can_scale(state_snapshot, now):
-                self._request_scale(
-                    state_snapshot,
-                    reason=f"Consumer lag exceeded ({state_snapshot.consumer_lag} > {self.LAG_THRESHOLD})",
-                    decision_rule="LAG_THRESHOLD_EXCEEDED",
-                    trigger_metric="consumer_lag",
-                    trigger_value=float(state_snapshot.consumer_lag),
-                )
-                return
+        if snapshot.status == AgentStatus.DEGRADED.value and snapshot.last_degraded_at:
+            degraded_age = (now - snapshot.last_degraded_at).total_seconds()
+            if degraded_age >= self.DEGRADED_RESTART_DELAY_SECONDS:
+                self._emit_recovery_triggered(snapshot, "restart", "DEGRADED_PERSISTED")
+                if self._can_restart(snapshot, now):
+                    self._publish_restart(snapshot, "Degraded condition persisted beyond grace period", "DEGRADED_PERSISTED")
+                else:
+                    self._maybe_publish_fallback(snapshot, "DEGRADED_PERSISTED")
 
-        # Rule 3: CPU > 90 → scale
-        if state_snapshot.cpu_percent and state_snapshot.cpu_percent > self.CPU_THRESHOLD:
-            if self._can_scale(state_snapshot, now):
-                self._request_scale(
-                    state_snapshot,
-                    reason=f"CPU exceeded ({state_snapshot.cpu_percent:.1f}% > {self.CPU_THRESHOLD}%)",
-                    decision_rule="CPU_THRESHOLD_EXCEEDED",
-                    trigger_metric="cpu_percent",
-                    trigger_value=state_snapshot.cpu_percent,
-                )
-                return
-
-    def _check_expected_agents(self) -> None:
-        """Rule 7: Check if expected agents are missing and spawn them."""
-        now = datetime.utcnow()
-
-        for agent_name in self.expected_agents:
-            # FIX 2: Search by agent_name across all states (since state is keyed by agent_id)
-            with self._state_lock:
-                # Find any registered instance of this agent type
-                found_registered = any(
-                    s.agent_name == agent_name and s.registered
-                    for s in self.agent_state.values()
-                )
-                # Find any instance with recent heartbeat
-                found_healthy = any(
-                    s.agent_name == agent_name
-                    and s.last_heartbeat is not None
-                    and (now - s.last_heartbeat).total_seconds() <= self.HEARTBEAT_TIMEOUT_SECONDS * 2
-                    for s in self.agent_state.values()
-                )
-
-            # Agent not found or not registered
-            if not found_registered:
-                self._evaluate_spawn_missing_agent(agent_name)
-                continue
-
-            # Agent registered but no healthy instance
-            if not found_healthy:
-                self._evaluate_spawn_missing_agent(agent_name)
-
-    def _evaluate_spawn_missing_agent(self, agent_name: str) -> None:
-        """Spawn a missing expected agent (rule 7)."""
-        now = datetime.utcnow()
-
-        # Find any existing state for this agent type to check cooldown
-        with self._state_lock:
-            existing_states = [
-                s for s in self.agent_state.values()
-                if s.agent_name == agent_name
-            ]
-
-        # Check cooldown on any existing state for this agent type
-        for state in existing_states:
-            if state.last_spawn_requested:
-                elapsed = (now - state.last_spawn_requested).total_seconds()
-                if elapsed < self.SPAWN_COOLDOWN_SECONDS:
-                    return  # Still in cooldown
-
-        # Create a synthetic state for spawn request (using agent_name as temp key)
-        # This is for expected agents that have never been seen
-        synthetic_agent_id = f"agent_{agent_name}_pending"
-        state = AgentState(
-            agent_id=synthetic_agent_id,
-            agent_name=agent_name,
+    def _overload_signal(self, state: AgentRecoveryState) -> float:
+        """Choose the most relevant overload signal value for scale events."""
+        return float(
+            max(
+                state.consumer_lag,
+                int(state.cpu_percent or 0),
+                int(state.memory_percent or 0),
+                int(state.latency_ms or 0),
+            )
         )
 
-        self._request_spawn(
-            state,
-            reason=f"Expected agent {agent_name} not found in registry",
-            decision_rule="EXPECTED_AGENT_MISSING",
-        )
-
-        # Track spawn request to prevent spam
-        with self._state_lock:
-            if synthetic_agent_id not in self.agent_state:
-                self.agent_state[synthetic_agent_id] = state
-            self.agent_state[synthetic_agent_id].last_spawn_requested = now
-
-    # -------------------------------------------------------------------------
-    # Cooldown checks
-    # -------------------------------------------------------------------------
-
-    def _can_restart(self, state: AgentState, now: datetime) -> bool:
-        """Check if restart is allowed (cooldown elapsed)."""
+    def _can_restart(self, state: AgentRecoveryState, now: datetime) -> bool:
         if state.last_restart_requested is None:
             return True
-        elapsed = (now - state.last_restart_requested).total_seconds()
-        return elapsed >= self.RESTART_COOLDOWN_SECONDS
+        return (now - state.last_restart_requested).total_seconds() >= self.RESTART_COOLDOWN_SECONDS
 
-    def _can_scale(self, state: AgentState, now: datetime) -> bool:
-        """Check if scale is allowed (cooldown elapsed)."""
-        if state.last_scale_requested is None:
-            return True
-        elapsed = (now - state.last_scale_requested).total_seconds()
-        return elapsed >= self.SCALE_COOLDOWN_SECONDS
-
-    def _can_spawn(self, state: AgentState, now: datetime) -> bool:
-        """Check if spawn is allowed (cooldown elapsed)."""
+    def _can_spawn(self, state: AgentRecoveryState, now: datetime) -> bool:
         if state.last_spawn_requested is None:
             return True
-        elapsed = (now - state.last_spawn_requested).total_seconds()
-        return elapsed >= self.SPAWN_COOLDOWN_SECONDS
+        return (now - state.last_spawn_requested).total_seconds() >= self.SPAWN_COOLDOWN_SECONDS
 
-    # -------------------------------------------------------------------------
-    # Command publishers
-    # -------------------------------------------------------------------------
+    def _can_scale(self, state: AgentRecoveryState, now: datetime) -> bool:
+        if state.last_scale_requested is None:
+            return True
+        return (now - state.last_scale_requested).total_seconds() >= self.SCALE_COOLDOWN_SECONDS
 
-    def _request_restart(
-        self,
-        state: AgentState,
-        reason: str,
-        decision_rule: str,
-    ) -> None:
-        """Publish agent.restart.requested event."""
-        logger.info(
-            f"Requesting restart for {state.agent_name}: {reason} "
-            f"(rule: {decision_rule})"
+    def _can_emit_recovery(self, state: AgentRecoveryState, now: datetime) -> bool:
+        if state.last_recovery_triggered is None:
+            return True
+        return (now - state.last_recovery_triggered).total_seconds() >= self.RECOVERY_EVENT_COOLDOWN_SECONDS
+
+    def _can_request_placement(self, state: AgentRecoveryState, now: datetime) -> bool:
+        if state.last_placement_requested is None:
+            return True
+        return (now - state.last_placement_requested).total_seconds() >= self.PLACEMENT_REQUEST_COOLDOWN_SECONDS
+
+    def _can_select_fallback(self, state: AgentRecoveryState, now: datetime) -> bool:
+        if state.last_fallback_selected is None:
+            return True
+        return (now - state.last_fallback_selected).total_seconds() >= self.FALLBACK_COOLDOWN_SECONDS
+
+    def _emit_recovery_triggered(self, state: AgentRecoveryState, action: str, decision_rule: str) -> None:
+        """Publish recovery.triggered event."""
+        now = datetime.utcnow()
+        if not self._can_emit_recovery(state, now):
+            return
+
+        payload = {
+            "agent_id": state.agent_id,
+            "agent_type": state.agent_type,
+            "agent_name": state.agent_name,
+            "instance_id": state.instance_id,
+            "triggered_at": now.isoformat(),
+            "recommended_action": action,
+            "decision_rule": decision_rule,
+            "status": state.status,
+            "consumer_lag": state.consumer_lag,
+            "error_count": state.error_count,
+            "latency_ms": state.latency_ms,
+        }
+
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type=SystemEventType.RECOVERY_TRIGGERED.value,
+            entity_id=state.agent_name,
+            payload=payload,
+            correlation_id=self.create_correlation_id(),
         )
 
+        with self._state_lock:
+            current = self._states.get(state.agent_id)
+            if current is not None:
+                current.last_recovery_triggered = now
+
+    def _publish_restart(self, state: AgentRecoveryState, reason: str, decision_rule: str) -> None:
+        """Publish agent.restart.requested."""
         event_data = create_restart_request_event(
             event_source=self.agent_name,
             agent_id=state.agent_id,
@@ -805,46 +472,28 @@ class SelfHealingAgent(BaseAgent):
             agent_type=state.agent_type,
             graceful=True,
             timeout_seconds=30,
-            restart_count=state.restart_count,
-            max_restarts=self.MAX_RESTART_COUNT,
+            restart_count=0,
+            max_restarts=self.MAX_RESTARTS_BEFORE_SPAWN,
             decision_rule=decision_rule,
             decision_score=0.95,
             correlation_id=self.create_correlation_id(),
         )
-
         self.kafka_client.publish(self.SYSTEM_TOPIC, event_data)
 
-        # Update cooldown timestamp (by agent_id)
         with self._state_lock:
-            if state.agent_id in self.agent_state:
-                self.agent_state[state.agent_id].last_restart_requested = datetime.utcnow()
+            current = self._states.get(state.agent_id)
+            if current is not None:
+                current.last_restart_requested = datetime.utcnow()
 
-    def _request_scale(
-        self,
-        state: AgentState,
-        reason: str,
-        decision_rule: str,
-        trigger_metric: Optional[str] = None,
-        trigger_value: Optional[float] = None,
-    ) -> None:
-        """Publish agent.scale.requested event."""
+    def _publish_scale(self, state: AgentRecoveryState, reason: str, decision_rule: str, trigger_value: float) -> None:
+        """Publish agent.scale.requested."""
         current_replicas = state.replica_count or 1
-        max_replicas = state.max_replicas or 5
-        desired_replicas = min(current_replicas + 1, max_replicas)
-
-        # Don't scale if already at max
+        max_replicas = state.max_replicas or self.DEFAULT_MAX_REPLICAS
         if current_replicas >= max_replicas:
-            logger.info(
-                f"Skipping scale for {state.agent_name}: already at max replicas "
-                f"({current_replicas}/{max_replicas})"
-            )
+            self._publish_spawn_and_placement(state, "Scale limit reached; requesting replacement capacity", "SCALE_LIMIT_REACHED")
             return
 
-        logger.info(
-            f"Requesting scale for {state.agent_name}: {current_replicas} → {desired_replicas} "
-            f"({reason}, rule: {decision_rule})"
-        )
-
+        desired_replicas = min(current_replicas + self.SCALE_UP_STEP, max_replicas)
         event_data = create_scale_request_event(
             event_source=self.agent_name,
             agent_name=state.agent_name,
@@ -853,164 +502,100 @@ class SelfHealingAgent(BaseAgent):
             max_replicas=max_replicas,
             reason=reason,
             agent_type=state.agent_type,
-            trigger_metric=trigger_metric,
+            trigger_metric="consumer_lag" if state.consumer_lag else "overload_signal",
             trigger_value=trigger_value,
             decision_rule=decision_rule,
-            decision_score=0.90,
+            decision_score=0.9,
             correlation_id=self.create_correlation_id(),
         )
-
         self.kafka_client.publish(self.SYSTEM_TOPIC, event_data)
 
-        # Update cooldown timestamp (by agent_id)
         with self._state_lock:
-            if state.agent_id in self.agent_state:
-                self.agent_state[state.agent_id].last_scale_requested = datetime.utcnow()
+            current = self._states.get(state.agent_id)
+            if current is not None:
+                current.last_scale_requested = datetime.utcnow()
 
-    def _request_spawn(
-        self,
-        state: AgentState,
-        reason: str,
-        decision_rule: str,
-    ) -> None:
-        """Publish agent.spawn.requested event."""
-        logger.info(
-            f"Requesting spawn for {state.agent_name}: {reason} "
-            f"(rule: {decision_rule})"
-        )
+    def _publish_spawn_and_placement(self, state: AgentRecoveryState, reason: str, decision_rule: str) -> None:
+        """Publish agent.spawn.requested and placement.requested when capacity recovery is needed."""
+        now = datetime.utcnow()
+        if not self._can_spawn(state, now):
+            return
 
-        event_data = create_spawn_request_event(
+        spawn_event = create_spawn_request_event(
             event_source=self.agent_name,
             agent_name=state.agent_name,
             reason=reason,
             agent_type=state.agent_type,
-            priority="high" if decision_rule == "EXPECTED_AGENT_MISSING" else "normal",
+            instance_id=None,
+            host=None,
+            config=None,
+            priority="high",
             source_agent_id=state.agent_id,
             source_instance_id=state.instance_id,
             replica_count=state.replica_count,
             max_replicas=state.max_replicas,
             decision_rule=decision_rule,
-            decision_score=0.95,
+            decision_score=0.92,
             correlation_id=self.create_correlation_id(),
         )
+        self.kafka_client.publish(self.SYSTEM_TOPIC, spawn_event)
 
-        self.kafka_client.publish(self.SYSTEM_TOPIC, event_data)
+        if self._can_request_placement(state, now):
+            placement_payload = {
+                "agent_type": state.agent_type,
+                "agent_name": state.agent_name,
+                "instance_id": None,
+                "requirements": {
+                    "reason": reason,
+                    "source_agent_id": state.agent_id,
+                },
+                "preferred_hosts": None,
+                "excluded_hosts": [state.host] if state.host else None,
+                "requester": self.agent_name,
+                "priority": "high",
+                "decision_rule": decision_rule,
+                "decision_score": 0.9,
+            }
+            self.publish_event(
+                topic=self.SYSTEM_TOPIC,
+                event_type=SystemEventType.PLACEMENT_REQUESTED.value,
+                entity_id=state.agent_name,
+                payload=placement_payload,
+                correlation_id=self.create_correlation_id(),
+            )
 
-        # Update cooldown timestamp (by agent_id)
         with self._state_lock:
-            if state.agent_id in self.agent_state:
-                self.agent_state[state.agent_id].last_spawn_requested = datetime.utcnow()
+            current = self._states.get(state.agent_id)
+            if current is not None:
+                current.last_spawn_requested = now
+                current.last_placement_requested = now
 
-    def _request_shutdown(
-        self,
-        state: AgentState,
-        reason: str,
-        decision_rule: str,
-    ) -> None:
-        """Publish agent.shutdown.requested event."""
-        logger.info(
-            f"Requesting shutdown for {state.agent_name}: {reason} "
-            f"(rule: {decision_rule})"
-        )
+    def _maybe_publish_fallback(self, state: AgentRecoveryState, decision_rule: str) -> None:
+        """Publish fallback.agent.selected when a fallback is configured."""
+        now = datetime.utcnow()
+        if not state.candidate_fallbacks or not self._can_select_fallback(state, now):
+            return
 
-        shutdown_payload = {
-            "agent_id": state.agent_id,
-            "agent_type": state.agent_type,
-            "agent_name": state.agent_name,
-            "instance_id": state.instance_id or f"instance_{state.agent_name}",
-            "reason": reason,
-            "requester": self.agent_name,
-            "graceful": True,
-            "timeout_seconds": 30,
+        fallback_agent = state.candidate_fallbacks[0]
+        payload = {
+            "source_agent_id": state.agent_id,
+            "source_agent_name": state.agent_name,
+            "fallback_agent_name": fallback_agent,
+            "selected_at": now.isoformat(),
             "decision_rule": decision_rule,
-            "decision_score": 0.90,
+            "decision_score": 0.85,
+            "reason": "Fallback agent selected while primary recovery is pending",
         }
 
         self.publish_event(
             topic=self.SYSTEM_TOPIC,
-            event_type=SystemEventType.AGENT_SHUTDOWN_REQUESTED.value,
+            event_type=SystemEventType.FALLBACK_AGENT_SELECTED.value,
             entity_id=state.agent_name,
-            payload=shutdown_payload,
+            payload=payload,
             correlation_id=self.create_correlation_id(),
         )
 
-    # -------------------------------------------------------------------------
-    # State access methods
-    # -------------------------------------------------------------------------
-
-    def get_agent_state_by_id(self, agent_id: str) -> Optional[AgentState]:
-        """Get state for a specific agent by agent_id."""
         with self._state_lock:
-            return self.agent_state.get(agent_id)
-
-    def get_agent_states_by_name(self, agent_name: str) -> List[AgentState]:
-        """Get all states for agents with a given name (all replicas)."""
-        with self._state_lock:
-            return [
-                state for state in self.agent_state.values()
-                if state.agent_name == agent_name
-            ]
-
-    def get_all_agent_states(self) -> Dict[str, AgentState]:
-        """Get copy of all agent states."""
-        with self._state_lock:
-            return dict(self.agent_state)
-
-    def get_unhealthy_agents(self) -> List[str]:
-        """Get list of agent_ids with non-healthy status."""
-        unhealthy_statuses = {
-            AgentStatus.DEGRADED.value,
-            AgentStatus.CRITICAL.value,
-            AgentStatus.OVERLOADED.value,
-            AgentStatus.ERROR.value,
-            AgentStatus.TIMEOUT.value,
-            AgentStatus.UNREACHABLE.value,
-        }
-
-        with self._state_lock:
-            return [
-                agent_id for agent_id, state in self.agent_state.items()
-                if state.status in unhealthy_statuses
-            ]
-
-    def add_expected_agent(self, agent_name: str) -> None:
-        """Add an agent to the expected agents set."""
-        self.expected_agents.add(agent_name)
-
-    def remove_expected_agent(self, agent_name: str) -> None:
-        """Remove an agent from the expected agents set."""
-        self.expected_agents.discard(agent_name)
-
-    # -------------------------------------------------------------------------
-    # Status and diagnostics
-    # -------------------------------------------------------------------------
-
-    def get_decision_stats(self) -> Dict[str, Any]:
-        """Get statistics about decisions made."""
-        with self._state_lock:
-            total_agents = len(self.agent_state)
-            registered = sum(1 for s in self.agent_state.values() if s.registered)
-            healthy = sum(
-                1 for s in self.agent_state.values()
-                if s.status == AgentStatus.HEALTHY.value
-            )
-
-            return {
-                "total_tracked_agents": total_agents,
-                "registered_agents": registered,
-                "healthy_agents": healthy,
-                "expected_agents": list(self.expected_agents),
-                "unhealthy_agents": self.get_unhealthy_agents(),
-                "thresholds": {
-                    "heartbeat_timeout_seconds": self.HEARTBEAT_TIMEOUT_SECONDS,
-                    "lag_threshold": self.LAG_THRESHOLD,
-                    "cpu_threshold": self.CPU_THRESHOLD,
-                    "error_threshold": self.ERROR_THRESHOLD,
-                    "max_restart_count": self.MAX_RESTART_COUNT,
-                },
-                "cooldowns": {
-                    "restart_seconds": self.RESTART_COOLDOWN_SECONDS,
-                    "scale_seconds": self.SCALE_COOLDOWN_SECONDS,
-                    "spawn_seconds": self.SPAWN_COOLDOWN_SECONDS,
-                },
-            }
+            current = self._states.get(state.agent_id)
+            if current is not None:
+                current.last_fallback_selected = now

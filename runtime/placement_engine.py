@@ -1,0 +1,135 @@
+"""
+PlacementEngine - Event-driven placement decider for ACIS-X.
+
+Consumes placement requests from acis.system and publishes placement.completed
+events with simulated host, replica index, and group assignment decisions.
+"""
+
+import logging
+import threading
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from agents.base.base_agent import BaseAgent
+from schemas.event_schema import Event, SystemEventType
+
+logger = logging.getLogger(__name__)
+
+
+class PlacementEngine(BaseAgent):
+    """Simulated placement engine that decides placement but does not spawn agents."""
+
+    def __init__(
+        self,
+        kafka_client: Any,
+        agent_version: str = "1.0.0",
+        instance_id: Optional[str] = None,
+        host: Optional[str] = None,
+        simulated_hosts: Optional[List[str]] = None,
+    ):
+        super().__init__(
+            agent_name="PlacementEngine",
+            agent_version=agent_version,
+            group_id="placement-engine-group",
+            subscribed_topics=["acis.system"],
+            capabilities=[
+                "placement_decisioning",
+                "host_assignment",
+                "replica_assignment",
+            ],
+            kafka_client=kafka_client,
+            agent_type="PlacementEngine",
+            instance_id=instance_id,
+            host=host,
+        )
+
+        self._simulated_hosts = simulated_hosts or [
+            "placement-host-1.acis.local",
+            "placement-host-2.acis.local",
+            "placement-host-3.acis.local",
+        ]
+        self._next_host_index = 0
+        self._replica_counters: Dict[str, int] = {}
+        self._lock = threading.Lock()
+
+    def subscribe(self) -> List[str]:
+        """Consume placement requests from the system topic."""
+        return ["acis.system"]
+
+    def process_event(self, event: Event) -> None:
+        """Handle placement.requested events only."""
+        if event.event_type == SystemEventType.PLACEMENT_REQUESTED.value:
+            self._handle_placement_requested(event)
+
+    def _handle_placement_requested(self, event: Event) -> None:
+        """Choose host, replica index, and group assignment for a placement request."""
+        payload = event.payload
+        agent_name = payload["agent_name"]
+        agent_type = payload.get("agent_type")
+        instance_id = payload.get("instance_id") or f"instance_{agent_name.lower()}_{datetime.utcnow().strftime('%H%M%S')}"
+        preferred_hosts = payload.get("preferred_hosts") or []
+        excluded_hosts = set(payload.get("excluded_hosts") or [])
+        decision_rule = payload.get("decision_rule", "SIMULATED_ROUND_ROBIN")
+        decision_score = payload.get("decision_score", 1.0)
+
+        host = self._select_host(preferred_hosts, excluded_hosts)
+        replica_index = self._next_replica_index(agent_name)
+        group_id = self._derive_group_id(agent_name, payload)
+
+        placement_payload = {
+            "agent_type": agent_type,
+            "agent_name": agent_name,
+            "instance_id": instance_id,
+            "host": host,
+            "port": None,
+            "placement_decision": (
+                f"Placed on {host} with replica_index={replica_index} "
+                f"and group_id={group_id}"
+            ),
+            "alternatives_considered": self._simulated_hosts,
+            "placement_duration_ms": 0,
+            "status": "completed",
+            "error_message": None,
+            "decision_rule": decision_rule,
+            "decision_score": decision_score,
+            "replica_index": replica_index,
+            "group_id": group_id,
+        }
+
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type=SystemEventType.PLACEMENT_COMPLETED.value,
+            entity_id=agent_name,
+            payload=placement_payload,
+            correlation_id=event.correlation_id,
+        )
+
+    def _select_host(self, preferred_hosts: List[str], excluded_hosts: set[str]) -> str:
+        """Pick a simulated host honoring preferences and exclusions."""
+        with self._lock:
+            for host in preferred_hosts:
+                if host not in excluded_hosts:
+                    return host
+
+            for _ in range(len(self._simulated_hosts)):
+                host = self._simulated_hosts[self._next_host_index]
+                self._next_host_index = (self._next_host_index + 1) % len(self._simulated_hosts)
+                if host not in excluded_hosts:
+                    return host
+
+        return self.host or "placement-host-unassigned"
+
+    def _next_replica_index(self, agent_name: str) -> int:
+        """Return the next simulated replica index for an agent type."""
+        with self._lock:
+            index = self._replica_counters.get(agent_name, 0)
+            self._replica_counters[agent_name] = index + 1
+            return index
+
+    def _derive_group_id(self, agent_name: str, payload: Dict[str, Any]) -> str:
+        """Return a group id for the placement decision."""
+        group_id = payload.get("group_id")
+        if group_id:
+            return group_id
+        agent_token = agent_name.lower().replace(" ", "-")
+        return f"{agent_token}-group"

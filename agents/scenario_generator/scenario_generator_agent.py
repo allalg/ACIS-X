@@ -82,6 +82,7 @@ class ScenarioGeneratorAgent(BaseAgent):
                 "scenario_simulation",
             ],
             kafka_client=kafka_client,
+            agent_type="ScenarioGeneratorAgent",
         )
 
         self.generation_interval = generation_interval_seconds
@@ -120,6 +121,10 @@ class ScenarioGeneratorAgent(BaseAgent):
         logger.info("Starting ScenarioGeneratorAgent")
 
         self._running = True
+        self._start_time = datetime.utcnow()
+
+        topics = self.subscribe()
+        self.subscribed_topics = topics
 
         # Register with registry
         self._register_with_registry()
@@ -788,11 +793,12 @@ class ScenarioGeneratorAgent(BaseAgent):
     def _register_with_registry(self) -> None:
         """Register with registry including produced topics."""
         registration_payload = {
-            "agent_id": f"agent_{self.agent_name.lower().replace(' ', '_')}",
+            "agent_id": self._get_agent_id(),
             "agent_name": self.agent_name,
+            "agent_type": self.agent_type,
             "capabilities": self.capabilities,
             "topics": {
-                "consumes": [],
+                "consumes": self.subscribed_topics,
                 "produces": [
                     self.TOPIC_CUSTOMERS,
                     self.TOPIC_INVOICES,
@@ -801,10 +807,15 @@ class ScenarioGeneratorAgent(BaseAgent):
                     self.TOPIC_COMMANDS,
                 ],
             },
-            "status": "registered",
-            "version": self.agent_version,
-            "registered_at": datetime.utcnow().isoformat(),
             "group_id": self.group_id,
+            "version": self.agent_version,
+            "status": "registered",
+            "host": self.host,
+            "instance_id": self.instance_id,
+            "registered_at": datetime.utcnow().isoformat(),
+            "replica_index": self.replica_index,
+            "replica_count": self.replica_count,
+            "max_replicas": self.max_replicas,
         }
 
         self.publish_event(
