@@ -88,6 +88,7 @@ class SelfHealingAgent(BaseAgent):
     Inputs:
     - agent.health.degraded
     - agent.health.critical
+    - agent.error
     - agent.overloaded
     - lag.detected
     - agent.timeout
@@ -179,6 +180,8 @@ class SelfHealingAgent(BaseAgent):
             self._handle_degraded(event)
         elif event_type == SystemEventType.AGENT_HEALTH_CRITICAL.value:
             self._handle_critical(event)
+        elif event_type == SystemEventType.AGENT_ERROR.value:
+            self._handle_error(event)
         elif event_type == SystemEventType.AGENT_OVERLOADED.value:
             self._handle_overloaded(event)
         elif event_type == SystemEventType.LAG_DETECTED.value:
@@ -242,6 +245,18 @@ class SelfHealingAgent(BaseAgent):
             self._update_metrics_from_payload(state, event.payload)
 
         self._evaluate_state(state.agent_id, trigger="overloaded")
+
+    def _handle_error(self, event: Event) -> None:
+        state = self._get_or_create_state(event.payload, event.entity_id)
+
+        with self._state_lock:
+            state.status = AgentStatus.ERROR.value
+            state.last_event_at = event.event_time
+            state.update_identity(event.payload)
+            self._update_metrics_from_payload(state, event.payload)
+            state.error_count = max(state.error_count, int(event.payload.get("error_count", state.error_count + 1) or 0))
+
+        self._evaluate_state(state.agent_id, trigger="error")
 
     def _handle_lag_detected(self, event: Event) -> None:
         state = self._get_or_create_state(event.payload, event.entity_id)
@@ -344,6 +359,14 @@ class SelfHealingAgent(BaseAgent):
                 self._publish_restart(snapshot, "Timeout detected by monitoring", "TIMEOUT_DETECTED")
             else:
                 self._maybe_publish_fallback(snapshot, "TIMEOUT_DETECTED")
+            return
+
+        if snapshot.status == AgentStatus.ERROR.value or trigger == "error":
+            self._emit_recovery_triggered(snapshot, "restart", "AGENT_ERROR")
+            if self._can_restart(snapshot, now):
+                self._publish_restart(snapshot, "Agent error reported by monitoring", "AGENT_ERROR")
+            else:
+                self._maybe_publish_fallback(snapshot, "AGENT_ERROR")
             return
 
         if snapshot.status == AgentStatus.CRITICAL.value or trigger == "critical":

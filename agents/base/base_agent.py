@@ -160,9 +160,10 @@ class BaseAgent(ABC):
         """Start the agent: subscribe, register, and begin consuming."""
         logger.info(f"Starting agent: {self.agent_name} v{self.agent_version} (instance: {self.instance_id})")
 
-        # Register signal handlers for graceful shutdown
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # Register signal handlers for graceful shutdown only on the main thread
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, self._signal_handler)
+            signal.signal(signal.SIGTERM, self._signal_handler)
 
         self._running = True
         self._start_time = datetime.utcnow()
@@ -291,7 +292,6 @@ class BaseAgent(ABC):
             # Check idempotency
             if self._is_duplicate(event.event_id):
                 logger.debug(f"Duplicate event {event.event_id}, skipping")
-                self.kafka_client.commit(message)
                 return
 
             # Set correlation context
@@ -313,7 +313,6 @@ class BaseAgent(ABC):
                         self._latencies_ms.append(latency_ms)
                         if len(self._latencies_ms) > self._max_latency_samples:
                             self._latencies_ms.pop(0)
-                    self.kafka_client.commit(message)
                     break
 
                 except Exception as e:
@@ -328,7 +327,6 @@ class BaseAgent(ABC):
                         with self._metrics_lock:
                             self._events_failed += 1
                             self._error_count += 1
-                        self.kafka_client.commit(message)
 
             # Clear correlation context
             self._current_correlation_id = None

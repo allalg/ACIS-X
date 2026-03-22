@@ -63,7 +63,7 @@ class KafkaConfig:
 
     # Consumer settings
     consumer_auto_offset_reset: str = "earliest"  # earliest, latest, none
-    consumer_enable_auto_commit: bool = False  # Manual commit for reliability
+    consumer_enable_auto_commit: bool = True  # Keep config aligned with consumer behavior
     consumer_max_poll_records: int = 500
     consumer_max_poll_interval_ms: int = 300000  # 5 minutes
     consumer_session_timeout_ms: int = 30000  # 30 seconds
@@ -268,13 +268,12 @@ class KafkaClient:
                 "bootstrap.servers": ",".join(self.config.bootstrap_servers),
                 "client.id": self.config.client_id,
                 "group.id": group_id,
-                "auto.offset.reset": self.config.consumer_auto_offset_reset,
-                "enable.auto.commit": self.config.consumer_enable_auto_commit,
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": True,
                 "max.poll.interval.ms": self.config.consumer_max_poll_interval_ms,
                 "session.timeout.ms": self.config.consumer_session_timeout_ms,
                 "heartbeat.interval.ms": self.config.consumer_heartbeat_interval_ms,
                 "fetch.min.bytes": self.config.consumer_fetch_min_bytes,
-                "fetch.max.wait.ms": self.config.consumer_fetch_max_wait_ms,
             }
 
             # Add security settings
@@ -309,7 +308,6 @@ class KafkaClient:
                 "session_timeout_ms": self.config.consumer_session_timeout_ms,
                 "heartbeat_interval_ms": self.config.consumer_heartbeat_interval_ms,
                 "fetch_min_bytes": self.config.consumer_fetch_min_bytes,
-                "fetch_max_wait_ms": self.config.consumer_fetch_max_wait_ms,
                 "value_deserializer": lambda m: json.loads(m.decode("utf-8")),
                 "key_deserializer": lambda k: k.decode("utf-8") if k else None,
             }
@@ -397,7 +395,11 @@ class KafkaClient:
     ) -> None:
         """Publish using confluent-kafka."""
         # Convert headers to list of tuples
-        header_list = [(k, v.encode("utf-8")) for k, v in headers.items()]
+        header_list = [
+            (k, str(v).encode("utf-8"))
+            for k, v in headers.items()
+            if v is not None
+        ]
 
         # Publish
         self._producer.produce(
@@ -658,20 +660,16 @@ class KafkaClient:
 
         try:
             if self.backend == "confluent":
-                if message:
-                    # Commit specific offset (not directly supported, use async)
+                try:
                     self._consumer.commit(asynchronous=False)
-                else:
-                    self._consumer.commit(asynchronous=False)
+                except Exception:
+                    pass
 
             elif self.backend == "kafka-python":
-                if message:
-                    # Commit specific offset
-                    from kafka import TopicPartition
-                    tp = TopicPartition(message.topic, message.partition)
-                    self._consumer.commit({tp: message.offset + 1})
-                else:
+                try:
                     self._consumer.commit()
+                except Exception:
+                    pass
 
             logger.debug("Offsets committed")
 

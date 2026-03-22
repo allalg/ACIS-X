@@ -65,49 +65,49 @@ ACIS_TOPIC_CONFIGS = {
     "acis.invoices": TopicConfig(
         name="acis.invoices",
         partitions=6,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=7 * 24 * 3600 * 1000,  # 7 days
         cleanup_policy="delete",
     ),
     "acis.payments": TopicConfig(
         name="acis.payments",
         partitions=6,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=7 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.customers": TopicConfig(
         name="acis.customers",
         partitions=3,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=30 * 24 * 3600 * 1000,  # 30 days
         cleanup_policy="compact",  # Latest customer state only
     ),
     "acis.risk": TopicConfig(
         name="acis.risk",
         partitions=4,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=14 * 24 * 3600 * 1000,  # 14 days
         cleanup_policy="delete",
     ),
     "acis.policy": TopicConfig(
         name="acis.policy",
         partitions=2,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=30 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.external": TopicConfig(
         name="acis.external",
         partitions=3,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=7 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.commands": TopicConfig(
         name="acis.commands",
         partitions=3,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=1 * 24 * 3600 * 1000,  # 1 day (commands are ephemeral)
         cleanup_policy="delete",
     ),
@@ -116,21 +116,21 @@ ACIS_TOPIC_CONFIGS = {
     "acis.system": TopicConfig(
         name="acis.system",
         partitions=4,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=30 * 24 * 3600 * 1000,  # 30 days
         cleanup_policy="delete",
     ),
     "acis.agent.health": TopicConfig(
         name="acis.agent.health",
         partitions=2,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=7 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.registry": TopicConfig(
         name="acis.registry",
         partitions=1,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=-1,  # Infinite retention
         cleanup_policy="compact",  # Keep latest agent state
     ),
@@ -139,28 +139,28 @@ ACIS_TOPIC_CONFIGS = {
     "acis.invoices.dlq": TopicConfig(
         name="acis.invoices.dlq",
         partitions=1,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=90 * 24 * 3600 * 1000,  # 90 days
         cleanup_policy="delete",
     ),
     "acis.payments.dlq": TopicConfig(
         name="acis.payments.dlq",
         partitions=1,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.risk.dlq": TopicConfig(
         name="acis.risk.dlq",
         partitions=1,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.system.dlq": TopicConfig(
         name="acis.system.dlq",
         partitions=1,
-        replication_factor=3,
+        replication_factor=1,
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),

@@ -56,6 +56,7 @@ class AgentObservation:
     last_lag_emitted_at: Optional[datetime] = None
     last_throughput_emitted_at: Optional[datetime] = None
     last_missing_heartbeat_emitted_at: Optional[datetime] = None
+    last_error_emitted_at: Optional[datetime] = None
 
     def update_identity(self, payload: Dict[str, Any]) -> None:
         """Refresh identifying fields from an event payload."""
@@ -113,6 +114,7 @@ class MonitoringAgent(BaseAgent):
     LAG_EVENT_COOLDOWN_SECONDS = 60
     THROUGHPUT_EVENT_COOLDOWN_SECONDS = 60
     METRICS_PUBLISH_COOLDOWN_SECONDS = 30
+    ERROR_EVENT_COOLDOWN_SECONDS = 60
 
     def __init__(
         self,
@@ -375,6 +377,7 @@ class MonitoringAgent(BaseAgent):
 
             error_rate = agent.error_rate_per_minute(now, self.ERROR_WINDOW_SECONDS)
             lag = agent.consumer_lag
+            error_detected = error_rate >= self.ERROR_RATE_THRESHOLD or agent.status == AgentStatus.ERROR.value
             overloaded = (
                 (agent.cpu_percent or 0.0) >= self.OVERLOAD_CPU_THRESHOLD
                 or (agent.memory_percent or 0.0) >= self.OVERLOAD_MEMORY_THRESHOLD
@@ -386,6 +389,9 @@ class MonitoringAgent(BaseAgent):
 
         if lag >= self.LAG_THRESHOLD:
             self._publish_lag_detected_if_needed(agent_id)
+
+        if error_detected:
+            self._publish_error_if_needed(agent_id, error_rate)
 
         if overloaded:
             self._publish_overloaded_if_needed(agent_id, reason=reason)
@@ -557,6 +563,48 @@ class MonitoringAgent(BaseAgent):
             agent = self._agents.get(agent_id)
             if agent is not None:
                 agent.last_overloaded_emitted_at = now
+
+    def _publish_error_if_needed(self, agent_id: str, error_rate: float) -> None:
+        """Emit agent.error when an agent crosses the monitoring error threshold."""
+        with self._agents_lock:
+            agent = self._agents.get(agent_id)
+            if agent is None:
+                return
+
+            now = datetime.utcnow()
+            if agent.last_error_emitted_at and (now - agent.last_error_emitted_at).total_seconds() < self.ERROR_EVENT_COOLDOWN_SECONDS:
+                return
+
+            payload = {
+                "agent_id": agent.agent_id,
+                "agent_type": agent.agent_type,
+                "agent_name": agent.agent_name,
+                "instance_id": agent.instance_id,
+                "host": agent.host,
+                "status": AgentStatus.ERROR.value,
+                "error_code": "HIGH_ERROR_RATE",
+                "error_message": f"Error rate exceeded threshold ({error_rate}/min)",
+                "error_count": agent.error_count,
+                "error_rate_per_minute": error_rate,
+                "consumer_lag": agent.consumer_lag,
+                "latency_ms": agent.latency_ms,
+                "timestamp": now.isoformat(),
+                "replica_count": agent.replica_count,
+                "max_replicas": agent.max_replicas,
+                "replica_index": agent.replica_index,
+            }
+
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type=SystemEventType.AGENT_ERROR.value,
+            entity_id=payload["agent_name"],
+            payload=payload,
+        )
+
+        with self._agents_lock:
+            agent = self._agents.get(agent_id)
+            if agent is not None:
+                agent.last_error_emitted_at = now
 
     def _publish_throughput_update_if_needed(self, agent_id: str) -> None:
         """Emit throughput.updated when an agent reports meaningful throughput."""

@@ -256,7 +256,7 @@ class RegistryService:
             elif event_type == SystemEventType.AGENT_SPAWNED.value:
                 self._handle_agent_spawned(event)
 
-            elif event_type == SystemEventType.AGENT_STOPPED.value:
+            elif event_type == "agent.stopped":
                 self._handle_agent_stopped(event)
 
             elif event_type == SystemEventType.AGENT_RESTART_COMPLETED.value:

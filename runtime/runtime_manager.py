@@ -93,10 +93,10 @@ class RuntimeManager(BaseAgent):
             self._handle_spawn_requested(event)
         elif event_type == SystemEventType.AGENT_RESTART_REQUESTED.value:
             self._handle_restart_requested(event)
+        elif event_type == SystemEventType.AGENT_SHUTDOWN_REQUESTED.value:
+            self._handle_shutdown_requested(event)
         elif event_type == SystemEventType.AGENT_SCALE_REQUESTED.value:
             self._handle_scale_requested(event)
-        elif event_type == SystemEventType.PLACEMENT_REQUESTED.value:
-            self._handle_placement_requested(event)
 
     def _handle_spawn_requested(self, event: Event) -> None:
         payload = event.payload
@@ -186,53 +186,30 @@ class RuntimeManager(BaseAgent):
             correlation_id=correlation_id,
         )
 
-    def _handle_placement_requested(self, event: Event) -> None:
+    def _handle_shutdown_requested(self, event: Event) -> None:
+        """Simulate stopping an instance and publish agent.stopped."""
         payload = event.payload
-        agent_name = payload["agent_name"]
-        agent_type = payload.get("agent_type")
+        agent_id = payload["agent_id"]
         correlation_id = event.correlation_id
-        preferred_hosts = payload.get("preferred_hosts") or []
-        excluded_hosts = set(payload.get("excluded_hosts") or [])
 
-        chosen_host = None
-        for host in preferred_hosts:
-            if host not in excluded_hosts:
-                chosen_host = host
-                break
+        with self._instances_lock:
+            instance = self._instances.pop(agent_id, None)
+            if instance is None:
+                instance = SimulatedInstance(
+                    agent_id=agent_id,
+                    agent_name=payload["agent_name"],
+                    agent_type=payload.get("agent_type"),
+                    instance_id=payload.get("instance_id", self._generate_instance_id(payload["agent_name"])),
+                    host=self.host or "runtime-host-unassigned",
+                    port=None,
+                    version="1.0.0",
+                    group_id=f"{payload['agent_name'].lower()}-group",
+                    status=AgentStatus.STOPPED.value,
+                )
+            else:
+                instance.status = AgentStatus.STOPPED.value
 
-        if chosen_host is None:
-            for _ in range(len(self._simulated_hosts)):
-                candidate = self._assign_host()
-                if candidate not in excluded_hosts:
-                    chosen_host = candidate
-                    break
-
-        if chosen_host is None:
-            chosen_host = self.host or "runtime-host-unassigned"
-
-        instance_id = payload.get("instance_id") or self._generate_instance_id(agent_name)
-        placement_payload = {
-            "agent_type": agent_type,
-            "agent_name": agent_name,
-            "instance_id": instance_id,
-            "host": chosen_host,
-            "port": None,
-            "placement_decision": f"Simulated placement on {chosen_host}",
-            "alternatives_considered": self._simulated_hosts,
-            "placement_duration_ms": 0,
-            "status": "completed",
-            "error_message": None,
-            "decision_rule": payload.get("decision_rule", "SIMULATED_ROUND_ROBIN"),
-            "decision_score": payload.get("decision_score", 1.0),
-        }
-
-        self.publish_event(
-            topic=self.SYSTEM_TOPIC,
-            event_type=SystemEventType.PLACEMENT_COMPLETED.value,
-            entity_id=agent_name,
-            payload=placement_payload,
-            correlation_id=correlation_id,
-        )
+        self._publish_agent_stopped(instance, correlation_id)
 
     def _ensure_replicas(
         self,
@@ -342,6 +319,15 @@ class RuntimeManager(BaseAgent):
             correlation_id=correlation_id,
         )
 
+        # Publish the runtime-oriented alias event expected by the wiring flow.
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type="agent.restarted",
+            entity_id=instance.agent_name,
+            payload=payload,
+            correlation_id=correlation_id,
+        )
+
     def _publish_scale_completed(
         self,
         agent_name: str,
@@ -388,6 +374,34 @@ class RuntimeManager(BaseAgent):
             "status": instance.status,
             "replica_index": instance.replica_index,
         }
+
+    def _publish_agent_stopped(
+        self,
+        instance: SimulatedInstance,
+        correlation_id: Optional[str],
+    ) -> None:
+        """Publish agent.stopped."""
+        payload = {
+            "agent_id": instance.agent_id,
+            "agent_type": instance.agent_type,
+            "agent_name": instance.agent_name,
+            "instance_id": instance.instance_id,
+            "host": instance.host,
+            "status": AgentStatus.STOPPED.value,
+            "stopped_at": datetime.utcnow().isoformat(),
+            "group_id": instance.group_id,
+            "replica_index": instance.replica_index,
+            "replica_count": instance.replica_count,
+            "max_replicas": instance.max_replicas,
+        }
+
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type="agent.stopped",
+            entity_id=instance.agent_name,
+            payload=payload,
+            correlation_id=correlation_id,
+        )
 
     def _assign_host(self) -> str:
         """Return next simulated host using round-robin assignment."""
