@@ -109,14 +109,14 @@ class RegistryService:
     Maintains in-memory registry of all agents and provides service discovery.
     """
 
-    # Heartbeat timeout for health checks
-    HEARTBEAT_TIMEOUT_SECONDS = 60
+    # Heartbeat timeout for health checks (agent must send heartbeat every 2s)
+    HEARTBEAT_TIMEOUT_SECONDS = 30  # 15x heartbeat interval - more conservative
 
-    # Heartbeat cleanup interval (remove stale agents)
-    CLEANUP_INTERVAL_SECONDS = 60
+    # Heartbeat cleanup interval (check for stale agents every 10s)
+    CLEANUP_INTERVAL_SECONDS = 10
 
-    # Stale agent threshold (2x heartbeat timeout)
-    STALE_AGENT_TIMEOUT_SECONDS = HEARTBEAT_TIMEOUT_SECONDS * 2
+    # Stale agent threshold (agents without heartbeat for 60s are removed)
+    STALE_AGENT_TIMEOUT_SECONDS = 60
 
     # Topology change detection (emit event if topology changed)
     TOPOLOGY_CHANGE_COOLDOWN_SECONDS = 30
@@ -170,10 +170,11 @@ class RegistryService:
         self._running = True
         self._start_time = datetime.utcnow()
 
-        # Subscribe to topics
+        # Subscribe to topics with STABLE consumer group (not random UUID)
+        # This ensures we don't replay old events on restart
         self.kafka_client.subscribe(
             topics=["acis.agent.health", "acis.registry", "acis.system"],
-            group_id=f"registry-{self.service_id}",
+            group_id="acis-registry-service",  # Stable group ID
         )
 
         # Start consumer loop
@@ -245,6 +246,12 @@ class RegistryService:
                 logger.warning(f"Invalid event schema on {msg.topic}")
                 return
 
+            # CRITICAL: Ignore events from before this registry instance started
+            # This prevents replaying old historical events from Kafka
+            if self._start_time and event.event_time < self._start_time:
+                logger.debug(f"Ignoring old event {event.event_type} from {event.event_time}")
+                return
+
             self._events_processed += 1
 
             # Route to appropriate handler
@@ -296,28 +303,15 @@ class RegistryService:
 
         with self._registry_lock:
             if agent_id not in self._registry:
-                # Create new entry from heartbeat
+                # Auto-register with minimal fields only - real registration will fill details
                 self._registry[agent_id] = RegisteredAgent(
                     agent_id=agent_id,
                     agent_name=agent_name,
-                    agent_type=payload.get("agent_type"),
-                    instance_id=payload.get("instance_id"),
-                    host=payload.get("host"),
                     status=payload.get("status", AgentStatus.HEALTHY.value),
+                    registered_at=datetime.utcnow(),
                     last_heartbeat=datetime.utcnow(),
-                    replica_index=payload.get("replica_index"),
-                    replica_count=payload.get("replica_count"),
-                    max_replicas=payload.get("max_replicas"),
-                    metrics=payload.get("metrics", {}),
+                    last_updated=datetime.utcnow(),
                 )
-
-                # Extract topics from details
-                details = payload.get("details", {})
-                if details:
-                    self._registry[agent_id].topics_consumed = details.get("subscribed_topics", [])
-                    self._registry[agent_id].group_id = details.get("group_id")
-                    self._registry[agent_id].version = details.get("version", "1.0.0")
-
                 logger.info(f"Auto-registered agent from heartbeat: {agent_id}")
             else:
                 # Update existing entry
@@ -449,21 +443,39 @@ class RegistryService:
 
         with self._registry_lock:
             is_new = agent_id not in self._registry
+            was_auto_registered = False
+
+            # Check if this was auto-registered from heartbeat (has heartbeat but minimal fields)
+            if agent_id in self._registry:
+                existing = self._registry[agent_id]
+                was_auto_registered = existing.last_heartbeat is not None
+                # Preserve heartbeat timestamp from existing entry
+                agent.last_heartbeat = existing.last_heartbeat
+
             self._registry[agent_id] = agent
             self._registry_updates += 1
 
-        if is_new:
+        # Only trigger topology change if truly new (not if upgrading from auto-registered)
+        if is_new and not was_auto_registered:
             self._mark_topology_changed()
             logger.info(f"Agent registered: {agent_id}")
+        elif was_auto_registered:
+            logger.info(f"Agent registration upgraded from auto-register: {agent_id}")
 
     def _handle_agent_deregistered(self, event: Event) -> None:
         """Handle registry.agent.deregistered - remove agent."""
+        # Ignore events we published ourselves (from remove_agent -> _publish_agent_deregistered)
+        if event.event_source == self.service_id:
+            logger.debug(f"Ignoring self-published deregistration event")
+            return
+
         payload = event.payload
         agent_id = payload.get("agent_id")
 
         if agent_id:
-            self.remove_agent(agent_id)
-            logger.info(f"Agent deregistered: {agent_id}")
+            removed = self.remove_agent(agent_id)
+            if removed:
+                logger.info(f"Agent deregistered via event: {agent_id}")
 
     def _handle_agent_updated(self, event: Event) -> None:
         """Handle registry.agent.updated - update agent metadata."""
@@ -773,19 +785,32 @@ class RegistryService:
     def _cleanup_stale_agents(self) -> None:
         """Remove agents with stale heartbeats."""
         now = datetime.utcnow()
-        stale_timeout = timedelta(seconds=self.STALE_AGENT_TIMEOUT_SECONDS)
         stale_agents = []
 
         with self._registry_lock:
             for agent_id, agent in list(self._registry.items()):
-                if agent.last_heartbeat is None:
-                    continue
+                should_remove = False
 
-                age = now - agent.last_heartbeat
-                if age > stale_timeout:
+                if agent.last_heartbeat is not None:
+                    # Agent has sent at least one heartbeat - check if stale
+                    age_seconds = (now - agent.last_heartbeat).total_seconds()
+                    if age_seconds > self.STALE_AGENT_TIMEOUT_SECONDS:
+                        should_remove = True
+                        logger.debug(f"Agent {agent_id} stale: last heartbeat {age_seconds:.1f}s ago")
+                else:
+                    # Agent has never sent a heartbeat
+                    if agent.registered_at is not None:
+                        age_seconds = (now - agent.registered_at).total_seconds()
+                        if age_seconds > self.STALE_AGENT_TIMEOUT_SECONDS:
+                            # Zombie agent - registered but never heartbeated
+                            should_remove = True
+                            logger.debug(f"Agent {agent_id} zombie: registered {age_seconds:.1f}s ago, no heartbeat")
+                    # If no registered_at, don't remove (defensive)
+
+                if should_remove:
                     stale_agents.append(agent_id)
 
-        # Remove stale agents
+        # Remove stale agents outside the lock
         for agent_id in stale_agents:
             self.remove_agent(agent_id)
             logger.warning(f"Removed stale agent: {agent_id}")

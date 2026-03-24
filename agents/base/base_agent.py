@@ -43,7 +43,7 @@ class BaseAgent(ABC):
     HEALTH_TOPIC = "acis.agent.health"
     SYSTEM_TOPIC = "acis.system"
     REGISTRY_TOPIC = "acis.registry"
-    HEARTBEAT_INTERVAL_SECONDS = 30
+    HEARTBEAT_INTERVAL_SECONDS = 2  # Send heartbeat every 2 seconds
     OVERLOAD_COOLDOWN_SECONDS = 60
     LAG_DETECTION_THRESHOLD = 5000
     LAG_DETECTION_COOLDOWN_SECONDS = 120
@@ -552,6 +552,11 @@ class BaseAgent(ABC):
         """Background thread that sends periodic heartbeats and metrics."""
         logger.info(f"Heartbeat loop started for {self.agent_name}")
 
+        # IMPORTANT: Wait before sending first heartbeat to allow registration event
+        # to be processed first and avoid race condition in registry
+        initial_delay = 3  # Fixed 3 second delay regardless of heartbeat interval
+        self._shutdown_event.wait(timeout=initial_delay)
+
         while self._running:
             try:
                 self.send_heartbeat()
@@ -818,9 +823,12 @@ class BaseAgent(ABC):
     # -------------------------------------------------------------------------
 
     def _get_agent_id(self) -> str:
-        """Generate unique agent ID including instance for replica tracking."""
-        base = self.agent_name.lower().replace(" ", "_")
-        return f"agent_{base}_{self.instance_id}"
+        """Generate unique agent ID for replica tracking.
+
+        instance_id already has format: agent_<name>_<uuid>
+        So we use it directly as the agent_id.
+        """
+        return self.instance_id
 
     def _register_with_registry(self) -> None:
         """Register agent with the registry service on startup."""
