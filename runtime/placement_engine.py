@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
+from registry.registry_service import RegistryService
 from schemas.event_schema import Event, SystemEventType
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class PlacementEngine(BaseAgent):
         instance_id: Optional[str] = None,
         host: Optional[str] = None,
         simulated_hosts: Optional[List[str]] = None,
+        registry: Optional[RegistryService] = None,
     ):
         super().__init__(
             agent_name="PlacementEngine",
@@ -51,6 +53,7 @@ class PlacementEngine(BaseAgent):
         self._next_host_index = 0
         self._replica_counters: Dict[str, int] = {}
         self._lock = threading.Lock()
+        self.registry = registry
 
     def subscribe(self) -> List[str]:
         """Consume placement requests from the system topic."""
@@ -64,15 +67,29 @@ class PlacementEngine(BaseAgent):
     def _handle_placement_requested(self, event: Event) -> None:
         """Choose host, replica index, and group assignment for a placement request."""
         payload = event.payload
-        agent_name = payload["agent_name"]
+        agent_name = payload.get("agent_name")
         agent_type = payload.get("agent_type")
         instance_id = payload.get("instance_id") or f"instance_{agent_name.lower()}_{datetime.utcnow().strftime('%H%M%S')}"
-        preferred_hosts = payload.get("preferred_hosts") or []
-        excluded_hosts = set(payload.get("excluded_hosts") or [])
+        preferred_hosts = payload.get("preferred_hosts")
+        excluded_hosts = payload.get("excluded_hosts")
         decision_rule = payload.get("decision_rule", "SIMULATED_ROUND_ROBIN")
         decision_score = payload.get("decision_score", 1.0)
 
-        host = self._select_host(preferred_hosts, excluded_hosts)
+        # Choose host using topology-aware logic
+        host = self._choose_host(
+            agent_name,
+            preferred_hosts,
+            excluded_hosts,
+        )
+
+        # Fallback to least loaded host if no host chosen
+        if host is None and self.registry:
+            host = self.registry.get_least_loaded_host()
+
+        # Final fallback to old round-robin logic
+        if host is None:
+            host = self._select_host(preferred_hosts or [], set(excluded_hosts or []))
+
         replica_index = self._next_replica_index(agent_name)
         group_id = self._derive_group_id(agent_name, payload)
 
@@ -103,6 +120,55 @@ class PlacementEngine(BaseAgent):
             payload=placement_payload,
             correlation_id=event.correlation_id,
         )
+
+    def _get_hosts(self) -> List[str]:
+        """Get available hosts from registry."""
+        if not self.registry:
+            return []
+
+        return self.registry.get_hosts()
+
+    def _get_host_load(self, host: str) -> int:
+        """Get host load (number of agents on host)."""
+        if not self.registry:
+            return 0
+
+        return self.registry.get_host_load(host)
+
+    def _choose_host(
+        self,
+        agent_name: str,
+        preferred_hosts: Optional[List[str]],
+        excluded_hosts: Optional[List[str]],
+    ) -> Optional[str]:
+        """Choose best host based on topology and preferences."""
+        hosts = self._get_hosts()
+
+        if not hosts:
+            return None
+
+        # Remove excluded hosts
+        if excluded_hosts:
+            hosts = [h for h in hosts if h not in excluded_hosts]
+
+        # If preferred hosts exist, use only them
+        if preferred_hosts:
+            hosts = [h for h in hosts if h in preferred_hosts]
+
+        if not hosts:
+            return None
+
+        best_host = None
+        best_load = None
+
+        for h in hosts:
+            load = self._get_host_load(h)
+
+            if best_load is None or load < best_load:
+                best_host = h
+                best_load = load
+
+        return best_host
 
     def _select_host(self, preferred_hosts: List[str], excluded_hosts: set[str]) -> str:
         """Pick a simulated host honoring preferences and exclusions."""

@@ -865,6 +865,114 @@ class RegistryService:
         with self._registry_lock:
             return list(self._registry.values())
 
+    # -------------------------------------------------------------------------
+    # Topology Helper Methods
+    # -------------------------------------------------------------------------
+
+    def get_all_agent_cards(self) -> List[AgentCard]:
+        """
+        Get all registered agents as AgentCard objects.
+
+        Returns:
+            List of AgentCard objects
+        """
+        with self._registry_lock:
+            return [a.agent_card for a in self._registry.values() if a.agent_card]
+
+    def get_agents_by_host(self, host: str) -> List[AgentCard]:
+        """
+        Return agents running on a host.
+
+        Args:
+            host: Host name to filter by
+
+        Returns:
+            List of AgentCard objects on the specified host
+        """
+        with self._registry_lock:
+            return [
+                a.agent_card for a in self._registry.values()
+                if a.agent_card and a.host == host
+            ]
+
+    def get_agents_by_type(self, agent_name: str) -> List[AgentCard]:
+        """
+        Return all replicas of an agent type.
+
+        Args:
+            agent_name: Agent name/type to filter by
+
+        Returns:
+            List of AgentCard objects matching the agent name
+        """
+        with self._registry_lock:
+            return [
+                a.agent_card for a in self._registry.values()
+                if a.agent_card and a.agent_name == agent_name
+            ]
+
+    def get_replica_count(self, agent_name: str) -> int:
+        """
+        Get the count of replicas for an agent type.
+
+        Args:
+            agent_name: Agent name/type
+
+        Returns:
+            Number of replicas
+        """
+        return len(self.get_agents_by_type(agent_name))
+
+    def get_host_load(self, host: str) -> int:
+        """
+        Get host load (number of agents on host).
+
+        Args:
+            host: Host name
+
+        Returns:
+            Number of agents running on the host
+        """
+        return len(self.get_agents_by_host(host))
+
+    def get_hosts(self) -> List[str]:
+        """
+        Return all known hosts.
+
+        Returns:
+            List of unique host names
+        """
+        with self._registry_lock:
+            hosts = set()
+            for a in self._registry.values():
+                if a.host:
+                    hosts.add(a.host)
+            return list(hosts)
+
+    def get_least_loaded_host(self) -> Optional[str]:
+        """
+        Get the host with the least number of agents.
+
+        Returns:
+            Host name with minimum load, or None if no hosts exist
+        """
+        hosts = self.get_hosts()
+
+        if not hosts:
+            return None
+
+        best_host = None
+        best_load = None
+
+        for h in hosts:
+            load = self.get_host_load(h)
+
+            if best_load is None or load < best_load:
+                best_host = h
+                best_load = load
+
+        return best_host
+
     def get_topology(self) -> Dict[str, Any]:
         """
         Get system topology.

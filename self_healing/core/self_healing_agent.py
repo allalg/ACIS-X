@@ -545,7 +545,7 @@ class SelfHealingAgent(BaseAgent):
         logger.info(f"[SelfHealing] agent={agent_id} score={score:.2f} action={action}")
 
         now = datetime.utcnow()
-        replicas, max_replicas = self._get_replica_info(state)
+        replicas, max_replicas = self._get_replica_info(state.agent_name)
 
         if action == "restart":
             if self._can_restart(state, now):
@@ -591,22 +591,39 @@ class SelfHealingAgent(BaseAgent):
             logger.debug(f"Registry lookup failed for capability {capability}: {e}")
             return None
 
-    def _get_replica_info(self, state: AgentRecoveryState) -> tuple:
-        """Get current replica count and max replicas from registry or state."""
-        replica_count = state.replica_count or 1
-        max_replicas = state.max_replicas or self.DEFAULT_MAX_REPLICAS
+    def _get_replica_info(self, agent_name: str) -> tuple:
+        """Get current replica count and max replicas from registry."""
+        if not self.registry:
+            return 1, self.DEFAULT_MAX_REPLICAS
 
-        if self.registry:
-            capability = self._get_capability_for_agent(state.agent_name)
-            if capability:
-                best = self._find_best_agent(capability)
-                if best:
-                    if best.replica_count is not None:
-                        replica_count = best.replica_count
-                    if best.max_replicas is not None:
-                        max_replicas = best.max_replicas
+        replica_count = self.registry.get_replica_count(agent_name)
+        agents = self.registry.get_agents_by_type(agent_name)
+
+        max_replicas = None
+        if agents:
+            max_replicas = agents[0].max_replicas
+
+        if max_replicas is None:
+            max_replicas = self.DEFAULT_MAX_REPLICAS
 
         return replica_count, max_replicas
+
+    def _build_placement_hints(self, agent_name: str) -> Dict[str, List[str]]:
+        """Build placement hints for spawning agents on different hosts."""
+        if not self.registry:
+            return {"excluded_hosts": [], "preferred_hosts": []}
+
+        agents = self.registry.get_agents_by_type(agent_name)
+
+        hosts = []
+        for a in agents:
+            if a.host:
+                hosts.append(a.host)
+
+        return {
+            "excluded_hosts": hosts,
+            "preferred_hosts": [],
+        }
 
     # -------------------------------------------------------------------------
     # Cooldown Checks
@@ -702,11 +719,10 @@ class SelfHealingAgent(BaseAgent):
     def _publish_scale(self, state: AgentRecoveryState, reason: str, decision_rule: str, trigger_value: float) -> None:
         """Publish agent.scale.requested."""
         # Check replica limits before scaling
-        current_replicas, max_replicas = self._get_replica_info(state)
+        current_replicas, max_replicas = self._get_replica_info(state.agent_name)
 
-        if current_replicas >= max_replicas:
-            logger.info(f"Max replicas reached for {state.agent_name}, cannot scale (current={current_replicas}, max={max_replicas})")
-            self._publish_spawn_and_placement(state, "Scale blocked by max replicas", "MAX_REPLICA_LIMIT")
+        if max_replicas is not None and current_replicas >= max_replicas:
+            logger.info(f"[SelfHealing] max replicas reached for {state.agent_name}")
             return
 
         desired_replicas = min(current_replicas + self.SCALE_UP_STEP, max_replicas)
@@ -737,10 +753,20 @@ class SelfHealingAgent(BaseAgent):
         if not self._can_spawn(state, now):
             return
 
+        # Check replica limits before spawning
+        replica_count, max_replicas = self._get_replica_info(state.agent_name)
+
+        if max_replicas is not None and replica_count >= max_replicas:
+            self.logger.info(
+                f"[SelfHealing] max replicas reached for {state.agent_name}"
+            )
+            return
+
+        # Build placement hints
+        placement_hints = self._build_placement_hints(state.agent_name)
+
         # Try to get agent info from registry
         agent_type = state.agent_type
-        replica_count = state.replica_count
-        max_replicas = state.max_replicas
 
         if self.registry:
             capability = self._get_capability_for_agent(state.agent_name)
@@ -749,10 +775,6 @@ class SelfHealingAgent(BaseAgent):
                 if best_agent:
                     if best_agent.agent_type:
                         agent_type = best_agent.agent_type
-                    if best_agent.replica_count is not None:
-                        replica_count = best_agent.replica_count
-                    if best_agent.max_replicas is not None:
-                        max_replicas = best_agent.max_replicas
 
         spawn_event = create_spawn_request_event(
             event_source=self.agent_name,
@@ -782,12 +804,15 @@ class SelfHealingAgent(BaseAgent):
                     "reason": reason,
                     "source_agent_id": state.agent_id,
                 },
-                "preferred_hosts": None,
-                "excluded_hosts": [state.host] if state.host else None,
+                "preferred_hosts": placement_hints.get("preferred_hosts"),
+                "excluded_hosts": placement_hints.get("excluded_hosts"),
                 "requester": self.agent_name,
                 "priority": "high",
                 "decision_rule": decision_rule,
                 "decision_score": 0.9,
+                "replica_count": replica_count,
+                "max_replicas": max_replicas,
+                "placement_hints": placement_hints,
             }
             self.publish_event(
                 topic=self.SYSTEM_TOPIC,
