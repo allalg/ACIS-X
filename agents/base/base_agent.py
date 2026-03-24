@@ -176,6 +176,9 @@ class BaseAgent(ABC):
         # THEN register with registry
         self._register_with_registry()
 
+        # Publish agent card for discovery
+        self._publish_agent_card()
+
         # Start heartbeat thread
         self._heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
@@ -830,6 +833,47 @@ class BaseAgent(ABC):
         """
         return self.instance_id
 
+    def get_agent_card(self) -> Dict[str, Any]:
+        """
+        Get AgentCard with complete metadata for discovery.
+
+        Returns:
+            Dictionary containing agent card fields
+        """
+        return {
+            "agent_id": self._get_agent_id(),
+            "agent_name": self.agent_name,
+            "agent_type": self.agent_type,
+            "version": self.agent_version,
+            "capabilities": self.capabilities,
+            "group_id": self.group_id,
+            "topics_consumed": self.subscribed_topics,
+            "topics_produced": [],  # Subclasses can override
+            "host": self.host,
+            "instance_id": self.instance_id,
+            "replica_index": self.replica_index,
+            "replica_count": self.replica_count,
+            "max_replicas": self.max_replicas,
+            "status": "healthy" if self._running else "stopped",
+            "metadata": {},  # Subclasses can add custom metadata
+            "last_updated": datetime.utcnow().isoformat(),
+        }
+
+    def _publish_agent_card(self) -> None:
+        """Publish agent card to registry for discovery."""
+        card_payload = self.get_agent_card()
+
+        self.publish_event(
+            topic=self.REGISTRY_TOPIC,
+            event_type="registry.agent.card.updated",
+            entity_id=self.agent_name,
+            payload=card_payload,
+            correlation_id=None,
+            metadata={"environment": "production"},
+        )
+
+        logger.debug(f"Agent card published for {self.agent_name}")
+
     def _register_with_registry(self) -> None:
         """Register agent with the registry service on startup."""
         registration_payload = {
@@ -892,35 +936,7 @@ class BaseAgent(ABC):
         except Exception as e:
             logger.warning(f"Failed to deregister from registry: {e}")
 
-    # -------------------------------------------------------------------------
-    # Agent card
-    # -------------------------------------------------------------------------
-
-    def get_agent_card(self) -> Dict[str, Any]:
-        """Return agent metadata for registry/discovery."""
-        metrics = self.collect_metrics()
-        return {
-            "agent_id": self._get_agent_id(),
-            "agent_type": self.agent_type,
-            "agent_name": self.agent_name,
-            "agent_version": self.agent_version,
-            "instance_id": self.instance_id,
-            "host": self.host,
-            "group_id": self.group_id,
-            "subscribed_topics": self.subscribed_topics,
-            "capabilities": self.capabilities,
-            "schema_version": self.SCHEMA_VERSION,
-            "status": "healthy" if self._running else "stopped",
-            "replica_index": self.replica_index,
-            "replica_count": self.replica_count,
-            "max_replicas": self.max_replicas,
-            "metrics": metrics,
-            "last_heartbeat": (
-                self._last_heartbeat.isoformat()
-                if self._last_heartbeat else None
-            ),
-        }
-
+    
     # -------------------------------------------------------------------------
     # Correlation ID helpers
     # -------------------------------------------------------------------------

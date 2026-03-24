@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
+from registry.registry_service import RegistryService
 from schemas.event_schema import (
     AgentStatus,
     Event,
@@ -118,6 +119,27 @@ class SelfHealingAgent(BaseAgent):
     DEFAULT_MAX_REPLICAS = 3
     MAX_RESTARTS_BEFORE_SPAWN = 2
 
+    # Hybrid scoring weights
+    CPU_WEIGHT = 0.2
+    LAG_WEIGHT = 0.3
+    ERROR_WEIGHT = 0.2
+    LATENCY_WEIGHT = 0.2
+    STATUS_WEIGHT = 0.1
+
+    # Score thresholds for actions
+    SCORE_DEGRADED = 0.4   # restart
+    SCORE_SCALE = 0.5      # scale
+    SCORE_CRITICAL = 0.7   # spawn
+
+    # Agent capability mapping for registry-based discovery
+    AGENT_CAPABILITY_MAP = {
+        "MonitoringAgent": "monitoring",
+        "ScenarioGeneratorAgent": "scenario",
+        "PlacementEngine": "placement",
+        "RuntimeManager": "runtime",
+        "SelfHealingAgent": "self_healing",
+    }
+
     def __init__(
         self,
         kafka_client: Any,
@@ -125,6 +147,7 @@ class SelfHealingAgent(BaseAgent):
         instance_id: Optional[str] = None,
         host: Optional[str] = None,
         fallback_agents: Optional[Dict[str, List[str]]] = None,
+        registry: Optional[RegistryService] = None,
     ):
         super().__init__(
             agent_name="SelfHealingAgent",
@@ -148,6 +171,7 @@ class SelfHealingAgent(BaseAgent):
         self._state_lock = threading.Lock()
         self._decision_thread: Optional[threading.Thread] = None
         self._fallback_agents = fallback_agents or {}
+        self.registry = registry
 
     def subscribe(self) -> List[str]:
         """Return subscribed Kafka topics."""
@@ -332,12 +356,52 @@ class SelfHealingAgent(BaseAgent):
             state.events_per_second = float(payload["events_per_second"] or 0.0)
 
     def _evaluate_all_states(self) -> None:
-        """Re-run decision logic across all tracked agents."""
-        with self._state_lock:
-            agent_ids = list(self._states.keys())
+        """Re-run decision logic across all tracked agents using HYBRID approach."""
+        now = datetime.utcnow()
 
-        for agent_id in agent_ids:
-            self._evaluate_state(agent_id, trigger="periodic")
+        with self._state_lock:
+            states_snapshot = {aid: AgentRecoveryState(**s.__dict__) for aid, s in self._states.items()}
+
+        for agent_id, state in states_snapshot.items():
+            # Skip self and stopped agents
+            if state.agent_name == self.agent_name:
+                continue
+            if state.status == AgentStatus.STOPPED.value:
+                continue
+            if not state.last_event_at:
+                continue
+
+            # ----------------------------------
+            # Immediate rules (no scoring)
+            # ----------------------------------
+
+            if state.status == AgentStatus.CRITICAL.value:
+                if self._can_spawn(state, now):
+                    self._emit_recovery_triggered(state, "spawn", "CRITICAL_IMMEDIATE")
+                    self._publish_spawn_and_placement(state, "Critical status - immediate spawn", "CRITICAL_IMMEDIATE")
+                continue
+
+            if state.status == AgentStatus.ERROR.value:
+                if self._can_restart(state, now):
+                    self._emit_recovery_triggered(state, "restart", "ERROR_IMMEDIATE")
+                    self._publish_restart(state, "Error status - immediate restart", "ERROR_IMMEDIATE")
+                continue
+
+            if state.status == AgentStatus.TIMEOUT.value:
+                if self._can_restart(state, now):
+                    self._emit_recovery_triggered(state, "restart", "TIMEOUT_IMMEDIATE")
+                    self._publish_restart(state, "Timeout status - immediate restart", "TIMEOUT_IMMEDIATE")
+                continue
+
+            # ----------------------------------
+            # Score-based rules for degraded/lag/overload
+            # ----------------------------------
+
+            if state.status in (
+                AgentStatus.DEGRADED.value,
+                AgentStatus.OVERLOADED.value,
+            ) or state.consumer_lag > 0:
+                self._apply_score_decision(agent_id, state)
 
     def _evaluate_state(self, agent_id: str, trigger: str) -> None:
         """Apply recovery rules to a single tracked agent."""
@@ -380,25 +444,40 @@ class SelfHealingAgent(BaseAgent):
             return
 
         if snapshot.consumer_lag >= self.CRITICAL_LAG_THRESHOLD:
-            self._emit_recovery_triggered(snapshot, "scale", "CRITICAL_LAG")
-            if self._can_scale(snapshot, now):
-                self._publish_scale(snapshot, "Critical consumer lag detected", "CRITICAL_LAG", float(snapshot.consumer_lag))
+            replicas, max_replicas = self._get_replica_info(snapshot)
+            if replicas < max_replicas:
+                self._emit_recovery_triggered(snapshot, "scale", "CRITICAL_LAG")
+                if self._can_scale(snapshot, now):
+                    self._publish_scale(snapshot, "Critical consumer lag detected", "CRITICAL_LAG", float(snapshot.consumer_lag))
+                else:
+                    self._publish_spawn_and_placement(snapshot, "Lag remains critical during scale cooldown", "CRITICAL_LAG_ESCALATED")
             else:
-                self._publish_spawn_and_placement(snapshot, "Lag remains critical during scale cooldown", "CRITICAL_LAG_ESCALATED")
+                self._emit_recovery_triggered(snapshot, "spawn", "CRITICAL_LAG_SPAWN")
+                self._publish_spawn_and_placement(snapshot, "Critical lag - scale at limit", "CRITICAL_LAG_SPAWN")
             return
 
         if snapshot.status == AgentStatus.OVERLOADED.value or trigger == "overloaded":
-            self._emit_recovery_triggered(snapshot, "scale", "OVERLOADED_AGENT")
-            if self._can_scale(snapshot, now):
-                self._publish_scale(snapshot, "Overloaded agent requires more capacity", "OVERLOADED_AGENT", self._overload_signal(snapshot))
+            replicas, max_replicas = self._get_replica_info(snapshot)
+            if replicas < max_replicas:
+                self._emit_recovery_triggered(snapshot, "scale", "OVERLOADED_AGENT")
+                if self._can_scale(snapshot, now):
+                    self._publish_scale(snapshot, "Overloaded agent requires more capacity", "OVERLOADED_AGENT", self._overload_signal(snapshot))
+                else:
+                    self._maybe_publish_fallback(snapshot, "OVERLOADED_AGENT")
             else:
-                self._maybe_publish_fallback(snapshot, "OVERLOADED_AGENT")
+                self._emit_recovery_triggered(snapshot, "spawn", "OVERLOADED_SPAWN")
+                self._publish_spawn_and_placement(snapshot, "Overloaded - scale at limit", "OVERLOADED_SPAWN")
             return
 
         if snapshot.consumer_lag >= self.LAG_SCALE_THRESHOLD or trigger == "lag":
-            self._emit_recovery_triggered(snapshot, "scale", "LAG_DETECTED")
-            if self._can_scale(snapshot, now):
-                self._publish_scale(snapshot, "High lag detected by monitoring", "LAG_DETECTED", float(snapshot.consumer_lag))
+            replicas, max_replicas = self._get_replica_info(snapshot)
+            if replicas < max_replicas:
+                self._emit_recovery_triggered(snapshot, "scale", "LAG_DETECTED")
+                if self._can_scale(snapshot, now):
+                    self._publish_scale(snapshot, "High lag detected by monitoring", "LAG_DETECTED", float(snapshot.consumer_lag))
+            else:
+                self._emit_recovery_triggered(snapshot, "spawn", "LAG_SPAWN")
+                self._publish_spawn_and_placement(snapshot, "High lag - scale at limit", "LAG_SPAWN")
             return
 
         if snapshot.status == AgentStatus.DEGRADED.value and snapshot.last_degraded_at:
@@ -420,6 +499,118 @@ class SelfHealingAgent(BaseAgent):
                 int(state.latency_ms or 0),
             )
         )
+
+    # -------------------------------------------------------------------------
+    # Hybrid Scoring Logic
+    # -------------------------------------------------------------------------
+
+    def _compute_health_score(self, state: AgentRecoveryState) -> float:
+        """Compute health score from 0 (healthy) to 1 (critical)."""
+        cpu = min((state.cpu_percent or 0) / 100, 1.0)
+        lag = min(state.consumer_lag / 10000, 1.0)
+        error = min(state.error_count / 10, 1.0)
+        latency = min((state.latency_ms or 0) / 1000, 1.0)
+
+        status_score = 0.0
+        if state.status == AgentStatus.DEGRADED.value:
+            status_score = 0.5
+        elif state.status == AgentStatus.CRITICAL.value:
+            status_score = 1.0
+
+        score = (
+            cpu * self.CPU_WEIGHT
+            + lag * self.LAG_WEIGHT
+            + error * self.ERROR_WEIGHT
+            + latency * self.LATENCY_WEIGHT
+            + status_score * self.STATUS_WEIGHT
+        )
+
+        return min(score, 1.0)
+
+    def _decide_action_from_score(self, score: float) -> str:
+        """Map score to action: spawn/scale/restart/none."""
+        if score >= self.SCORE_CRITICAL:
+            return "spawn"
+        if score >= self.SCORE_SCALE:
+            return "scale"
+        if score >= self.SCORE_DEGRADED:
+            return "restart"
+        return "none"
+
+    def _apply_score_decision(self, agent_id: str, state: AgentRecoveryState) -> None:
+        """Apply score-based decision for degraded/lag/overload states."""
+        score = self._compute_health_score(state)
+        action = self._decide_action_from_score(score)
+
+        logger.info(f"[SelfHealing] agent={agent_id} score={score:.2f} action={action}")
+
+        now = datetime.utcnow()
+        replicas, max_replicas = self._get_replica_info(state)
+
+        if action == "restart":
+            if self._can_restart(state, now):
+                self._emit_recovery_triggered(state, "restart", "SCORE_BASED_RESTART")
+                self._publish_restart(state, f"Score-based restart (score={score:.2f})", "SCORE_BASED_RESTART")
+
+        elif action == "scale":
+            if replicas < max_replicas:
+                if self._can_scale(state, now):
+                    self._emit_recovery_triggered(state, "scale", "SCORE_BASED_SCALE")
+                    self._publish_scale(state, f"Score-based scale (score={score:.2f})", "SCORE_BASED_SCALE", self._overload_signal(state))
+            else:
+                if self._can_spawn(state, now):
+                    self._emit_recovery_triggered(state, "spawn", "SCORE_BASED_SPAWN_FROM_SCALE")
+                    self._publish_spawn_and_placement(state, f"Score-based spawn - scale at limit (score={score:.2f})", "SCORE_BASED_SPAWN_FROM_SCALE")
+
+        elif action == "spawn":
+            if replicas < max_replicas:
+                if self._can_scale(state, now):
+                    self._emit_recovery_triggered(state, "scale", "SCORE_BASED_SCALE_BEFORE_SPAWN")
+                    self._publish_scale(state, f"Score-based scale before spawn (score={score:.2f})", "SCORE_BASED_SCALE_BEFORE_SPAWN", self._overload_signal(state))
+            else:
+                if self._can_spawn(state, now):
+                    self._emit_recovery_triggered(state, "spawn", "SCORE_BASED_SPAWN")
+                    self._publish_spawn_and_placement(state, f"Score-based spawn (score={score:.2f})", "SCORE_BASED_SPAWN")
+
+    # -------------------------------------------------------------------------
+    # Registry-based Discovery Helpers
+    # -------------------------------------------------------------------------
+
+    def _get_capability_for_agent(self, agent_name: str) -> Optional[str]:
+        """Get capability name for an agent based on agent name."""
+        return self.AGENT_CAPABILITY_MAP.get(agent_name)
+
+    def _find_best_agent(self, capability: str) -> Optional[Any]:
+        """Find best agent with the specified capability using registry."""
+        if self.registry is None:
+            return None
+
+        try:
+            return self.registry.find_best_agent(capability)
+        except Exception as e:
+            logger.debug(f"Registry lookup failed for capability {capability}: {e}")
+            return None
+
+    def _get_replica_info(self, state: AgentRecoveryState) -> tuple:
+        """Get current replica count and max replicas from registry or state."""
+        replica_count = state.replica_count or 1
+        max_replicas = state.max_replicas or self.DEFAULT_MAX_REPLICAS
+
+        if self.registry:
+            capability = self._get_capability_for_agent(state.agent_name)
+            if capability:
+                best = self._find_best_agent(capability)
+                if best:
+                    if best.replica_count is not None:
+                        replica_count = best.replica_count
+                    if best.max_replicas is not None:
+                        max_replicas = best.max_replicas
+
+        return replica_count, max_replicas
+
+    # -------------------------------------------------------------------------
+    # Cooldown Checks
+    # -------------------------------------------------------------------------
 
     def _can_restart(self, state: AgentRecoveryState, now: datetime) -> bool:
         if state.last_restart_requested is None:
@@ -510,10 +701,12 @@ class SelfHealingAgent(BaseAgent):
 
     def _publish_scale(self, state: AgentRecoveryState, reason: str, decision_rule: str, trigger_value: float) -> None:
         """Publish agent.scale.requested."""
-        current_replicas = state.replica_count or 1
-        max_replicas = state.max_replicas or self.DEFAULT_MAX_REPLICAS
+        # Check replica limits before scaling
+        current_replicas, max_replicas = self._get_replica_info(state)
+
         if current_replicas >= max_replicas:
-            self._publish_spawn_and_placement(state, "Scale limit reached; requesting replacement capacity", "SCALE_LIMIT_REACHED")
+            logger.info(f"Max replicas reached for {state.agent_name}, cannot scale (current={current_replicas}, max={max_replicas})")
+            self._publish_spawn_and_placement(state, "Scale blocked by max replicas", "MAX_REPLICA_LIMIT")
             return
 
         desired_replicas = min(current_replicas + self.SCALE_UP_STEP, max_replicas)
@@ -544,19 +737,36 @@ class SelfHealingAgent(BaseAgent):
         if not self._can_spawn(state, now):
             return
 
+        # Try to get agent info from registry
+        agent_type = state.agent_type
+        replica_count = state.replica_count
+        max_replicas = state.max_replicas
+
+        if self.registry:
+            capability = self._get_capability_for_agent(state.agent_name)
+            if capability:
+                best_agent = self._find_best_agent(capability)
+                if best_agent:
+                    if best_agent.agent_type:
+                        agent_type = best_agent.agent_type
+                    if best_agent.replica_count is not None:
+                        replica_count = best_agent.replica_count
+                    if best_agent.max_replicas is not None:
+                        max_replicas = best_agent.max_replicas
+
         spawn_event = create_spawn_request_event(
             event_source=self.agent_name,
             agent_name=state.agent_name,
             reason=reason,
-            agent_type=state.agent_type,
+            agent_type=agent_type,
             instance_id=None,
             host=None,
             config=None,
             priority="high",
             source_agent_id=state.agent_id,
             source_instance_id=state.instance_id,
-            replica_count=state.replica_count,
-            max_replicas=state.max_replicas,
+            replica_count=replica_count,
+            max_replicas=max_replicas,
             decision_rule=decision_rule,
             decision_score=0.92,
             correlation_id=self.create_correlation_id(),
@@ -565,7 +775,7 @@ class SelfHealingAgent(BaseAgent):
 
         if self._can_request_placement(state, now):
             placement_payload = {
-                "agent_type": state.agent_type,
+                "agent_type": agent_type,
                 "agent_name": state.agent_name,
                 "instance_id": None,
                 "requirements": {
@@ -596,10 +806,27 @@ class SelfHealingAgent(BaseAgent):
     def _maybe_publish_fallback(self, state: AgentRecoveryState, decision_rule: str) -> None:
         """Publish fallback.agent.selected when a fallback is configured."""
         now = datetime.utcnow()
-        if not state.candidate_fallbacks or not self._can_select_fallback(state, now):
+        if not self._can_select_fallback(state, now):
             return
 
-        fallback_agent = state.candidate_fallbacks[0]
+        fallback_agent = None
+
+        # Try registry-based discovery first
+        if self.registry:
+            capability = self._get_capability_for_agent(state.agent_name)
+            if capability:
+                best_agent = self._find_best_agent(capability)
+                if best_agent and best_agent.agent_id != state.agent_id:
+                    fallback_agent = best_agent.agent_id
+
+        # Fallback to static configuration
+        if not fallback_agent and state.candidate_fallbacks:
+            fallback_agent = state.candidate_fallbacks[0]
+
+        # No fallback available
+        if not fallback_agent:
+            return
+
         payload = {
             "source_agent_id": state.agent_id,
             "source_agent_name": state.agent_name,

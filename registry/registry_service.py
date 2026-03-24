@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from runtime.kafka_client import KafkaClient, KafkaMessage
 from schemas.event_schema import Event, RegistryEventType, SystemEventType, AgentStatus
+from registry.agent_card import AgentCard
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,9 @@ class RegisteredAgent:
     # Metrics (latest from heartbeat)
     metrics: Dict[str, Any] = field(default_factory=dict)
 
+    # AgentCard (for discovery)
+    agent_card: Optional[AgentCard] = None
+
     def is_healthy(self, heartbeat_timeout_seconds: int = 90) -> bool:
         """Check if agent is healthy based on heartbeat."""
         if self.status not in [AgentStatus.HEALTHY.value, AgentStatus.DEGRADED.value]:
@@ -95,6 +99,9 @@ class RegisteredAgent:
             data["last_heartbeat"] = self.last_heartbeat.isoformat()
         if self.last_updated:
             data["last_updated"] = self.last_updated.isoformat()
+        # Convert AgentCard to dict
+        if self.agent_card:
+            data["agent_card"] = self.agent_card.to_dict()
         return data
 
 
@@ -277,6 +284,9 @@ class RegistryService:
 
             elif event_type == RegistryEventType.AGENT_UPDATED.value:
                 self._handle_agent_updated(event)
+
+            elif event_type == "registry.agent.card.updated":
+                self._handle_agent_card_updated(event)
 
             elif event_type == RegistryEventType.DISCOVERY_REQUEST.value:
                 self._handle_discovery_request(event)
@@ -509,6 +519,74 @@ class RegistryService:
 
                 logger.info(f"Agent updated: {agent_id}")
 
+    def _handle_agent_card_updated(self, event: Event) -> None:
+        """Handle registry.agent.card.updated - store agent card for discovery."""
+        payload = event.payload
+        agent_id = payload.get("agent_id")
+        agent_name = payload.get("agent_name", event.entity_id)
+
+        if not agent_id:
+            logger.warning(f"Agent card missing agent_id for {agent_name}")
+            return
+
+        try:
+            # Create AgentCard from payload
+            agent_card = AgentCard.from_dict(payload)
+
+            with self._registry_lock:
+                # Update existing agent or create new entry
+                if agent_id in self._registry:
+                    agent = self._registry[agent_id]
+                    agent.agent_card = agent_card
+
+                    # Update agent fields from card
+                    agent.capabilities = agent_card.capabilities
+                    agent.topics_consumed = agent_card.topics_consumed
+                    agent.topics_produced = agent_card.topics_produced
+                    agent.version = agent_card.version
+                    if agent_card.status is not None:
+                        agent.status = agent_card.status
+                    agent.replica_index = agent_card.replica_index
+                    agent.replica_count = agent_card.replica_count
+                    agent.max_replicas = agent_card.max_replicas
+                    agent.last_updated = datetime.utcnow()
+
+                    logger.info(f"Agent card updated: {agent_id}")
+                else:
+                    # Create minimal entry if agent not yet registered
+                    self._registry[agent_id] = RegisteredAgent(
+                        agent_id=agent_id,
+                        agent_name=agent_name,
+                        agent_type=agent_card.agent_type,
+                        instance_id=agent_card.instance_id,
+                        host=agent_card.host,
+                        version=agent_card.version,
+                        group_id=agent_card.group_id,
+                        capabilities=agent_card.capabilities,
+                        topics_consumed=agent_card.topics_consumed,
+                        topics_produced=agent_card.topics_produced,
+                        status=agent_card.status if agent_card.status is not None else AgentStatus.HEALTHY.value,
+                        replica_index=agent_card.replica_index,
+                        replica_count=agent_card.replica_count,
+                        max_replicas=agent_card.max_replicas,
+                        registered_at=datetime.utcnow(),
+                        last_updated=datetime.utcnow(),
+                        agent_card=agent_card,
+                    )
+                    logger.info(f"Agent card registered: {agent_id}")
+
+            # Publish updated event
+            with self._registry_lock:
+                agent = self._registry.get(agent_id)
+                if agent:
+                    self._publish_agent_updated(agent, "agent_card_updated")
+
+            # Mark topology changed
+            self._mark_topology_changed()
+
+        except Exception as e:
+            logger.error(f"Failed to process agent card for {agent_id}: {e}")
+
     def _handle_discovery_request(self, event: Event) -> None:
         """Handle registry.discovery.request - respond with matching agents."""
         payload = event.payload
@@ -705,6 +783,77 @@ class RegistryService:
                 agent for agent in self._registry.values()
                 if agent.is_healthy(self.HEARTBEAT_TIMEOUT_SECONDS)
             ]
+
+    def find_by_type(self, agent_type: str) -> List[RegisteredAgent]:
+        """
+        Find agents by agent type.
+
+        Args:
+            agent_type: Agent type to search for
+
+        Returns:
+            List of matching agents
+        """
+        with self._registry_lock:
+            return [
+                agent for agent in self._registry.values()
+                if agent.agent_type == agent_type
+            ]
+
+    def find_healthy_by_capability(self, capability: str) -> List[RegisteredAgent]:
+        """
+        Find healthy agents with a specific capability.
+
+        Args:
+            capability: Capability to search for
+
+        Returns:
+            List of healthy agents with the capability
+        """
+        with self._registry_lock:
+            return [
+                agent for agent in self._registry.values()
+                if capability in agent.capabilities
+                and agent.is_healthy(self.HEARTBEAT_TIMEOUT_SECONDS)
+            ]
+
+    def find_best_agent(self, capability: str) -> Optional[RegisteredAgent]:
+        """
+        Find the best (most available) agent with a specific capability.
+
+        Selection criteria (in order):
+        1. Agent must be healthy
+        2. Agent must have the capability
+        3. Lowest consumer lag
+        4. Lowest CPU usage
+        5. Most recent heartbeat
+
+        Args:
+            capability: Required capability
+
+        Returns:
+            Best matching agent, or None if no healthy agent found
+        """
+        candidates = self.find_healthy_by_capability(capability)
+        if not candidates:
+            return None
+
+        def score_agent(agent: RegisteredAgent) -> tuple:
+            """Score agent for selection (lower is better)."""
+            # Metrics
+            lag = agent.metrics.get("consumer_lag", 0) if agent.metrics else 0
+            cpu = agent.metrics.get("cpu_percent", 0) if agent.metrics else 0
+
+            # Heartbeat recency (negative because more recent is better)
+            heartbeat_age = 0
+            if agent.last_heartbeat:
+                heartbeat_age = (datetime.utcnow() - agent.last_heartbeat).total_seconds()
+
+            return (lag, cpu, heartbeat_age)
+
+        # Sort by score (ascending) and return best
+        candidates.sort(key=score_agent)
+        return candidates[0]
 
     def get_all_agents(self) -> List[RegisteredAgent]:
         """
