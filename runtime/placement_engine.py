@@ -8,11 +8,13 @@ events with simulated host, replica index, and group assignment decisions.
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from agents.base.base_agent import BaseAgent
-from registry.registry_service import RegistryService
 from schemas.event_schema import Event, SystemEventType
+
+if TYPE_CHECKING:
+    from registry.registry_service import RegistryService
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ class PlacementEngine(BaseAgent):
         instance_id: Optional[str] = None,
         host: Optional[str] = None,
         simulated_hosts: Optional[List[str]] = None,
-        registry: Optional[RegistryService] = None,
+        registry: Optional['RegistryService'] = None,
     ):
         super().__init__(
             agent_name="PlacementEngine",
