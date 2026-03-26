@@ -12,6 +12,20 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
+from config.settings import (
+    HEALTH_SCORE_THRESHOLD,
+    DECISION_INTERVAL,
+    RESTART_COOLDOWN,
+    SCALE_COOLDOWN,
+    SPAWN_COOLDOWN,
+    FALLBACK_COOLDOWN,
+    RECOVERY_EVENT_COOLDOWN,
+    PLACEMENT_REQUEST_COOLDOWN,
+    DEGRADED_RESTART_DELAY,
+    LAG_SCALE_THRESHOLD,
+    CRITICAL_LAG_THRESHOLD,
+    DEFAULT_MAX_REPLICAS,
+)
 from registry.registry_service import RegistryService
 from schemas.event_schema import (
     AgentStatus,
@@ -104,32 +118,33 @@ class SelfHealingAgent(BaseAgent):
     - fallback.agent.selected
     """
 
-    DECISION_INTERVAL_SECONDS = 15
-    RESTART_COOLDOWN_SECONDS = 120
-    SPAWN_COOLDOWN_SECONDS = 180
-    SCALE_COOLDOWN_SECONDS = 180
-    FALLBACK_COOLDOWN_SECONDS = 120
-    RECOVERY_EVENT_COOLDOWN_SECONDS = 60
-    PLACEMENT_REQUEST_COOLDOWN_SECONDS = 180
+    DECISION_INTERVAL_SECONDS = DECISION_INTERVAL
+    RESTART_COOLDOWN_SECONDS = RESTART_COOLDOWN
+    SPAWN_COOLDOWN_SECONDS = SPAWN_COOLDOWN
+    SCALE_COOLDOWN_SECONDS = SCALE_COOLDOWN
+    FALLBACK_COOLDOWN_SECONDS = FALLBACK_COOLDOWN
+    RECOVERY_EVENT_COOLDOWN_SECONDS = RECOVERY_EVENT_COOLDOWN
+    PLACEMENT_REQUEST_COOLDOWN_SECONDS = PLACEMENT_REQUEST_COOLDOWN
 
-    DEGRADED_RESTART_DELAY_SECONDS = 30
-    LAG_SCALE_THRESHOLD = 5000
-    CRITICAL_LAG_THRESHOLD = 10000
+    DEGRADED_RESTART_DELAY_SECONDS = DEGRADED_RESTART_DELAY
+    LAG_SCALE_THRESHOLD = LAG_SCALE_THRESHOLD
+    CRITICAL_LAG_THRESHOLD = CRITICAL_LAG_THRESHOLD
     SCALE_UP_STEP = 1
-    DEFAULT_MAX_REPLICAS = 3
+    DEFAULT_MAX_REPLICAS = DEFAULT_MAX_REPLICAS
     MAX_RESTARTS_BEFORE_SPAWN = 2
 
     # Hybrid scoring weights
-    CPU_WEIGHT = 0.2
-    LAG_WEIGHT = 0.3
-    ERROR_WEIGHT = 0.2
-    LATENCY_WEIGHT = 0.2
-    STATUS_WEIGHT = 0.1
+    CPU_WEIGHT = 0.15
+    MEMORY_WEIGHT = 0.15
+    LAG_WEIGHT = 0.2
+    ERROR_WEIGHT = 0.15
+    LATENCY_WEIGHT = 0.1
+    STATUS_WEIGHT = 0.25
 
     # Score thresholds for actions
     SCORE_DEGRADED = 0.4   # restart
-    SCORE_SCALE = 0.5      # scale
-    SCORE_CRITICAL = 0.7   # spawn
+    SCORE_SCALE = HEALTH_SCORE_THRESHOLD  # scale (configurable, default 0.8)
+    SCORE_CRITICAL = 0.9   # spawn
 
     # Agent capability mapping for registry-based discovery
     AGENT_CAPABILITY_MAP = {
@@ -457,16 +472,8 @@ class SelfHealingAgent(BaseAgent):
             return
 
         if snapshot.status == AgentStatus.OVERLOADED.value or trigger == "overloaded":
-            replicas, max_replicas = self._get_replica_info(snapshot)
-            if replicas < max_replicas:
-                self._emit_recovery_triggered(snapshot, "scale", "OVERLOADED_AGENT")
-                if self._can_scale(snapshot, now):
-                    self._publish_scale(snapshot, "Overloaded agent requires more capacity", "OVERLOADED_AGENT", self._overload_signal(snapshot))
-                else:
-                    self._maybe_publish_fallback(snapshot, "OVERLOADED_AGENT")
-            else:
-                self._emit_recovery_triggered(snapshot, "spawn", "OVERLOADED_SPAWN")
-                self._publish_spawn_and_placement(snapshot, "Overloaded - scale at limit", "OVERLOADED_SPAWN")
+            # Use score-based decision for overload instead of immediate scale
+            self._apply_score_decision(agent_id, snapshot)
             return
 
         if snapshot.consumer_lag >= self.LAG_SCALE_THRESHOLD or trigger == "lag":
@@ -507,6 +514,7 @@ class SelfHealingAgent(BaseAgent):
     def _compute_health_score(self, state: AgentRecoveryState) -> float:
         """Compute health score from 0 (healthy) to 1 (critical)."""
         cpu = min((state.cpu_percent or 0) / 100, 1.0)
+        memory = min((state.memory_percent or 0) / 100, 1.0)
         lag = min(state.consumer_lag / 10000, 1.0)
         error = min(state.error_count / 10, 1.0)
         latency = min((state.latency_ms or 0) / 1000, 1.0)
@@ -514,11 +522,14 @@ class SelfHealingAgent(BaseAgent):
         status_score = 0.0
         if state.status == AgentStatus.DEGRADED.value:
             status_score = 0.5
+        elif state.status == AgentStatus.OVERLOADED.value:
+            status_score = 1.0  # Treat overload as critical
         elif state.status == AgentStatus.CRITICAL.value:
             status_score = 1.0
 
         score = (
             cpu * self.CPU_WEIGHT
+            + memory * self.MEMORY_WEIGHT
             + lag * self.LAG_WEIGHT
             + error * self.ERROR_WEIGHT
             + latency * self.LATENCY_WEIGHT

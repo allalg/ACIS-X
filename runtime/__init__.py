@@ -20,8 +20,8 @@ from runtime.topic_manager import (
     TopicConfig,
     ACIS_TOPIC_CONFIGS,
 )
-from runtime.placement_engine import PlacementEngine
-from runtime.runtime_manager import RuntimeManager
+# PlacementEngine and RuntimeManager are not exported here to avoid circular imports
+# Import them directly: from runtime.placement_engine import PlacementEngine
 
 __all__ = [
     # Kafka client
@@ -41,6 +41,4 @@ __all__ = [
     "TopicAdmin",
     "TopicConfig",
     "ACIS_TOPIC_CONFIGS",
-    "PlacementEngine",
-    "RuntimeManager",
 ]

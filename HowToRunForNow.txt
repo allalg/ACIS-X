@@ -1,0 +1,13 @@
+1. install docker extension
+2. We also need docker desktop runing so install that and open it.
+3.Make sure to install everything in requirements.txt
+4. to run the event bus + scenario generator + agents in terminal:
+    a) docker-compose up -d (launches kafka bus)
+    b) python run_acis
+    c) to restart bus first kill the conatiner running then relaunch.:
+    to kill first use docker ps to get conatiner id and then use docker kill "conatiner id"
+5.to run any test in tests folder :
+    a)make sure conatiner is active and then run run_acis.py file.
+    b)open another terminal run the python test file. 
+    run using python -m tests."name of the different test file"
+    example :  python -m tests.test_overload

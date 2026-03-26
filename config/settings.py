@@ -38,7 +38,45 @@ HEARTBEAT_INTERVAL = int(
 )
 
 HEALTH_SCORE_THRESHOLD = float(
-    os.getenv("ACIS_HEALTH_SCORE_THRESHOLD", "0.6")
+    os.getenv("ACIS_HEALTH_SCORE_THRESHOLD", "0.8")
+)
+
+# Self-Healing cooldown periods (seconds)
+RESTART_COOLDOWN = int(
+    os.getenv("ACIS_RESTART_COOLDOWN", "120")
+)
+
+SCALE_COOLDOWN = int(
+    os.getenv("ACIS_SCALE_COOLDOWN", "180")
+)
+
+SPAWN_COOLDOWN = int(
+    os.getenv("ACIS_SPAWN_COOLDOWN", "180")
+)
+
+FALLBACK_COOLDOWN = int(
+    os.getenv("ACIS_FALLBACK_COOLDOWN", "120")
+)
+
+RECOVERY_EVENT_COOLDOWN = int(
+    os.getenv("ACIS_RECOVERY_EVENT_COOLDOWN", "60")
+)
+
+PLACEMENT_REQUEST_COOLDOWN = int(
+    os.getenv("ACIS_PLACEMENT_REQUEST_COOLDOWN", "180")
+)
+
+# Self-Healing thresholds
+DEGRADED_RESTART_DELAY = int(
+    os.getenv("ACIS_DEGRADED_RESTART_DELAY", "30")
+)
+
+LAG_SCALE_THRESHOLD = int(
+    os.getenv("ACIS_LAG_SCALE_THRESHOLD", "5000")
+)
+
+CRITICAL_LAG_THRESHOLD = int(
+    os.getenv("ACIS_CRITICAL_LAG_THRESHOLD", "10000")
 )
 
 
