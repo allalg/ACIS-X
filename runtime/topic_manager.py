@@ -269,6 +269,7 @@ class TopicAdmin:
     def _create_topic_kafka_python(self, topic_config: TopicConfig) -> bool:
         """Create topic using kafka-python."""
         from kafka.admin import NewTopic
+        from kafka.errors import TopicAlreadyExistsError
 
         new_topic = NewTopic(
             name=topic_config.name,
@@ -281,8 +282,11 @@ class TopicAdmin:
             self._admin_client.create_topics([new_topic])
             logger.info(f"Topic created: {topic_config.name}")
             return True
+        except TopicAlreadyExistsError:
+            logger.info(f"Topic already exists: {topic_config.name}")
+            return True
         except Exception as e:
-            if "TopicExistsError" in str(e):
+            if "AlreadyExists" in str(e) or "already exists" in str(e).lower():
                 logger.info(f"Topic already exists: {topic_config.name}")
                 return True
             logger.error(f"Failed to create topic: {e}")

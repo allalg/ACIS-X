@@ -233,8 +233,7 @@ class KafkaClient:
                 "compression_type": self.config.producer_compression,
                 "batch_size": self.config.producer_batch_size,
                 "linger_ms": self.config.producer_linger_ms,
-                "value_serializer": lambda v: json.dumps(v).encode("utf-8"),
-                "key_serializer": lambda k: k.encode("utf-8") if k else None,
+                "key_serializer": lambda k: k.encode("utf-8") if isinstance(k, str) else k,
             }
 
             # Add security settings if configured
@@ -424,11 +423,16 @@ class KafkaClient:
     ) -> None:
         """Publish using kafka-python."""
         # Convert headers to list of tuples
-        header_list = [(k, v.encode("utf-8")) for k, v in headers.items()]
+        headers = headers or {}
+        header_list = [
+            (k, str(v).encode("utf-8"))
+            for k, v in headers.items()
+            if v is not None
+        ]
 
         # Publish
         kwargs = {
-            "key": key.encode("utf-8") if key else None,
+            "key": key,
             "value": value,
             "headers": header_list,
         }

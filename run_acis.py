@@ -8,6 +8,9 @@ Starts the core runtime components:
 - RuntimeManager
 - PlacementEngine
 - ScenarioGeneratorAgent
+- PaymentPredictionAgent
+- RiskScoringAgent
+- CreditPolicyAgent
 
 Creates Kafka topics up front and runs each component in its own thread.
 """
@@ -18,6 +21,9 @@ import signal
 import threading
 from typing import Any, Dict, List, Tuple
 
+from agents.policy.credit_policy_agent import CreditPolicyAgent
+from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
+from agents.risk.risk_scoring_agent import RiskScoringAgent
 from agents.scenario_generator.scenario_generator_agent import ScenarioGeneratorAgent
 from monitoring.monitoring_agent import MonitoringAgent
 from registry.registry_service import RegistryService
@@ -41,7 +47,7 @@ def _bootstrap_servers() -> List[str]:
 
 
 def _kafka_backend() -> str:
-    return os.getenv("ACIS_KAFKA_BACKEND", "confluent")
+    return os.getenv("ACIS_KAFKA_BACKEND", "kafka-python")
 
 
 def _build_kafka_client() -> KafkaClient:
@@ -50,17 +56,21 @@ def _build_kafka_client() -> KafkaClient:
 
 
 def _create_topics() -> Dict[str, bool]:
-    admin = TopicAdmin(bootstrap_servers=_bootstrap_servers(), backend=_kafka_backend())
     try:
-        results = admin.create_all_acis_topics()
-        failed = [topic for topic, ok in results.items() if not ok]
-        if failed:
-            logger.warning("Some topics failed to create: %s", ", ".join(failed))
-        else:
-            logger.info("ACIS-X topics are ready")
-        return results
-    finally:
-        admin.close()
+        admin = TopicAdmin(bootstrap_servers=_bootstrap_servers(), backend=_kafka_backend())
+        try:
+            results = admin.create_all_acis_topics()
+            failed = [topic for topic, ok in results.items() if not ok]
+            if failed:
+                logger.warning("Some topics failed to create: %s", ", ".join(failed))
+            else:
+                logger.info("ACIS-X topics are ready")
+            return results
+        finally:
+            admin.close()
+    except Exception as e:
+        logger.warning("Topic creation skipped: %s", e)
+        return {}
 
 
 def _run_registry_service(service: RegistryService, shutdown_event: threading.Event) -> None:
@@ -90,6 +100,9 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         RuntimeManager(kafka_client=_build_kafka_client()),
         PlacementEngine(kafka_client=_build_kafka_client()),
         ScenarioGeneratorAgent(kafka_client=_build_kafka_client()),
+        PaymentPredictionAgent(kafka_client=_build_kafka_client()),
+        RiskScoringAgent(kafka_client=_build_kafka_client()),
+        CreditPolicyAgent(kafka_client=_build_kafka_client()),
     ]
 
     return registry_service, agents
