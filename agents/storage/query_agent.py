@@ -59,6 +59,14 @@ class QueryAgent(BaseAgent):
         """QueryAgent does minimal event processing."""
         pass
 
+    def start(self) -> None:
+        """
+        Override BaseAgent start.
+        QueryAgent is read-only and does NOT consume Kafka events.
+        It only provides synchronous query services.
+        """
+        logger.info("QueryAgent started (read-only mode, no Kafka subscription)")
+
     def get_customer(self, customer_id: str) -> Optional[Dict[str, Any]]:
         """
         Get customer data by ID.
@@ -161,6 +169,126 @@ class QueryAgent(BaseAgent):
 
         return None
 
+    def get_invoices_by_customer(self, customer_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all pending invoices for a customer.
+
+        Args:
+            customer_id: The customer ID to look up.
+
+        Returns:
+            List of invoice dicts with status != 'paid', or empty list if none found.
+        """
+        if not customer_id:
+            return []
+
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT invoice_id, customer_id, amount, due_date, status
+                    FROM invoices
+                    WHERE customer_id = ?
+                    AND status != 'paid'
+                """, (customer_id,))
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                result = [dict(row) for row in rows]
+                logger.debug(f"Fetched {len(result)} pending invoices for customer {customer_id}")
+                return result
+
+            except sqlite3.Error as e:
+                logger.error(f"Database error querying invoices for customer {customer_id}: {e}")
+
+        return []
+
+    def get_all_invoices_by_customer(self, customer_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all invoices for a customer (paid and unpaid).
+
+        Args:
+            customer_id: The customer ID to look up.
+
+        Returns:
+            List of invoice dicts, or empty list if none found.
+        """
+        if not customer_id:
+            return []
+
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT invoice_id, customer_id, amount, due_date, status
+                    FROM invoices
+                    WHERE customer_id = ?
+                    ORDER BY due_date DESC
+                """, (customer_id,))
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                result = [dict(row) for row in rows]
+                logger.debug(f"Fetched {len(result)} total invoices for customer {customer_id}")
+                return result
+
+            except sqlite3.Error as e:
+                logger.error(f"Database error querying all invoices for customer {customer_id}: {e}")
+
+        return []
+
+    def get_unpaid_invoices(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all pending invoices from DB.
+
+        Returns:
+            List[dict]: Each dict contains:
+                - invoice_id
+                - customer_id
+                - amount
+                - due_date
+                - status
+        """
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT invoice_id, customer_id, amount, due_date, status
+                    FROM invoices
+                    WHERE status = 'pending'
+                """)
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                invoices = []
+                for row in rows:
+                    invoices.append({
+                        "invoice_id": row[0],
+                        "customer_id": row[1],
+                        "amount": row[2],
+                        "due_date": row[3],
+                        "status": row[4],
+                    })
+
+                logger.debug(f"Fetched {len(invoices)} unpaid invoices from DB")
+                return invoices
+
+            except sqlite3.Error as e:
+                logger.error(f"Database error querying unpaid invoices: {e}")
+
+        return []
+
     def get_customer_state(self, customer_id: str) -> Optional[Dict[str, Any]]:
         """
         Get customer state (in-memory derived state).
@@ -184,6 +312,7 @@ class QueryAgent(BaseAgent):
                 return state
 
         # Fall back to DB for customer record
+        logger.info(f"Falling back from MemoryAgent cache to DB for customer state: {customer_id}")
         customer = self.get_customer(customer_id)
         if customer:
             return {

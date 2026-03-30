@@ -333,6 +333,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             "invoice_id": invoice_id,
             "customer_id": customer_id,
             "amount": amount,
+            "remaining_amount": amount,
             "currency": customer["currency"],
             "due_date": due_date.strftime("%Y-%m-%d"),
             "status": "pending",
@@ -430,18 +431,26 @@ class ScenarioGeneratorAgent(BaseAgent):
         invoice_id = random.choice(payable_invoices)
         invoice = self._invoices[invoice_id]
 
+        # Safety check: invoice should exist
+        if invoice_id not in self._invoices:
+            logger.warning(f"Skipping payment: invoice {invoice_id} not created")
+            return ""
+
         self._payment_counter += 1
         payment_id = f"pay_{self._payment_counter:05d}"
+
+        # Get payable amount (use remaining_amount if partial paid, else full amount)
+        payable_amount = invoice.get("remaining_amount", invoice["amount"])
 
         # Decide: full or partial payment
         is_partial = random.random() < 0.2  # 20% partial payments
 
         if is_partial:
-            amount = round(invoice["amount"] * random.uniform(0.3, 0.7), 2)
+            amount = round(payable_amount * random.uniform(0.3, 0.7), 2)
             status = "partial"
-            remaining = round(invoice["amount"] - amount, 2)
+            remaining = round(payable_amount - amount, 2)
         else:
-            amount = invoice["amount"]
+            amount = payable_amount
             status = "completed"
             remaining = 0
 
@@ -459,9 +468,11 @@ class ScenarioGeneratorAgent(BaseAgent):
 
         if is_partial:
             payment_data["remaining_balance"] = remaining
-
-        # Update invoice status if fully paid
-        if not is_partial:
+            # Track remaining amount in internal state
+            self._invoices[invoice_id]["remaining_amount"] = remaining
+            self._invoices[invoice_id]["updated_at"] = datetime.utcnow().isoformat()
+        else:
+            # Update invoice status if fully paid
             self._invoices[invoice_id]["status"] = "paid"
             self._invoices[invoice_id]["updated_at"] = datetime.utcnow().isoformat()
 
@@ -531,29 +542,51 @@ class ScenarioGeneratorAgent(BaseAgent):
             self._invoice_counter += 1
             invoice_id = f"inv_{self._invoice_counter:05d}"
 
+            created_at = datetime.utcnow() - timedelta(days=random.randint(45, 90))
+            due_date = datetime.utcnow() - timedelta(days=random.randint(5, 30))
+
+            amount = self._generate_invoice_amount(customer["credit_limit"])
             invoice_data = {
                 "invoice_id": invoice_id,
                 "customer_id": customer_id,
-                "amount": self._generate_invoice_amount(customer["credit_limit"]),
+                "amount": amount,
+                "remaining_amount": amount,
                 "currency": customer["currency"],
-                "due_date": (datetime.utcnow() - timedelta(days=random.randint(5, 30))).strftime("%Y-%m-%d"),
-                "status": "overdue",
-                "created_at": (datetime.utcnow() - timedelta(days=random.randint(45, 90))).isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-                "days_overdue": random.randint(5, 30),
+                "due_date": due_date.strftime("%Y-%m-%d"),
+                "status": "pending",
+                "created_at": created_at.isoformat(),
+                "updated_at": None,
                 "line_items": None,
                 "notes": None,
             }
 
             self._invoices[invoice_id] = invoice_data
 
+            # Step 1: Publish invoice.created
             self.publish_event(
                 topic=self.TOPIC_INVOICES,
-                event_type="invoice.overdue",
+                event_type="invoice.created",
                 entity_id=customer_id,
                 payload=invoice_data,
                 correlation_id=correlation_id,
             )
+
+            # Step 2: Publish invoice.overdue
+            invoice_data_overdue = invoice_data.copy()
+            invoice_data_overdue["status"] = "overdue"
+            invoice_data_overdue["updated_at"] = datetime.utcnow().isoformat()
+            invoice_data_overdue["days_overdue"] = random.randint(5, 30)
+
+            self.publish_event(
+                topic=self.TOPIC_INVOICES,
+                event_type="invoice.overdue",
+                entity_id=customer_id,
+                payload=invoice_data_overdue,
+                correlation_id=correlation_id,
+            )
+
+            # Update internal state to match published state
+            self._invoices[invoice_id] = invoice_data_overdue
 
     def _scenario_overdue_cascade(self, correlation_id: str) -> None:
         """Create multiple overdue invoices for a customer."""
@@ -568,30 +601,51 @@ class ScenarioGeneratorAgent(BaseAgent):
             invoice_id = f"inv_{self._invoice_counter:05d}"
 
             days_overdue = (i + 1) * 10
+            created_at = datetime.utcnow() - timedelta(days=days_overdue + 30)
+            due_date = datetime.utcnow() - timedelta(days=days_overdue)
 
+            amount = self._generate_invoice_amount(customer["credit_limit"])
             invoice_data = {
                 "invoice_id": invoice_id,
                 "customer_id": customer_id,
-                "amount": self._generate_invoice_amount(customer["credit_limit"]),
+                "amount": amount,
+                "remaining_amount": amount,
                 "currency": customer["currency"],
-                "due_date": (datetime.utcnow() - timedelta(days=days_overdue)).strftime("%Y-%m-%d"),
-                "status": "overdue",
-                "created_at": (datetime.utcnow() - timedelta(days=days_overdue + 30)).isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-                "days_overdue": days_overdue,
+                "due_date": due_date.strftime("%Y-%m-%d"),
+                "status": "pending",
+                "created_at": created_at.isoformat(),
+                "updated_at": None,
                 "line_items": None,
                 "notes": None,
             }
 
             self._invoices[invoice_id] = invoice_data
 
+            # Step 1: Publish invoice.created
             self.publish_event(
                 topic=self.TOPIC_INVOICES,
-                event_type="invoice.overdue",
+                event_type="invoice.created",
                 entity_id=customer_id,
                 payload=invoice_data,
                 correlation_id=correlation_id,
             )
+
+            # Step 2: Publish invoice.overdue
+            invoice_data_overdue = invoice_data.copy()
+            invoice_data_overdue["status"] = "overdue"
+            invoice_data_overdue["updated_at"] = datetime.utcnow().isoformat()
+            invoice_data_overdue["days_overdue"] = days_overdue
+
+            self.publish_event(
+                topic=self.TOPIC_INVOICES,
+                event_type="invoice.overdue",
+                entity_id=customer_id,
+                payload=invoice_data_overdue,
+                correlation_id=correlation_id,
+            )
+
+            # Update internal state to match published state
+            self._invoices[invoice_id] = invoice_data_overdue
 
     def _scenario_external_data_request(self, correlation_id: str) -> None:
         """Simulate external data request and response."""
@@ -663,30 +717,49 @@ class ScenarioGeneratorAgent(BaseAgent):
 
             amount = self._generate_invoice_amount(customer["credit_limit"])
             due_date = datetime.utcnow() - timedelta(days=(i + 1) * 15)
+            created_at = due_date - timedelta(days=30)
 
             invoice_data = {
                 "invoice_id": invoice_id,
                 "customer_id": customer_id,
                 "amount": amount,
+                "remaining_amount": amount,
                 "currency": customer["currency"],
                 "due_date": due_date.strftime("%Y-%m-%d"),
-                "status": "overdue",
-                "created_at": (due_date - timedelta(days=30)).isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-                "days_overdue": (i + 1) * 15,
+                "status": "pending",
+                "created_at": created_at.isoformat(),
+                "updated_at": None,
                 "line_items": None,
                 "notes": None,
             }
 
             self._invoices[invoice_id] = invoice_data
 
+            # Step 1: Publish invoice.created
             self.publish_event(
                 topic=self.TOPIC_INVOICES,
-                event_type="invoice.overdue",
+                event_type="invoice.created",
                 entity_id=customer_id,
                 payload=invoice_data,
                 correlation_id=correlation_id,
             )
+
+            # Step 2: Publish invoice.overdue
+            invoice_data_overdue = invoice_data.copy()
+            invoice_data_overdue["status"] = "overdue"
+            invoice_data_overdue["updated_at"] = datetime.utcnow().isoformat()
+            invoice_data_overdue["days_overdue"] = (i + 1) * 15
+
+            self.publish_event(
+                topic=self.TOPIC_INVOICES,
+                event_type="invoice.overdue",
+                entity_id=customer_id,
+                payload=invoice_data_overdue,
+                correlation_id=correlation_id,
+            )
+
+            # Update internal state to match published state
+            self._invoices[invoice_id] = invoice_data_overdue
 
             # Generate partial payment
             self._payment_counter += 1
@@ -851,10 +924,12 @@ class ScenarioGeneratorAgent(BaseAgent):
             invoice_id = f"inv_{self._invoice_counter:05d}"
             customer = self._customers[customer_id]
 
+            amount = self._generate_invoice_amount(customer["credit_limit"])
             invoice_data = {
                 "invoice_id": invoice_id,
                 "customer_id": customer_id,
-                "amount": self._generate_invoice_amount(customer["credit_limit"]),
+                "amount": amount,
+                "remaining_amount": amount,
                 "currency": customer["currency"],
                 "due_date": (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d"),
                 "status": "pending",

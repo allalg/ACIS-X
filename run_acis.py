@@ -18,12 +18,16 @@ Creates Kafka topics up front and runs each component in its own thread.
 import logging
 import os
 import signal
+import sys
 import threading
 from typing import Any, Dict, List, Tuple
 
+from agents.intelligence.customer_state_agent import CustomerStateAgent
+from agents.invoice.overdue_detection_agent import OverdueDetectionAgent
 from agents.policy.credit_policy_agent import CreditPolicyAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
 from agents.risk.risk_scoring_agent import RiskScoringAgent
+from agents.customer.customer_profile_agent import CustomerProfileAgent
 from agents.scenario_generator.scenario_generator_agent import ScenarioGeneratorAgent
 from agents.storage.db_agent import DBAgent
 from agents.storage.memory_agent import MemoryAgent
@@ -40,6 +44,10 @@ from self_healing.core.self_healing_agent import SelfHealingAgent
 logging.basicConfig(
     level=os.getenv("ACIS_LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler("acis.log", mode="w"),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger("run_acis")
 
@@ -82,14 +90,10 @@ def _run_registry_service(service: RegistryService, shutdown_event: threading.Ev
 
 
 def _run_agent_service(agent: Any, shutdown_event: threading.Event) -> None:
-    original_signal = signal.signal
-
     try:
-        # BaseAgent.start() installs signal handlers, which only works on the main thread.
-        signal.signal = lambda *args, **kwargs: None
         agent.start()
-    finally:
-        signal.signal = original_signal
+    except Exception as e:
+        logger.error(f"Error in agent {agent.agent_name}: {e}")
 
     shutdown_event.wait()
 
@@ -103,18 +107,34 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         memory_agent=memory_agent
     )
 
+    customer_state_agent = CustomerStateAgent(
+        kafka_client=_build_kafka_client(),
+        query_agent=query_agent
+    )
+
+    overdue_detection_agent = OverdueDetectionAgent(
+        kafka_client=_build_kafka_client(),
+        query_agent=query_agent
+    )
+
     agents: List[Any] = [
         MonitoringAgent(kafka_client=_build_kafka_client()),
         SelfHealingAgent(kafka_client=_build_kafka_client()),
         RuntimeManager(kafka_client=_build_kafka_client()),
         PlacementEngine(kafka_client=_build_kafka_client()),
         ScenarioGeneratorAgent(kafka_client=_build_kafka_client()),
-        PaymentPredictionAgent(kafka_client=_build_kafka_client()),
-        RiskScoringAgent(kafka_client=_build_kafka_client()),
-        CreditPolicyAgent(kafka_client=_build_kafka_client()),
         DBAgent(kafka_client=_build_kafka_client()),
         memory_agent,
         query_agent,
+        customer_state_agent,
+        overdue_detection_agent,
+        PaymentPredictionAgent(
+            kafka_client=_build_kafka_client(),
+            query_agent=query_agent
+        ),
+        RiskScoringAgent(kafka_client=_build_kafka_client()),
+        CustomerProfileAgent(kafka_client=_build_kafka_client()),
+        CreditPolicyAgent(kafka_client=_build_kafka_client()),
     ]
 
     return registry_service, agents

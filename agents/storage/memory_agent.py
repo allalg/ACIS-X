@@ -13,13 +13,14 @@ class MemoryAgent(BaseAgent):
     """
     Memory Agent for ACIS-X.
 
-    Maintains in-memory customer state derived from invoice, payment, and risk events.
+    Maintains in-memory customer state derived from invoice, payment, risk, and metrics events.
     Provides fast access to aggregated customer metrics without database lookups.
 
     Subscribes to:
     - acis.invoices (invoice.created)
     - acis.payments (payment.received)
     - acis.risk (risk.scored)
+    - acis.metrics (customer.metrics.updated)
 
     Publishes to:
     - acis.memory (customer.state.updated)
@@ -28,6 +29,7 @@ class MemoryAgent(BaseAgent):
     TOPIC_INVOICES = "acis.invoices"
     TOPIC_PAYMENTS = "acis.payments"
     TOPIC_RISK = "acis.risk"
+    TOPIC_METRICS = "acis.metrics"
     TOPIC_MEMORY = "acis.memory"
 
     def __init__(
@@ -42,6 +44,7 @@ class MemoryAgent(BaseAgent):
                 self.TOPIC_INVOICES,
                 self.TOPIC_PAYMENTS,
                 self.TOPIC_RISK,
+                self.TOPIC_METRICS,
             ],
             capabilities=[
                 "state_management",
@@ -61,6 +64,7 @@ class MemoryAgent(BaseAgent):
             self.TOPIC_INVOICES,
             self.TOPIC_PAYMENTS,
             self.TOPIC_RISK,
+            self.TOPIC_METRICS,
         ]
 
     def process_event(self, event: Event) -> None:
@@ -73,6 +77,8 @@ class MemoryAgent(BaseAgent):
             self._handle_payment_received(event)
         elif event_type in ["PaymentRiskPredicted", "risk.scored", "RiskScoreUpdated"]:
             self._handle_risk_scored(event)
+        elif event_type == "customer.metrics.updated":
+            self._handle_metrics_updated(event)
 
     def _get_or_create_customer_state(self, customer_id: str) -> Dict[str, Any]:
         """Get existing customer state or create new one."""
@@ -80,6 +86,7 @@ class MemoryAgent(BaseAgent):
             self.customer_state[customer_id] = {
                 "total_outstanding": 0.0,
                 "avg_delay": 0.0,
+                "on_time_ratio": 0.5,
                 "risk_score": 0.0,
                 "last_updated": datetime.utcnow().isoformat(),
             }
@@ -163,6 +170,25 @@ class MemoryAgent(BaseAgent):
             )
 
             self._publish_state_update(customer_id, state, event.correlation_id)
+
+    def _handle_metrics_updated(self, event: Event) -> None:
+        """Handle customer.metrics.updated event - update customer metrics."""
+        data = event.payload or {}
+        customer_id = data.get("customer_id")
+
+        if not customer_id:
+            logger.warning("Skipping metrics update due to missing customer_id")
+            return
+
+        with self._state_lock:
+            state = self._get_or_create_customer_state(customer_id)
+
+            state["avg_delay"] = data.get("avg_delay", state.get("avg_delay", 0.0))
+            state["on_time_ratio"] = data.get("on_time_ratio", 0.5)
+            state["total_outstanding"] = data.get("total_outstanding", state.get("total_outstanding", 0.0))
+            state["last_updated"] = datetime.utcnow().isoformat()
+
+        logger.info(f"Updated memory state from metrics for customer {customer_id}")
 
     def _publish_state_update(
         self,
