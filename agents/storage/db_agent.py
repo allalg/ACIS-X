@@ -1,0 +1,361 @@
+import logging
+import sqlite3
+import threading
+from datetime import datetime
+from typing import List, Any, Optional
+
+from agents.base.base_agent import BaseAgent
+from schemas.event_schema import Event
+
+logger = logging.getLogger(__name__)
+
+
+class DBAgent(BaseAgent):
+    """
+    Database Agent for ACIS-X.
+
+    Single DB writer that persists invoice, payment, and collection events
+    to SQLite database. Handles idempotent writes and ensures data consistency.
+
+    Subscribes to:
+    - acis.invoices (invoice.created)
+    - acis.payments (payment.received)
+    - acis.collections (collection.action.triggered)
+    """
+
+    TOPIC_INVOICES = "acis.invoices"
+    TOPIC_PAYMENTS = "acis.payments"
+    TOPIC_COLLECTIONS = "acis.collections"
+    TOPIC_CUSTOMERS = "acis.customers"
+
+    DB_PATH = "acis.db"
+
+    def __init__(
+        self,
+        kafka_client: Any,
+        db_path: Optional[str] = None,
+    ):
+        super().__init__(
+            agent_name="DBAgent",
+            agent_version="1.0.0",
+            group_id="db-agent-group",
+            subscribed_topics=[
+                self.TOPIC_INVOICES,
+                self.TOPIC_PAYMENTS,
+                self.TOPIC_COLLECTIONS,
+                self.TOPIC_CUSTOMERS,
+            ],
+            capabilities=[
+                "db_write",
+                "persistent_storage",
+            ],
+            kafka_client=kafka_client,
+            agent_type="DBAgent",
+        )
+
+        self._db_path = db_path or self.DB_PATH
+        self._db_lock = threading.Lock()
+        self._init_database()
+
+    def _init_database(self) -> None:
+        """Initialize SQLite database and create tables if not exists."""
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS customers (
+                        customer_id TEXT PRIMARY KEY,
+                        name TEXT,
+                        credit_limit REAL DEFAULT 0,
+                        risk_score REAL DEFAULT 0,
+                        status TEXT DEFAULT 'active',
+                        created_at TEXT,
+                        updated_at TEXT
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS invoices (
+                        invoice_id TEXT PRIMARY KEY,
+                        customer_id TEXT,
+                        amount REAL,
+                        issued_date TEXT,
+                        due_date TEXT,
+                        status TEXT DEFAULT 'pending',
+                        created_at TEXT,
+                        updated_at TEXT,
+                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS payments (
+                        payment_id TEXT PRIMARY KEY,
+                        invoice_id TEXT,
+                        customer_id TEXT,
+                        amount REAL,
+                        payment_date TEXT,
+                        created_at TEXT,
+                        FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id),
+                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS collections_log (
+                        id TEXT PRIMARY KEY,
+                        customer_id TEXT,
+                        invoice_id TEXT,
+                        action TEXT,
+                        stage TEXT,
+                        timestamp TEXT,
+                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS customer_metrics (
+                        customer_id TEXT PRIMARY KEY,
+                        total_outstanding REAL DEFAULT 0,
+                        avg_delay REAL DEFAULT 0,
+                        on_time_ratio REAL DEFAULT 0,
+                        last_payment_date TEXT,
+                        updated_at TEXT,
+                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+                    )
+                """)
+
+                conn.commit()
+                logger.info(f"Database initialized at {self._db_path}")
+                logger.info("Upgraded database schema to v2 (credit control ready)")
+            finally:
+                conn.close()
+
+    def subscribe(self) -> List[str]:
+        """Return list of topics to subscribe to."""
+        return [
+            self.TOPIC_INVOICES,
+            self.TOPIC_PAYMENTS,
+            self.TOPIC_COLLECTIONS,
+            self.TOPIC_CUSTOMERS,
+        ]
+
+    def process_event(self, event: Event) -> None:
+        """Process incoming events and persist to database."""
+        event_type = event.event_type
+
+        if event_type.startswith("invoice."):
+            self._handle_invoice_upsert(event)
+        elif event_type == "payment.received":
+            self._handle_payment_received(event)
+        elif event_type == "collection.action.triggered":
+            self._handle_collection_action(event)
+        elif event_type == "customer.profile.updated":
+            self._handle_customer_profile(event)
+
+    def _handle_invoice_upsert(self, event: Event) -> None:
+        """
+        Handle all invoice.* events using UPSERT logic.
+        Supports:
+        - invoice.created
+        - invoice.overdue
+        - invoice.disputed
+        - invoice.cancelled
+        """
+        data = event.payload or {}
+        invoice_id = data.get("invoice_id")
+        customer_id = data.get("customer_id")
+        amount = data.get("amount")
+        due_date = data.get("due_date")
+        status = data.get("status", "pending")
+        issued_date = data.get("created_at") or data.get("issued_date")
+        now = datetime.utcnow().isoformat()
+
+        if not invoice_id:
+            logger.warning("Invoice event missing invoice_id, skipping")
+            return
+
+        if not issued_date:
+            issued_date = now
+
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    INSERT INTO invoices (
+                        invoice_id,
+                        customer_id,
+                        amount,
+                        issued_date,
+                        due_date,
+                        status,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(invoice_id) DO UPDATE SET
+                        customer_id=excluded.customer_id,
+                        amount=excluded.amount,
+                        due_date=excluded.due_date,
+                        status=excluded.status,
+                        updated_at=excluded.updated_at
+                """, (
+                    invoice_id,
+                    customer_id,
+                    amount,
+                    issued_date,
+                    due_date,
+                    status,
+                    now,
+                    now
+                ))
+
+                logger.info(f"Upserted invoice: {invoice_id} status={status}")
+
+                # Ensure customer exists
+                if customer_id:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                        VALUES (?, ?, ?)
+                    """, (customer_id, now, now))
+
+                conn.commit()
+            finally:
+                conn.close()
+
+    def _handle_payment_received(self, event: Event) -> None:
+        """Handle payment.received event - insert payment and update invoice status."""
+        data = event.payload or {}
+        payment_id = data.get("payment_id")
+        invoice_id = data.get("invoice_id")
+        amount = data.get("amount")
+        payment_date = data.get("payment_date") or datetime.utcnow().isoformat()
+        now = datetime.utcnow().isoformat()
+
+        if not payment_id:
+            logger.warning("payment.received event missing payment_id, skipping")
+            return
+
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+
+                # Resolve customer_id from invoice if not provided
+                customer_id = data.get("customer_id")
+                if not customer_id and invoice_id:
+                    cursor.execute(
+                        "SELECT customer_id FROM invoices WHERE invoice_id = ?",
+                        (invoice_id,)
+                    )
+                    row = cursor.fetchone()
+                    customer_id = row[0] if row else None
+                    logger.info(
+                        f"Resolved customer_id from invoice lookup: invoice_id={invoice_id}, customer_id={customer_id}"
+                    )
+
+                # Insert payment (idempotent)
+                cursor.execute("""
+                    INSERT OR IGNORE INTO payments (
+                        payment_id,
+                        invoice_id,
+                        customer_id,
+                        amount,
+                        payment_date,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (payment_id, invoice_id, customer_id, amount, payment_date, now))
+
+                if cursor.rowcount > 0:
+                    logger.info(f"Inserted payment: {payment_id} for invoice: {invoice_id}, customer: {customer_id}")
+
+                    # Update invoice status to paid
+                    if invoice_id:
+                        cursor.execute("""
+                            UPDATE invoices SET status = 'paid', updated_at = ? WHERE invoice_id = ?
+                        """, (now, invoice_id))
+                        if cursor.rowcount > 0:
+                            logger.info(f"Updated invoice {invoice_id} status to 'paid'")
+                else:
+                    logger.debug(f"Payment {payment_id} already exists, skipped")
+
+                conn.commit()
+            finally:
+                conn.close()
+
+    def _handle_collection_action(self, event: Event) -> None:
+        """Handle collection.action.triggered event - insert into collections_log."""
+        data = event.payload or {}
+        collection_id = data.get("id") or data.get("collection_id") or event.event_id
+        customer_id = data.get("customer_id")
+        invoice_id = data.get("invoice_id")
+        action = data.get("action")
+        stage = data.get("stage")
+        timestamp = data.get("timestamp") or datetime.utcnow().isoformat()
+
+        if not collection_id:
+            logger.warning("collection.action.triggered event missing id, skipping")
+            return
+
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR IGNORE INTO collections_log (
+                        id,
+                        customer_id,
+                        invoice_id,
+                        action,
+                        stage,
+                        timestamp
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (collection_id, customer_id, invoice_id, action, stage, timestamp))
+                conn.commit()
+
+                if cursor.rowcount > 0:
+                    logger.info(f"Inserted collection log: {collection_id} for customer: {customer_id}, action: {action}")
+                else:
+                    logger.debug(f"Collection log {collection_id} already exists, skipped")
+            finally:
+                conn.close()
+
+    def _handle_customer_profile(self, event: Event) -> None:
+        """Handle customer.profile.updated event - upsert customer profile data."""
+        data = event.payload or {}
+        customer_id = data.get("customer_id")
+
+        if not customer_id:
+            logger.warning("customer.profile.updated event missing customer_id, skipping")
+            return
+
+        risk_score = data.get("risk_score", 0.0)
+        credit_limit = data.get("credit_limit", 0.0)
+        status = data.get("status", "active")
+        now = datetime.utcnow().isoformat()
+
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    INSERT INTO customers (customer_id, risk_score, credit_limit, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(customer_id) DO UPDATE SET
+                        risk_score=excluded.risk_score,
+                        credit_limit=excluded.credit_limit,
+                        status=excluded.status,
+                        updated_at=excluded.updated_at
+                """, (customer_id, risk_score, credit_limit, status, now, now))
+
+                conn.commit()
+                logger.info(f"Upserted customer profile: {customer_id} risk={risk_score} status={status} limit={credit_limit}")
+            finally:
+                conn.close()
