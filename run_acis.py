@@ -25,6 +25,9 @@ from agents.policy.credit_policy_agent import CreditPolicyAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
 from agents.risk.risk_scoring_agent import RiskScoringAgent
 from agents.scenario_generator.scenario_generator_agent import ScenarioGeneratorAgent
+from agents.storage.db_agent import DBAgent
+from agents.storage.memory_agent import MemoryAgent
+from agents.storage.query_agent import QueryAgent
 from monitoring.monitoring_agent import MonitoringAgent
 from registry.registry_service import RegistryService
 from runtime.kafka_client import KafkaClient, KafkaConfig
@@ -94,6 +97,12 @@ def _run_agent_service(agent: Any, shutdown_event: threading.Event) -> None:
 def _build_components() -> Tuple[RegistryService, List[Any]]:
     registry_service = RegistryService(kafka_client=_build_kafka_client())
 
+    memory_agent = MemoryAgent(kafka_client=_build_kafka_client())
+    query_agent = QueryAgent(
+        kafka_client=_build_kafka_client(),
+        memory_agent=memory_agent
+    )
+
     agents: List[Any] = [
         MonitoringAgent(kafka_client=_build_kafka_client()),
         SelfHealingAgent(kafka_client=_build_kafka_client()),
@@ -103,6 +112,9 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         PaymentPredictionAgent(kafka_client=_build_kafka_client()),
         RiskScoringAgent(kafka_client=_build_kafka_client()),
         CreditPolicyAgent(kafka_client=_build_kafka_client()),
+        DBAgent(kafka_client=_build_kafka_client()),
+        memory_agent,
+        query_agent,
     ]
 
     return registry_service, agents
