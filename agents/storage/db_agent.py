@@ -18,9 +18,10 @@ class DBAgent(BaseAgent):
     to SQLite database. Handles idempotent writes and ensures data consistency.
 
     Subscribes to:
-    - acis.invoices (invoice.created)
-    - acis.payments (payment.received)
-    - acis.collections (collection.action.triggered)
+    - acis.invoices (invoice.created, invoice.overdue, etc.)
+    - acis.payments (payment.received, payment.partial)
+    - acis.collections (collection.reminder, collection.escalation, collection.action)
+    - acis.customers (customer.profile.updated)
     """
 
     TOPIC_INVOICES = "acis.invoices"
@@ -110,6 +111,8 @@ class DBAgent(BaseAgent):
                         invoice_id TEXT,
                         action TEXT,
                         stage TEXT,
+                        priority TEXT,
+                        reason TEXT,
                         timestamp TEXT,
                         FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
                     )
@@ -150,7 +153,7 @@ class DBAgent(BaseAgent):
             self._handle_invoice_upsert(event)
         elif event_type == "payment.received":
             self._handle_payment_received(event)
-        elif event_type == "collection.action.triggered":
+        elif event_type.startswith("collection."):
             self._handle_collection_action(event)
         elif event_type == "customer.profile.updated":
             self._handle_customer_profile(event)
@@ -289,17 +292,25 @@ class DBAgent(BaseAgent):
                 conn.close()
 
     def _handle_collection_action(self, event: Event) -> None:
-        """Handle collection.action.triggered event - insert into collections_log."""
+        """Handle all collection.* events - insert into collections_log."""
         data = event.payload or {}
         collection_id = data.get("id") or data.get("collection_id") or event.event_id
         customer_id = data.get("customer_id")
         invoice_id = data.get("invoice_id")
-        action = data.get("action")
-        stage = data.get("stage")
+
+        # Map action_type or action field
+        action = data.get("action") or data.get("action_type") or event.event_type
+
+        # Map stage from event type if not in payload
+        stage = data.get("stage") or event.event_type
+
+        # New fields for analytics
+        priority = data.get("priority")
+        reason = data.get("reason")
         timestamp = data.get("timestamp") or datetime.utcnow().isoformat()
 
         if not collection_id:
-            logger.warning("collection.action.triggered event missing id, skipping")
+            logger.warning(f"{event.event_type} event missing id, skipping")
             return
 
         with self._db_lock:
@@ -313,16 +324,21 @@ class DBAgent(BaseAgent):
                         invoice_id,
                         action,
                         stage,
+                        priority,
+                        reason,
                         timestamp
                     )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (collection_id, customer_id, invoice_id, action, stage, timestamp))
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (collection_id, customer_id, invoice_id, action, stage, priority, reason, timestamp))
                 conn.commit()
 
                 if cursor.rowcount > 0:
-                    logger.info(f"Inserted collection log: {collection_id} for customer: {customer_id}, action: {action}")
+                    logger.info(
+                        f"[DBAgent] Inserted collection log: {collection_id} for customer: {customer_id}, "
+                        f"action: {action}, priority: {priority}, reason: {reason}"
+                    )
                 else:
-                    logger.debug(f"Collection log {collection_id} already exists, skipped")
+                    logger.debug(f"[DBAgent] Collection log {collection_id} already exists, skipped")
             finally:
                 conn.close()
 
