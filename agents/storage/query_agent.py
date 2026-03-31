@@ -148,7 +148,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, due_date, status
+                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
                     FROM invoices
                     WHERE invoice_id = ?
                 """, (invoice_id,))
@@ -189,7 +189,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, due_date, status
+                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
                     FROM invoices
                     WHERE customer_id = ?
                     AND status != 'paid'
@@ -227,7 +227,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, due_date, status
+                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
                     FROM invoices
                     WHERE customer_id = ?
                     ORDER BY due_date DESC
@@ -242,6 +242,44 @@ class QueryAgent(BaseAgent):
 
             except sqlite3.Error as e:
                 logger.error(f"Database error querying all invoices for customer {customer_id}: {e}")
+
+        return []
+
+    def get_overdue_invoices(self, customer_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all overdue invoices for a customer.
+
+        Args:
+            customer_id: The customer ID to look up.
+
+        Returns:
+            List of invoice dicts with status='overdue', or empty list if none found.
+        """
+        if not customer_id:
+            return []
+
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
+                    FROM invoices
+                    WHERE customer_id = ?
+                    AND status = 'overdue'
+                """, (customer_id,))
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                result = [dict(row) for row in rows]
+                logger.debug(f"Fetched {len(result)} overdue invoices for customer {customer_id}")
+                return result
+
+            except sqlite3.Error as e:
+                logger.error(f"Database error querying overdue invoices for customer {customer_id}: {e}")
 
         return []
 
@@ -263,7 +301,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, due_date, status
+                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
                     FROM invoices
                     WHERE status = 'pending'
                 """)
@@ -277,8 +315,9 @@ class QueryAgent(BaseAgent):
                         "invoice_id": row[0],
                         "customer_id": row[1],
                         "amount": row[2],
-                        "due_date": row[3],
-                        "status": row[4],
+                        "remaining_amount": row[3],
+                        "due_date": row[4],
+                        "status": row[5],
                     })
 
                 logger.debug(f"Fetched {len(invoices)} unpaid invoices from DB")

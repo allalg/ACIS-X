@@ -28,6 +28,7 @@ from agents.policy.credit_policy_agent import CreditPolicyAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
 from agents.risk.risk_scoring_agent import RiskScoringAgent
 from agents.customer.customer_profile_agent import CustomerProfileAgent
+from agents.collections.collections_agent import CollectionsAgent
 from agents.scenario_generator.scenario_generator_agent import ScenarioGeneratorAgent
 from agents.storage.db_agent import DBAgent
 from agents.storage.memory_agent import MemoryAgent
@@ -117,6 +118,11 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         query_agent=query_agent
     )
 
+    collections_agent = CollectionsAgent(
+        kafka_client=_build_kafka_client(),
+        query_agent=query_agent
+    )
+
     agents: List[Any] = [
         MonitoringAgent(kafka_client=_build_kafka_client()),
         SelfHealingAgent(kafka_client=_build_kafka_client()),
@@ -134,6 +140,7 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         ),
         RiskScoringAgent(kafka_client=_build_kafka_client()),
         CustomerProfileAgent(kafka_client=_build_kafka_client()),
+        collections_agent,
         CreditPolicyAgent(kafka_client=_build_kafka_client()),
     ]
 
