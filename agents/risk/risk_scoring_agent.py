@@ -60,11 +60,15 @@ class RiskScoringAgent(BaseAgent):
         risk_score = max(0, min(1, risk_score))
         confidence = max(0, min(1, confidence))
 
+        # Propagate explanation from prediction
+        reasons = data.get("reasons", [])
+
         # Step 2: Refine risk
         adjusted_risk = risk_score
 
         if confidence < 0.5:
             adjusted_risk += 0.1
+            reasons.append("low confidence adjustment applied")
 
         # Clamp adjusted_risk between 0 and 1
         adjusted_risk = max(0, min(1, adjusted_risk))
@@ -82,13 +86,26 @@ class RiskScoringAgent(BaseAgent):
         else:
             risk_level = "low"
 
+        # Add severity level
+        if adjusted_risk > 0.85:
+            severity = "critical"
+        elif adjusted_risk > 0.6:
+            severity = "elevated"
+        else:
+            severity = "normal"
+
+        logger.debug(f"Risk reasons: {reasons}")
+        logger.debug(f"Severity: {severity}")
+
         # Step 4: Create RiskScoreUpdated payload
         risk_payload = {
             "customer_id": customer_id,
             "invoice_id": invoice_id,
             "risk_score": round(adjusted_risk, 4),
             "risk_level": risk_level,
+            "severity": severity,
             "confidence": confidence,
+            "reasons": reasons,
         }
 
         # Step 5: Publish RiskScoreUpdated event
