@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Tuple
 
 from agents.intelligence.customer_state_agent import CustomerStateAgent
 from agents.intelligence.external_data_agent import ExternalDataAgent
-from agents.intelligence.litigation_agent import ExternalScrapingAgent
+from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
 from agents.invoice.overdue_detection_agent import OverdueDetectionAgent
 from agents.policy.credit_policy_agent import CreditPolicyAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
