@@ -1,5 +1,6 @@
-import random
 import logging
+import requests
+import time
 from typing import List, Any
 from datetime import datetime
 
@@ -41,6 +42,7 @@ class ExternalDataAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="ExternalDataAgent",
         )
+        self._cache = {}
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -50,6 +52,52 @@ class ExternalDataAgent(BaseAgent):
         """Process incoming events."""
         if event.event_type == "customer.metrics.updated":
             self.handle_event(event)
+
+    def _fetch_gdelt_risk(self, company_name: str) -> float:
+        url = "https://api.gdeltproject.org/api/v2/doc/doc"
+
+        params = {
+            "query": company_name,
+            "mode": "ArtList",
+            "maxrecords": 10,
+            "format": "json",
+            "timespan": "1d",
+        }
+
+        try:
+            logger.debug(f"GDELT query for: {company_name}")
+            time.sleep(0.5)
+            response = requests.get(url, params=params, timeout=5)
+
+            if response.status_code != 200:
+                logger.warning(f"GDELT non-200 response for {company_name}")
+                return 0.0
+
+            try:
+                data = response.json()
+            except Exception:
+                logger.warning(f"GDELT invalid JSON for {company_name}")
+                return 0.0
+
+            articles = data.get("articles", [])
+            if not articles:
+                return 0.0
+
+            tones = [
+                max(min(a.get("tone", 0), 100), -100)
+                for a in articles if "tone" in a
+            ]
+            if not tones:
+                return 0.0
+
+            avg_tone = sum(tones) / len(tones)
+
+            risk = (-avg_tone) / 100
+            return max(0.0, min(1.0, risk))
+
+        except Exception as e:
+            logger.error(f"GDELT fetch failed for {company_name}: {e}")
+            return 0.0
 
     def handle_event(self, event: Event) -> None:
         """Handle customer.metrics.updated event and enrich with external data."""
@@ -63,25 +111,48 @@ class ExternalDataAgent(BaseAgent):
             logger.warning("Missing customer_id in metrics event")
             return
 
-        # Step 2: Generate external signals
-        financial_score = round(random.uniform(0.4, 0.9), 2)
-        external_risk = round(random.uniform(0.2, 0.8), 2)
-        litigation_flag = random.random() < 0.2
+        company_name = data.get("company_name") or customer_id
+        company_name = company_name.strip()[:100]
 
-        # Normalize generated values to [0, 1]
-        financial_score = min(max(financial_score, 0), 1)
-        external_risk = min(max(external_risk, 0), 1)
+        # Step 2: Fetch external risk with caching
+        cache_key = company_name.lower()
+        cache_entry = self._cache.get(cache_key)
 
-        # Step 3: Create payload
+        if cache_entry:
+            age = (datetime.utcnow() - cache_entry["timestamp"]).total_seconds()
+            if age < 86400:
+                external_risk = cache_entry["risk"]
+                logger.info(f"[ExternalDataAgent] Cache hit for {customer_id}")
+            else:
+                external_risk = self._fetch_gdelt_risk(company_name)
+                self._cache[cache_key] = {
+                    "risk": external_risk,
+                    "timestamp": datetime.utcnow()
+                }
+                logger.info(f"[ExternalDataAgent] Cache expired, fetched new data for {customer_id}")
+        else:
+            external_risk = self._fetch_gdelt_risk(company_name)
+            self._cache[cache_key] = {
+                "risk": external_risk,
+                "timestamp": datetime.utcnow()
+            }
+            logger.info(f"[ExternalDataAgent] Cache miss, fetched new data for {customer_id}")
+
+        # Step 3: Set placeholders
+        financial_score = None
+        litigation_flag = None
+
+        # Step 4: Create payload
         external_payload = {
             "customer_id": customer_id,
             "financial_score": financial_score,
-            "external_risk": external_risk,
+            "external_risk": round(external_risk, 4),
             "litigation_flag": litigation_flag,
+            "source": "gdelt_api",
             "generated_at": datetime.utcnow().isoformat()
         }
 
-        # Step 4: Publish event
+        # Step 5: Publish event
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
             event_type="ExternalDataEnriched",
@@ -91,7 +162,5 @@ class ExternalDataAgent(BaseAgent):
         )
 
         logger.info(
-            f"[ExternalDataAgent] Enriched data for {customer_id}: "
-            f"financial_score={financial_score}, external_risk={external_risk}, "
-            f"litigation_flag={litigation_flag}"
+            f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk:.4f}"
         )
