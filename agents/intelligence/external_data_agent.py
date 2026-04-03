@@ -57,47 +57,69 @@ class ExternalDataAgent(BaseAgent):
         url = "https://api.gdeltproject.org/api/v2/doc/doc"
 
         params = {
-            "query": company_name,
+            "query": f'"{company_name}" OR {company_name}',
             "mode": "ArtList",
-            "maxrecords": 10,
+            "maxrecords": 20,
             "format": "json",
-            "timespan": "1d",
+            "timespan": "7d",
         }
 
         try:
-            logger.debug(f"GDELT query for: {company_name}")
-            time.sleep(0.5)
+            logger.info(f"Fetching GDELT for {company_name}")
+            time.sleep(2)
             response = requests.get(url, params=params, timeout=5)
 
+            # Handle rate limiting with retry
+            if response.status_code == 429:
+                logger.warning(f"Rate limit hit for {company_name}")
+                time.sleep(5)
+                try:
+                    logger.info(f"Retry triggered for {company_name}")
+                    response = requests.get(url, params=params, timeout=5)
+                except Exception as e:
+                    logger.error(f"GDELT retry failed for {company_name}: {e}")
+                    logger.info(f"Returning fallback risk 0.2")
+                    return 0.2
+
             if response.status_code != 200:
-                logger.warning(f"GDELT non-200 response for {company_name}")
-                return 0.0
+                logger.warning(f"GDELT non-200 response for {company_name}: {response.status_code}")
+                logger.info(f"Returning fallback risk 0.2")
+                return 0.2
 
             try:
                 data = response.json()
-            except Exception:
-                logger.warning(f"GDELT invalid JSON for {company_name}")
-                return 0.0
+            except Exception as e:
+                logger.warning(f"GDELT invalid JSON for {company_name}: {e}")
+                logger.info(f"Returning fallback risk 0.2")
+                return 0.2
 
             articles = data.get("articles", [])
             if not articles:
-                return 0.0
+                logger.info(f"No articles found for {company_name}, returning fallback risk 0.2")
+                return 0.2
 
             tones = [
                 max(min(a.get("tone", 0), 100), -100)
                 for a in articles if "tone" in a
             ]
             if not tones:
-                return 0.0
+                logger.info(f"No tones found for {company_name}, returning fallback risk 0.2")
+                return 0.2
 
             avg_tone = sum(tones) / len(tones)
 
-            risk = (-avg_tone) / 100
-            return max(0.0, min(1.0, risk))
+            # Improved risk calculation
+            negative_count = sum(1 for tone in tones if tone < 0)
+            negative_ratio = negative_count / len(tones)
+            risk = (-avg_tone / 100) + (0.3 * negative_ratio)
+
+            risk = max(0.0, min(1.0, risk))
+            return risk
 
         except Exception as e:
             logger.error(f"GDELT fetch failed for {company_name}: {e}")
-            return 0.0
+            logger.info(f"Returning fallback risk 0.2")
+            return 0.2
 
     def handle_event(self, event: Event) -> None:
         """Handle customer.metrics.updated event and enrich with external data."""
