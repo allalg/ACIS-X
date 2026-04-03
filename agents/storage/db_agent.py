@@ -130,9 +130,26 @@ class DBAgent(BaseAgent):
                     )
                 """)
 
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS external_financials (
+                        company_name TEXT PRIMARY KEY,
+                        pe REAL,
+                        roe REAL,
+                        roce REAL,
+                        debt REAL,
+                        market_cap REAL,
+                        sales_growth REAL,
+                        profit_growth REAL,
+                        operating_margin REAL,
+                        interest_coverage REAL,
+                        risk REAL,
+                        updated_at TEXT
+                    )
+                """)
+
                 conn.commit()
                 logger.info(f"Database initialized at {self._db_path}")
-                logger.info("Upgraded database schema to v2 (credit control ready)")
+                logger.info("Upgraded database schema to v3 (external financials ready)")
             finally:
                 conn.close()
 
