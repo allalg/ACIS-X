@@ -118,9 +118,9 @@ Kafka topic administration:
 | `acis.invoices` | 6 | 7 days | delete |
 | `acis.payments` | 6 | 7 days | delete |
 | `acis.customers` | 3 | 30 days | compact |
+| `acis.metrics` | 3 | 7 days | delete |
 | `acis.risk` | 4 | 14 days | delete |
 | `acis.policy` | 2 | 30 days | delete |
-| `acis.external` | 3 | 7 days | delete |
 | `acis.commands` | 3 | 1 day | delete |
 | `acis.system` | 4 | 30 days | delete |
 | `acis.agent.health` | 2 | 7 days | delete |

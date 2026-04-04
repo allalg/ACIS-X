@@ -1,3 +1,4 @@
+import json
 import logging
 import sqlite3
 import threading
@@ -28,6 +29,8 @@ class DBAgent(BaseAgent):
     TOPIC_PAYMENTS = "acis.payments"
     TOPIC_COLLECTIONS = "acis.collections"
     TOPIC_CUSTOMERS = "acis.customers"
+    TOPIC_METRICS = "acis.metrics"
+    TOPIC_RISK = "acis.risk"
 
     DB_PATH = "acis.db"
 
@@ -45,6 +48,8 @@ class DBAgent(BaseAgent):
                 self.TOPIC_PAYMENTS,
                 self.TOPIC_COLLECTIONS,
                 self.TOPIC_CUSTOMERS,
+                self.TOPIC_METRICS,
+                self.TOPIC_RISK,
             ],
             capabilities=[
                 "db_write",
@@ -147,9 +152,46 @@ class DBAgent(BaseAgent):
                     )
                 """)
 
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS external_litigation (
+                        id TEXT PRIMARY KEY,
+                        customer_id TEXT,
+                        company_name TEXT,
+                        litigation_risk REAL,
+                        severity TEXT,
+                        case_count INTEGER,
+                        case_types TEXT,
+                        cases TEXT,
+                        source TEXT,
+                        confidence REAL,
+                        created_at TEXT
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_litigation_customer
+                    ON external_litigation(customer_id)
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS customer_risk_profile (
+                        id TEXT PRIMARY KEY,
+                        customer_id TEXT,
+                        company_name TEXT,
+                        financial_risk REAL,
+                        litigation_risk REAL,
+                        combined_risk REAL,
+                        severity TEXT,
+                        financial_source TEXT,
+                        litigation_source TEXT,
+                        confidence REAL,
+                        created_at TEXT
+                    )
+                """)
+
                 conn.commit()
                 logger.info(f"Database initialized at {self._db_path}")
-                logger.info("Upgraded database schema to v3 (external financials ready)")
+                logger.info("Upgraded database schema to v5 (customer risk profile ready)")
             finally:
                 conn.close()
 
@@ -160,6 +202,8 @@ class DBAgent(BaseAgent):
             self.TOPIC_PAYMENTS,
             self.TOPIC_COLLECTIONS,
             self.TOPIC_CUSTOMERS,
+            self.TOPIC_METRICS,
+            self.TOPIC_RISK,
         ]
 
     def process_event(self, event: Event) -> None:
@@ -174,6 +218,10 @@ class DBAgent(BaseAgent):
             self._handle_collection_action(event)
         elif event_type == "customer.profile.updated":
             self._handle_customer_profile(event)
+        elif event_type == "LitigationRiskUpdated":
+            self._handle_litigation_event(event)
+        elif event_type == "CustomerRiskProfileUpdated":
+            self._handle_customer_risk_profile(event)
 
     def _handle_invoice_upsert(self, event: Event) -> None:
         """
@@ -390,5 +438,144 @@ class DBAgent(BaseAgent):
 
                 conn.commit()
                 logger.info(f"Upserted customer profile: {customer_id} risk={risk_score} status={status} limit={credit_limit}")
+            finally:
+                conn.close()
+
+    def _handle_litigation_event(self, event: Event) -> None:
+        """Handle LitigationRiskUpdated event - insert litigation risk data."""
+        data = event.payload or {}
+        customer_id = data.get("customer_id")
+        company_name = data.get("company_name")
+        litigation_risk = data.get("litigation_risk", 0.0)
+        severity = data.get("severity")
+        case_count = data.get("case_count", 0)
+        case_types = data.get("case_types", [])
+        cases = data.get("cases", [])
+        source = data.get("source")
+        confidence = data.get("confidence", 0.0)
+        created_at = datetime.utcnow().isoformat()
+
+        if not customer_id:
+            logger.warning("LitigationRiskUpdated event missing customer_id, skipping")
+            return
+
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+
+                # Ensure customer exists
+                cursor.execute("""
+                    INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                    VALUES (?, ?, ?)
+                """, (customer_id, created_at, created_at))
+
+                cursor.execute("""
+                    INSERT OR IGNORE INTO external_litigation (
+                        id,
+                        customer_id,
+                        company_name,
+                        litigation_risk,
+                        severity,
+                        case_count,
+                        case_types,
+                        cases,
+                        source,
+                        confidence,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    event.event_id,
+                    customer_id,
+                    company_name,
+                    litigation_risk,
+                    severity,
+                    case_count,
+                    json.dumps(case_types or []),
+                    json.dumps(cases or []),
+                    source,
+                    confidence,
+                    created_at
+                ))
+                conn.commit()
+
+                if cursor.rowcount > 0:
+                    logger.info(
+                        f"[DBAgent] Stored litigation: customer={customer_id}, "
+                        f"risk={litigation_risk}, cases={case_count}"
+                    )
+                else:
+                    logger.debug(f"[DBAgent] Litigation record {event.event_id} already exists, skipped")
+            finally:
+                conn.close()
+
+    def _handle_customer_risk_profile(self, event: Event) -> None:
+        """Handle CustomerRiskProfileUpdated event - insert aggregated risk data."""
+        data = event.payload or {}
+
+        customer_id = data.get("customer_id")
+        company_name = data.get("company_name")
+
+        if not customer_id:
+            logger.warning("CustomerRiskProfileUpdated missing customer_id, skipping")
+            return
+
+        financial_risk = data.get("financial_risk", 0.0)
+        litigation_risk = data.get("litigation_risk", 0.0)
+        combined_risk = data.get("combined_risk", 0.0)
+
+        severity = data.get("severity")
+        financial_source = data.get("financial_source")
+        litigation_source = data.get("litigation_source")
+
+        confidence = data.get("confidence", 0.0)
+        created_at = datetime.utcnow().isoformat()
+
+        with self._db_lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    INSERT OR IGNORE INTO customer_risk_profile (
+                        id,
+                        customer_id,
+                        company_name,
+                        financial_risk,
+                        litigation_risk,
+                        combined_risk,
+                        severity,
+                        financial_source,
+                        litigation_source,
+                        confidence,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    event.event_id,
+                    customer_id,
+                    company_name,
+                    financial_risk,
+                    litigation_risk,
+                    combined_risk,
+                    severity,
+                    financial_source,
+                    litigation_source,
+                    confidence,
+                    created_at
+                ))
+
+                conn.commit()
+
+                if cursor.rowcount > 0:
+                    logger.info(
+                        f"[DBAgent] Stored aggregated risk: customer={customer_id}, combined={combined_risk}"
+                    )
+                else:
+                    logger.debug(
+                        f"[DBAgent] Risk profile {event.event_id} already exists, skipped"
+                    )
+
             finally:
                 conn.close()

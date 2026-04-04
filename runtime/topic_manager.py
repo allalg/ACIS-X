@@ -97,13 +97,6 @@ ACIS_TOPIC_CONFIGS = {
         retention_ms=30 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
-    "acis.external": TopicConfig(
-        name="acis.external",
-        partitions=3,
-        replication_factor=1,
-        retention_ms=7 * 24 * 3600 * 1000,
-        cleanup_policy="delete",
-    ),
     "acis.commands": TopicConfig(
         name="acis.commands",
         partitions=3,

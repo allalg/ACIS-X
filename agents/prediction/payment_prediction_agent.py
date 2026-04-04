@@ -24,7 +24,6 @@ class PaymentPredictionAgent(BaseAgent):
 
     TOPIC_METRICS = "acis.metrics"
     TOPIC_PREDICTIONS = "acis.predictions"
-    TOPIC_EXTERNAL = "acis.external"
 
     def __init__(
         self,
@@ -35,7 +34,7 @@ class PaymentPredictionAgent(BaseAgent):
             agent_name="PaymentPredictionAgent",
             agent_version="1.0.0",
             group_id="payment-prediction-group",
-            subscribed_topics=[self.TOPIC_METRICS, self.TOPIC_EXTERNAL],
+            subscribed_topics=[self.TOPIC_METRICS],
             capabilities=[
                 "payment_risk_prediction",
                 "credit_analysis",
@@ -49,7 +48,7 @@ class PaymentPredictionAgent(BaseAgent):
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
-        return [self.TOPIC_METRICS, self.TOPIC_EXTERNAL]
+        return [self.TOPIC_METRICS]
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""

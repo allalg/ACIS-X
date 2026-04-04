@@ -23,7 +23,7 @@ class ScenarioGeneratorAgent(BaseAgent):
     - acis.customers
     - acis.invoices
     - acis.payments
-    - acis.external
+    - acis.metrics
     - acis.commands
     """
 
@@ -31,7 +31,7 @@ class ScenarioGeneratorAgent(BaseAgent):
     TOPIC_CUSTOMERS = "acis.customers"
     TOPIC_INVOICES = "acis.invoices"
     TOPIC_PAYMENTS = "acis.payments"
-    TOPIC_EXTERNAL = "acis.external"
+    TOPIC_METRICS = "acis.metrics"
     TOPIC_COMMANDS = "acis.commands"
 
     # Synthetic data constants
@@ -695,7 +695,7 @@ class ScenarioGeneratorAgent(BaseAgent):
         }
 
         self.publish_event(
-            topic=self.TOPIC_EXTERNAL,
+            topic=self.TOPIC_METRICS,
             event_type="external.credit.report.received",
             entity_id=customer_id,
             payload=external_payload,
@@ -876,7 +876,7 @@ class ScenarioGeneratorAgent(BaseAgent):
                     self.TOPIC_CUSTOMERS,
                     self.TOPIC_INVOICES,
                     self.TOPIC_PAYMENTS,
-                    self.TOPIC_EXTERNAL,
+                    self.TOPIC_METRICS,
                     self.TOPIC_COMMANDS,
                 ],
             },

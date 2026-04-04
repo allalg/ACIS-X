@@ -22,6 +22,8 @@ class CustomerProfileAgent(BaseAgent):
     - customer.metrics.updated
     - RiskScoreUpdated
     - ExternalDataEnriched
+    - LitigationRiskUpdated
+    - CustomerRiskProfileUpdated
 
     Produces:
     - customer.profile.updated
@@ -32,7 +34,6 @@ class CustomerProfileAgent(BaseAgent):
 
     TOPIC_METRICS = "acis.metrics"
     TOPIC_RISK = "acis.risk"
-    TOPIC_EXTERNAL = "acis.external"
     TOPIC_PROFILE = "acis.customers"
 
     def __init__(self, kafka_client: Any):
@@ -43,7 +44,6 @@ class CustomerProfileAgent(BaseAgent):
             subscribed_topics=[
                 self.TOPIC_METRICS,
                 self.TOPIC_RISK,
-                self.TOPIC_EXTERNAL
             ],
             capabilities=[
                 "customer_risk_aggregation",
@@ -60,7 +60,6 @@ class CustomerProfileAgent(BaseAgent):
         return [
             self.TOPIC_METRICS,
             self.TOPIC_RISK,
-            self.TOPIC_EXTERNAL
         ]
 
     def process_event(self, event: Event) -> None:
@@ -72,6 +71,8 @@ class CustomerProfileAgent(BaseAgent):
             self._handle_external(event)
         elif event.event_type == "LitigationRiskUpdated":
             self._handle_scraped(event)
+        elif event.event_type == "CustomerRiskProfileUpdated":
+            self._handle_aggregated_risk(event)
 
     # ----------------------------
     # STATE MANAGEMENT
@@ -87,8 +88,10 @@ class CustomerProfileAgent(BaseAgent):
                 "external_risk": 0.0,
                 "external_scraped_risk": 0.0,
                 "litigation_flag": False,
-                "news_flag": False,
-                "reputation_flag": False,
+                "aggregated_risk": None,
+                "financial_risk": 0.0,
+                "litigation_risk": 0.0,
+                "severity": None,
             }
         return self._state[customer_id]
 
@@ -155,10 +158,36 @@ class CustomerProfileAgent(BaseAgent):
 
         state = self._get_state(customer_id)
 
-        state["external_scraped_risk"] = float(data.get("external_scraped_risk", 0.0))
+        state["external_scraped_risk"] = float(data.get("litigation_risk", 0.0))
         state["litigation_flag"] = bool(data.get("litigation_flag", False))
-        state["news_flag"] = bool(data.get("news_flag", False))
-        state["reputation_flag"] = bool(data.get("reputation_flag", False))
+
+        self._emit_profile(customer_id, event)
+
+    def _handle_aggregated_risk(self, event: Event):
+        """Handle CustomerRiskProfileUpdated - PRIMARY signal from AggregatorAgent."""
+        data = event.payload or {}
+        customer_id = data.get("customer_id")
+
+        if not customer_id:
+            return
+
+        state = self._get_state(customer_id)
+
+        # Store aggregated risk as primary signal
+        state["aggregated_risk"] = float(data.get("combined_risk", 0.0))
+        state["financial_risk"] = float(data.get("financial_risk", 0.0))
+        state["litigation_risk"] = float(data.get("litigation_risk", 0.0))
+        state["severity"] = data.get("severity")
+
+        # Also update legacy fields for backward compatibility
+        state["external_risk"] = state["financial_risk"]
+        state["external_scraped_risk"] = state["litigation_risk"]
+        state["litigation_flag"] = state["litigation_risk"] > 0
+
+        logger.info(
+            f"[CustomerProfileAgent] Received aggregated risk: customer={customer_id}, "
+            f"combined={state['aggregated_risk']:.4f}, severity={state['severity']}"
+        )
 
         self._emit_profile(customer_id, event)
 
@@ -167,6 +196,11 @@ class CustomerProfileAgent(BaseAgent):
     # ----------------------------
 
     def _compute_customer_risk(self, state: Dict[str, Any]) -> float:
+        # FIX 5: Use aggregated risk as PRIMARY signal if available
+        aggregated = state.get("aggregated_risk")
+        if aggregated is not None:
+            return max(0.0, min(1.0, aggregated))
+
         risks = state.get("risks", [])
 
         # Behavior adjustment
@@ -182,11 +216,15 @@ class CustomerProfileAgent(BaseAgent):
             scraped = 0.0
 
         litigation_flag = state.get("litigation_flag", False)
-        news_flag = state.get("news_flag", False)
-        reputation_flag = state.get("reputation_flag", False)
 
-        if not risks and external == 0 and scraped == 0:
-            return 0.0
+        # FIX 6: Handle cold start for new customers
+        is_new_customer = len(risks) == 0
+        if is_new_customer:
+            if external == 0 and scraped == 0:
+                return 0.0
+            # Rely only on external signals for new customers
+            cold_risk = (0.6 * external) + (0.4 * scraped)
+            return max(0.0, min(1.0, cold_risk))
 
         # Conservative approach: take max risk
         base_risk = max(risks) if risks else 0.0
@@ -199,12 +237,6 @@ class CustomerProfileAgent(BaseAgent):
         if litigation_flag:
             flag_penalty += 0.15
 
-        if news_flag:
-            flag_penalty += 0.1
-
-        if reputation_flag:
-            flag_penalty += 0.05
-
         logger.debug(
             f"[RiskComponents] base={base_risk:.2f}, "
             f"delay_factor={delay_factor:.2f}, "
@@ -214,8 +246,7 @@ class CustomerProfileAgent(BaseAgent):
         )
 
         logger.debug(
-            f"[Flags] litigation={litigation_flag}, "
-            f"news={news_flag}, reputation={reputation_flag}"
+            f"[Flags] litigation={litigation_flag}"
         )
 
         adjusted_risk = (

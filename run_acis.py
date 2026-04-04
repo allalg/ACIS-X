@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Tuple
 from agents.intelligence.customer_state_agent import CustomerStateAgent
 from agents.intelligence.external_data_agent import ExternalDataAgent
 from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
+from agents.intelligence.aggregator_agent import AggregatorAgent
 from agents.invoice.overdue_detection_agent import OverdueDetectionAgent
 from agents.policy.credit_policy_agent import CreditPolicyAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
@@ -53,6 +54,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("run_acis")
+
+if not os.environ.get("INDIAN_KANOON_API_KEY"):
+    logger.warning("INDIAN_KANOON_API_KEY not set - ExternalScrapingAgent will run in limited mode")
 
 
 def _bootstrap_servers() -> List[str]:
@@ -138,6 +142,7 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         overdue_detection_agent,
         ExternalDataAgent(kafka_client=_build_kafka_client()),
         ExternalScrapingAgent(kafka_client=_build_kafka_client()),
+        AggregatorAgent(kafka_client=_build_kafka_client()),
         PaymentPredictionAgent(
             kafka_client=_build_kafka_client(),
             query_agent=query_agent

@@ -27,11 +27,11 @@ class ExternalDataAgent(BaseAgent):
     - Computed external_risk based on financial signals
 
     Produces:
-    - acis.external (ExternalDataEnriched)
+    - acis.metrics (ExternalDataEnriched)
     """
 
     TOPIC_INPUT = "acis.metrics"
-    TOPIC_OUTPUT = "acis.external"
+    TOPIC_OUTPUT = "acis.metrics"
     DB_PATH = "acis.db"
     CACHE_TTL_HOURS = 24
 
@@ -362,37 +362,92 @@ class ExternalDataAgent(BaseAgent):
 
     def _compute_risk(self, data: Dict) -> float:
         """
-        Compute risk score based on multiple financial signals.
-        Returns value between 0.0 and 1.0.
+        Weighted financial risk model.
+
+        Combines:
+        - leverage risk
+        - profitability risk
+        - growth risk
+        - coverage risk
+        - efficiency risk
+
+        Returns score in [0.0, 1.0]
         """
-        risk = 0.0
 
-        # High debt increases risk
+        def normalize(val, low, high):
+            if val is None:
+                return None
+            return max(0.0, min(1.0, (val - low) / (high - low)))
+
+        def inverse_normalize(val, low, high):
+            if val is None:
+                return None
+            return 1.0 - normalize(val, low, high)
+
+        scores = []
+
+        # ----------------------------
+        # 1. LEVERAGE RISK (Debt)
+        # ----------------------------
         debt = data.get("debt")
-        if debt is not None and debt > 1.0:  # Debt-to-equity > 1
-            risk += 0.2
+        if debt is not None:
+            debt_score = normalize(debt, 0, 2)   # >2 = high risk
+            scores.append(("debt", debt_score, 0.25))
 
-        # Low ROE increases risk
+        # ----------------------------
+        # 2. PROFITABILITY (ROE)
+        # ----------------------------
         roe = data.get("roe")
-        if roe is not None and roe < 10:
-            risk += 0.2
+        if roe is not None:
+            roe_score = inverse_normalize(roe, 10, 25)  # low ROE = high risk
+            scores.append(("roe", roe_score, 0.20))
 
-        # Negative profit growth increases risk
+        # ----------------------------
+        # 3. GROWTH (Profit Growth)
+        # ----------------------------
         profit_growth = data.get("profit_growth")
-        if profit_growth is not None and profit_growth < 0:
-            risk += 0.2
+        if profit_growth is not None:
+            growth_score = inverse_normalize(profit_growth, 0, 20)
+            scores.append(("growth", growth_score, 0.20))
 
-        # Low interest coverage increases risk
-        interest_coverage = data.get("interest_coverage")
-        if interest_coverage is not None and interest_coverage < 2:
-            risk += 0.2
+        # ----------------------------
+        # 4. INTEREST COVERAGE
+        # ----------------------------
+        coverage = data.get("interest_coverage")
+        if coverage is not None:
+            coverage_score = inverse_normalize(coverage, 2, 10)
+            scores.append(("coverage", coverage_score, 0.15))
 
-        # Low operating margin increases risk
-        operating_margin = data.get("operating_margin")
-        if operating_margin is not None and operating_margin < 10:
-            risk += 0.2
+        # ----------------------------
+        # 5. OPERATING MARGIN
+        # ----------------------------
+        margin = data.get("operating_margin")
+        if margin is not None:
+            margin_score = inverse_normalize(margin, 10, 30)
+            scores.append(("margin", margin_score, 0.10))
 
-        return min(risk, 1.0)
+        # ----------------------------
+        # 6. PE RATIO (Overvaluation Risk)
+        # ----------------------------
+        pe = data.get("pe")
+        if pe is not None:
+            pe_score = normalize(pe, 10, 40)
+            scores.append(("pe", pe_score, 0.10))
+
+        # ----------------------------
+        # AGGREGATION
+        # ----------------------------
+        total_weight = sum(w for _, _, w in scores)
+        if total_weight == 0:
+            return 0.3  # fallback default
+
+        weighted_sum = sum(score * weight for _, score, weight in scores)
+
+        risk = weighted_sum / total_weight
+
+        logger.debug(f"[ExternalRisk] computed_risk={risk:.4f}, signals={scores}")
+
+        return round(max(0.0, min(1.0, risk)), 4)
 
     # ─────────────────────────────────────────────────────────────────────────
     # EVENT HANDLER

@@ -1,27 +1,63 @@
 """
 External Scraping Agent for ACIS-X.
 
-Generates multiple risk signals using a scraping-ready architecture:
-- Litigation risk
-- Reputation risk
-- News risk
+Generates litigation risk signals from Google News RSS:
+- Fraud, lawsuit, investigation detection
+- Risk analysis (keyword + inference based)
+- Litigation inference (direction detection)
 
-Currently uses mock data, designed for future integration with:
-- eCourts India
-- Indian Kanoon
-- News websites
+Self-contained agent with NO external module dependencies.
 """
 
 import logging
-import random
+import re
 import time
-from typing import List, Any, Tuple
-from datetime import datetime
-
+import requests
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote_plus
+from typing import List, Any, Dict
+from datetime import datetime, timedelta, timezone
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
 
 logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RISK KEYWORD WEIGHTS
+# ─────────────────────────────────────────────────────────────────────────────
+NEWS_RISK_KEYWORDS = {
+    "fraud": 1.0,
+    "scam": 1.0,
+    "bankruptcy": 1.0,
+    "investigation": 0.8,
+    "lawsuit": 0.7,
+    "sued": 0.7,
+    "penalty": 0.6,
+    "default": 0.6,
+    "violation": 0.5,
+    "probe": 0.5,
+    "indictment": 0.9,
+    "embezzlement": 1.0,
+    "misconduct": 0.7,
+    "scandal": 0.8,
+    "settlement": 0.5,
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CASE TYPE CLASSIFICATION KEYWORDS
+# ─────────────────────────────────────────────────────────────────────────────
+CASE_TYPE_KEYWORDS = {
+    "fraud": ["fraud", "cheating", "ipc 420", "420 ipc", "dishonest", "misappropriation", "scam", "embezzlement"],
+    "insolvency": ["insolvency", "ibc", "bankruptcy", "liquidation", "nclt", "corporate insolvency"],
+    "regulatory": ["sebi", "violation", "compliance", "rbi", "regulatory", "investigation", "probe", "penalty"],
+    "lawsuit": ["lawsuit", "sued", "sues", "litigation", "legal action", "court"],
+    "financial_default": ["default", "loan", "repayment", "recovery", "npa", "debt recovery"],
+    "tax_dispute": ["tax", "gst", "income tax", "tax evasion", "tax authority"],
+    "contract_dispute": ["contract", "breach", "agreement", "specific performance"],
+    "criminal": ["criminal", "offence", "fir", "cognizable", "prosecution", "indictment"],
+}
 
 
 class ExternalScrapingAgent(BaseAgent):
@@ -29,35 +65,42 @@ class ExternalScrapingAgent(BaseAgent):
     External Scraping Agent for ACIS-X.
 
     Subscribes to:
-    - acis.metrics (customer.metrics.updated)
+    - acis.metrics (customer.metrics.updated, customer.profile.updated)
 
     Produces:
-    - acis.external (LitigationRiskUpdated)
+    - acis.metrics (LitigationRiskUpdated)
 
     Responsibility:
-    Generate multi-signal external risk from scraping sources.
-    Designed for future scraping integration (bs4).
+    Generate litigation risk from Google News RSS (self-contained).
+    All news fetching, risk analysis, and litigation inference is inline.
     """
 
     TOPIC_INPUT = "acis.metrics"
-    TOPIC_OUTPUT = "acis.external"
+    TOPIC_OUTPUT = "acis.metrics"
+    GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 
     def __init__(self, kafka_client: Any):
         super().__init__(
             agent_name="ExternalScrapingAgent",
-            agent_version="1.0.0",
+            agent_version="3.0.0",
             group_id="litigation-agent-group",
             subscribed_topics=[self.TOPIC_INPUT],
             capabilities=[
                 "litigation_risk_detection",
                 "legal_signal_extraction",
-                "reputation_risk_detection",
-                "news_signal_extraction"
+                "google_news_integration",
+                "news_risk_analysis",
             ],
             kafka_client=kafka_client,
             agent_type="ExternalScrapingAgent",
         )
         self._cache = {}
+        self._session = requests.Session()
+        self._session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+
+        logger.info("[ExternalScrapingAgent] Initialized with Google News RSS integration")
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -65,195 +108,315 @@ class ExternalScrapingAgent(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
-        if event.event_type == "customer.metrics.updated":
+        if event.event_type in ("customer.metrics.updated", "customer.profile.updated"):
             self.handle_event(event)
 
-    def _fetch_litigation_signal(self, company_name: str) -> Tuple[float, int]:
+    # ─────────────────────────────────────────────────────────────────────────
+    # GOOGLE NEWS RSS FUNCTIONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _fetch_news(self, company_name: str) -> List[Dict[str, str]]:
         """
-        Fetch litigation signal for a company.
-
-        PHASE 1: Mock implementation with random data.
-        FUTURE: Replace with real scraping using requests + BeautifulSoup (bs4).
-
-        Target sources (not implemented yet):
-        - eCourts India
-        - Indian Kanoon
+        Fetch news articles from Google News RSS.
 
         Args:
-            company_name: Normalized company name
+            company_name: Company name to search
 
         Returns:
-            Tuple of (litigation_risk, case_count)
+            List of article dicts with title and pubDate (max 15, last 3 days only)
         """
         try:
-            case_count = random.randint(0, 5)
+            search_query = f'"{company_name}" lawsuit OR sued OR fraud OR investigation OR penalty OR default'
+            encoded_query = quote_plus(search_query)
+            url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
 
-            severity_bonus = 0.0
+            logger.info(f"[ExternalScrapingAgent] Fetching Google News for: {company_name}")
 
-            if case_count >= 3:
-                severity_bonus += 0.2
+            response = self._session.get(url, timeout=10)
 
-            if case_count >= 5:
-                severity_bonus += 0.2
+            if response.status_code != 200:
+                logger.warning(f"[ExternalScrapingAgent] Google News returned {response.status_code}")
+                return []
 
-            litigation_risk = case_count * 0.12 + severity_bonus
+            root = ET.fromstring(response.content)
+            articles = []
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
 
-            litigation_risk = max(0.0, min(1.0, litigation_risk))
+            for item in root.findall(".//item")[:15]:
+                title_elem = item.find("title")
+                pub_date_elem = item.find("pubDate")
 
-            return litigation_risk, case_count
+                title = title_elem.text if title_elem is not None else ""
+                pub_date_str = pub_date_elem.text if pub_date_elem is not None else ""
 
+                if not title:
+                    continue
+
+                # Filter by date (last 3 days only)
+                if pub_date_str:
+                    try:
+                        pub_date = parsedate_to_datetime(pub_date_str)
+                        if pub_date < cutoff_date:
+                            continue
+                    except (ValueError, TypeError):
+                        pass  # Include articles with unparseable dates
+
+                articles.append({
+                    "title": title.strip(),
+                    "pubDate": pub_date_str.strip() if pub_date_str else "",
+                })
+
+            if not articles:
+                logger.info(f"[ExternalScrapingAgent] No recent news articles found for {company_name}")
+            else:
+                logger.info(f"[ExternalScrapingAgent] Found {len(articles)} news articles for {company_name}")
+            
+            return articles
+
+        except ET.ParseError as e:
+            logger.error(f"[ExternalScrapingAgent] XML parse error: {e}")
+            return []
+        except requests.RequestException as e:
+            logger.error(f"[ExternalScrapingAgent] Google News fetch error: {e}")
+            return []
         except Exception as e:
-            logger.error(f"[ExternalScrapingAgent] Litigation fetch failed for {company_name}: {e}")
-            return 0.0, 0
+            logger.error(f"[ExternalScrapingAgent] Unexpected error fetching news: {e}")
+            return []
 
-    def _fetch_reputation_signal(self, company_name: str) -> float:
+    def _classify_case(self, text: str) -> str:
         """
-        Fetch reputation signal for a company.
-
-        PHASE 1: Mock implementation with random data.
-        FUTURE: Replace with real scraping using requests + BeautifulSoup (bs4).
-
-        Target sources (not implemented yet):
-        - Review websites
-        - Consumer complaint forums
+        Classify case/article type based on keywords.
 
         Args:
-            company_name: Normalized company name
+            text: Headline or case title
 
         Returns:
-            reputation_risk score (0.0 to 1.0)
+            Case type: fraud, insolvency, regulatory, lawsuit, financial_default, general
         """
-        try:
-            reputation_keywords = ["fraud", "scam", "default"]
+        text_lower = text.lower()
 
-            risk = random.uniform(0.0, 0.5)
+        for case_type, keywords in CASE_TYPE_KEYWORDS.items():
+            for keyword in keywords:
+                if keyword in text_lower:
+                    return case_type
 
-            return risk
+        return "general"
 
-        except Exception as e:
-            logger.error(f"[ExternalScrapingAgent] Reputation fetch failed for {company_name}: {e}")
-            return 0.0
-
-    def _fetch_news_signal(self, company_name: str) -> float:
+    def _detect_direction(self, text: str, company_name: str) -> str:
         """
-        Fetch news signal for a company.
+        Detect litigation direction from headline.
 
-        PHASE 1: Mock implementation with random data.
-        FUTURE: Replace with real scraping using requests + BeautifulSoup (bs4).
-
-        Target sources (not implemented yet):
-        - News websites
-        - Financial news aggregators
+        Patterns detected:
+        - "X sues Y" → check if company is X (plaintiff) or Y (defendant)
+        - "X sued by Y" → check positions
 
         Args:
-            company_name: Normalized company name
+            text: Headline text
+            company_name: Company name to check
 
         Returns:
-            news_risk score (0.0 to 1.0)
+            "filed_by_company", "filed_against_company", or "unknown"
         """
-        try:
-            news_risk = random.uniform(0.0, 0.6)
+        text_lower = text.lower()
+        company_lower = company_name.lower()
 
-            return news_risk
+        # Build match patterns: full name + individual significant words
+        company_patterns = [company_lower]
+        company_words = [w for w in company_lower.split() if len(w) > 2]
+        company_patterns.extend(company_words)
 
-        except Exception as e:
-            logger.error(f"[ExternalScrapingAgent] News fetch failed for {company_name}: {e}")
-            return 0.0
+        def matches_company(segment: str) -> bool:
+            """Check if segment contains company name or significant words."""
+            segment = segment.lower()
+            for pattern in company_patterns:
+                # Match as word boundary or partial match for longer patterns
+                if len(pattern) >= 4:
+                    if pattern in segment:
+                        return True
+                else:
+                    # For short patterns, require word boundary
+                    if re.search(rf'\b{re.escape(pattern)}\b', segment):
+                        return True
+            return False
+
+        # Pattern: "X sues Y" or "X suing Y"
+        sues_pattern = r"(\b\w+(?:\s+\w+){0,5})\s+(?:sues|suing|files\s+(?:suit|lawsuit)\s+against)\s+(\b\w+(?:\s+\w+){0,5})"
+        match = re.search(sues_pattern, text_lower)
+        if match:
+            plaintiff = match.group(1)
+            defendant = match.group(2)
+            if matches_company(plaintiff):
+                return "filed_by_company"
+            if matches_company(defendant):
+                return "filed_against_company"
+
+        # Pattern: "X sued by Y"
+        sued_by_pattern = r"(\b\w+(?:\s+\w+){0,5})\s+(?:sued\s+by|facing\s+(?:lawsuit|suit)\s+from)\s+(\b\w+(?:\s+\w+){0,5})"
+        match = re.search(sued_by_pattern, text_lower)
+        if match:
+            defendant = match.group(1)
+            plaintiff = match.group(2)
+            if matches_company(defendant):
+                return "filed_against_company"
+            if matches_company(plaintiff):
+                return "filed_by_company"
+
+        # Pattern: "A vs B"
+        vs_pattern = r"(\b\w+(?:\s+\w+){0,5})\s+(?:vs\.?|v\.|versus)\s+(\b\w+(?:\s+\w+){0,5})"
+        match = re.search(vs_pattern, text_lower)
+        if match:
+            plaintiff_side = match.group(1)
+            defendant_side = match.group(2)
+            if matches_company(plaintiff_side):
+                return "filed_by_company"
+            if matches_company(defendant_side):
+                return "filed_against_company"
+
+        return "unknown"
+
+    def _analyze_news(self, articles: List[Dict[str, str]], company_name: str) -> Dict[str, Any]:
+        """
+        Analyze news articles for litigation risk.
+
+        For each article:
+        - Detect risk keywords with weights
+        - Classify case type
+        - Detect litigation direction
+
+        Args:
+            articles: List of article dicts with title, pubDate
+            company_name: Company name for direction detection
+
+        Returns:
+            Dict with risk_score, severity, case_count, cases, case_types
+        """
+        if not articles:
+            logger.info(f"[ExternalScrapingAgent] No articles to analyze for {company_name}")
+            return {
+                "risk_score": 0.0,
+                "severity": "low",
+                "case_count": 0,
+                "cases": [],
+                "case_types": [],
+                "litigation_flag": False,
+            }
+
+        cases = []
+        case_types = set()
+        total_weight = 0.0
+        match_count = 0
+
+        for article in articles:
+            title = article.get("title", "")
+            title_lower = title.lower()
+
+            article_weight = 0.0
+            matched_keywords = []
+
+            for keyword, weight in NEWS_RISK_KEYWORDS.items():
+                if keyword in title_lower:
+                    article_weight = max(article_weight, weight)
+                    matched_keywords.append(keyword)
+
+            if matched_keywords:
+                case_type = self._classify_case(title)
+                direction = self._detect_direction(title, company_name)
+
+                case_types.add(case_type)
+                total_weight += article_weight
+                match_count += 1
+
+                cases.append({
+                    "headline": title[:200],
+                    "type": case_type,
+                    "direction": direction,
+                })
+
+        # Compute risk score based on total articles
+        risk_score = min(1.0, (total_weight / max(1, len(articles))) * 2)
+
+        # Determine severity
+        if risk_score >= 0.5:
+            severity = "high"
+        elif risk_score >= 0.25:
+            severity = "medium"
+        else:
+            severity = "low"
+
+        return {
+            "risk_score": round(risk_score, 4),
+            "severity": severity,
+            "case_count": match_count,
+            "cases": cases[:10],
+            "case_types": list(case_types),
+            "litigation_flag": match_count > 0,
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # EVENT HANDLER
+    # ─────────────────────────────────────────────────────────────────────────
 
     def handle_event(self, event: Event) -> None:
-        """Handle customer.metrics.updated event and generate multi-signal risk."""
+        """Handle customer events and generate litigation risk."""
         logger.info(f"Received event: {event.event_type} for entity {event.entity_id}")
 
-        # Step 1: Extract data
         data = event.payload or {}
         customer_id = data.get("customer_id")
 
         if not customer_id:
-            logger.warning("Missing customer_id in metrics event")
+            logger.warning("Missing customer_id in event")
             return
 
         company_name = data.get("company_name") or customer_id
-        company_name = company_name.strip().lower()[:100]
+        company_name = company_name.strip()[:100]
 
-        # Step 2: Check cache
-        cache_key = company_name
+        # Check cache (TTL = 24h)
+        cache_key = company_name.lower()
         cache_entry = self._cache.get(cache_key)
 
         if cache_entry:
             age = (datetime.utcnow() - cache_entry["timestamp"]).total_seconds()
             if age < 86400:
-                litigation_risk = cache_entry["litigation_risk"]
-                news_risk = cache_entry["news_risk"]
-                reputation_risk = cache_entry["reputation_risk"]
-                external_scraped_risk = cache_entry["combined"]
-                case_count = cache_entry["case_count"]
+                news_data = cache_entry["news_data"]
                 logger.info(f"[ExternalScrapingAgent] Cache hit for {customer_id}")
             else:
-                # Rate limiting - max 1 request per second
                 time.sleep(1)
-
-                litigation_risk, case_count = self._fetch_litigation_signal(company_name)
-                reputation_risk = self._fetch_reputation_signal(company_name)
-                news_risk = self._fetch_news_signal(company_name)
-
-                external_scraped_risk = (
-                    0.5 * litigation_risk +
-                    0.3 * news_risk +
-                    0.2 * reputation_risk
-                )
-                external_scraped_risk = max(0.0, min(1.0, external_scraped_risk))
-
+                articles = self._fetch_news(company_name)
+                news_data = self._analyze_news(articles, company_name)
                 self._cache[cache_key] = {
-                    "litigation_risk": litigation_risk,
-                    "news_risk": news_risk,
-                    "reputation_risk": reputation_risk,
-                    "combined": external_scraped_risk,
-                    "case_count": case_count,
+                    "news_data": news_data,
                     "timestamp": datetime.utcnow()
                 }
                 logger.info(f"[ExternalScrapingAgent] Cache expired, fetched new data for {customer_id}")
         else:
-            # Rate limiting - max 1 request per second
             time.sleep(1)
-
-            litigation_risk, case_count = self._fetch_litigation_signal(company_name)
-            reputation_risk = self._fetch_reputation_signal(company_name)
-            news_risk = self._fetch_news_signal(company_name)
-
-            external_scraped_risk = (
-                0.5 * litigation_risk +
-                0.3 * news_risk +
-                0.2 * reputation_risk
-            )
-            external_scraped_risk = max(0.0, min(1.0, external_scraped_risk))
-
+            articles = self._fetch_news(company_name)
+            news_data = self._analyze_news(articles, company_name)
             self._cache[cache_key] = {
-                "litigation_risk": litigation_risk,
-                "news_risk": news_risk,
-                "reputation_risk": reputation_risk,
-                "combined": external_scraped_risk,
-                "case_count": case_count,
+                "news_data": news_data,
                 "timestamp": datetime.utcnow()
             }
             logger.info(f"[ExternalScrapingAgent] Cache miss, fetched new data for {customer_id}")
 
-        # Step 3: Create payload
+        # Build payload
         payload = {
             "customer_id": customer_id,
+            "company_name": company_name,
 
-            "litigation_risk": round(litigation_risk, 4),
-            "news_risk": round(news_risk, 4),
-            "reputation_risk": round(reputation_risk, 4),
+            "litigation_flag": news_data["litigation_flag"],
+            "litigation_risk": news_data["risk_score"],
+            "severity": news_data["severity"],
 
-            "external_scraped_risk": round(external_scraped_risk, 4),
+            "case_count": news_data["case_count"],
+            "cases": news_data["cases"],
+            "case_types": news_data["case_types"],
 
-            "case_count": case_count,
-            "source": "scraping_multi_signal",
-            "confidence": 0.6,
+            "source": "google_news",
+            "confidence": 0.7,
             "generated_at": datetime.utcnow().isoformat()
         }
 
-        # Step 4: Publish event
+        # Publish event
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
             event_type="LitigationRiskUpdated",
@@ -264,6 +427,6 @@ class ExternalScrapingAgent(BaseAgent):
 
         logger.info(
             f"[ExternalScrapingAgent] company={company_name} "
-            f"litigation={litigation_risk:.4f} news={news_risk:.4f} "
-            f"reputation={reputation_risk:.4f} combined={external_scraped_risk:.4f}"
+            f"litigation_risk={news_data['risk_score']:.4f} "
+            f"cases={news_data['case_count']} severity={news_data['severity']}"
         )
