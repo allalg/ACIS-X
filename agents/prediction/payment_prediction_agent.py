@@ -88,7 +88,7 @@ class PaymentPredictionAgent(BaseAgent):
         current_outstanding = data.get("total_outstanding", 0)
         credit_rating = data.get("rating", "B")
         avg_delay = data.get("avg_delay")
-        on_time_ratio = data.get("on_time_ratio", 0.5)
+        on_time_ratio = data.get("on_time_ratio", 0.0)
 
         # Check external data availability
         if customer_id not in self.external_cache:

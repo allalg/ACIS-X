@@ -167,7 +167,7 @@ class CollectionsAgent(BaseAgent):
 
             total_outstanding = float(customer_metrics.get("total_outstanding", 0.0))
             avg_delay = float(customer_metrics.get("avg_delay", 0.0))
-            on_time_ratio = float(customer_metrics.get("on_time_ratio", 0.5))
+            on_time_ratio = float(customer_metrics.get("on_time_ratio", 0.0))
             overdue_count = int(customer_metrics.get("overdue_count", 0))
             credit_limit = float(customer_metrics.get("credit_limit", 100000.0))
 
@@ -199,16 +199,30 @@ class CollectionsAgent(BaseAgent):
             # Severity = blend of: risk + exposure + delay + behavior patterns
             # Context factors influence escalation decision, not risk calculation
 
+            # BUG FIX #4: Initialize severity_score from weighted blend before applying trends
+            # IMPROVEMENT 1: Exposure relative to customer credit limit (not fixed 100k)
+            exposure_factor = min(1.0, total_outstanding / max(credit_limit, 1.0)) if total_outstanding > 0 else 0.0
+            delay_factor = min(1.0, avg_delay / 60.0)  # Normalize by 60 days
+            behavior_penalty = 1.0 - on_time_ratio
+
+            # Initialize severity_score from weighted blend
+            severity_score = (
+                (0.6 * final_risk) +
+                (0.15 * exposure_factor) +
+                (0.15 * delay_factor) +
+                (0.1 * behavior_penalty)
+            )
+            severity_score = max(0.0, min(1.0, severity_score))
+
             # IMPROVEMENT 2: Add risk trend signal for predictive escalation
             risk_trend = customer_metrics.get("risk_trend", "stable")
+            reason_for_trend = None
             if risk_trend == "deteriorating_fast":
                 severity_score += 0.1
                 reason_for_trend = "Rapid risk deterioration"
             elif risk_trend == "improving":
                 severity_score -= 0.05
                 reason_for_trend = "Improving payment behavior"
-            else:
-                reason_for_trend = None
 
             # Clamp after trend adjustment
             severity_score = max(0.0, min(1.0, severity_score))
@@ -424,7 +438,7 @@ class CollectionsAgent(BaseAgent):
 
             total_outstanding = float(customer_metrics.get("total_outstanding", 0.0))
             avg_delay = float(customer_metrics.get("avg_delay", 0.0))
-            on_time_ratio = float(customer_metrics.get("on_time_ratio", 0.5))
+            on_time_ratio = float(customer_metrics.get("on_time_ratio", 0.0))
             credit_limit = float(customer_metrics.get("credit_limit", 100000.0))
 
             logger.debug(
@@ -440,6 +454,7 @@ class CollectionsAgent(BaseAgent):
             behavior_penalty = 1.0 - on_time_ratio
 
             # IMPROVEMENT 2✅: Severity weighted blend (not additive)
+            # Initialize severity_score first
             severity_score = (
                 (0.6 * customer_risk_score) +
                 (0.15 * exposure_factor) +
@@ -448,16 +463,15 @@ class CollectionsAgent(BaseAgent):
             )
             severity_score = max(0.0, min(1.0, severity_score))
 
-            # IMPROVEMENT 2: Extract risk trend (as in invoice-level)
+            # IMPROVEMENT 2: Extract risk trend (as in invoice-level) and apply
             risk_trend = customer_metrics.get("risk_trend", "stable")
+            reason_for_trend = None
             if risk_trend == "deteriorating_fast":
                 severity_score += 0.1
                 reason_for_trend = "Rapid risk deterioration"
             elif risk_trend == "improving":
                 severity_score -= 0.05
                 reason_for_trend = "Improving payment behavior"
-            else:
-                reason_for_trend = None
 
             # Clamp after trend adjustment
             severity_score = max(0.0, min(1.0, severity_score))
@@ -592,7 +606,7 @@ class CollectionsAgent(BaseAgent):
         return {
             "total_outstanding": 0.0,
             "avg_delay": 0.0,
-            "on_time_ratio": 0.5,
+            "on_time_ratio": 0.0,
             "overdue_count": 0,
             "credit_limit": 100000.0,
         }

@@ -35,6 +35,7 @@ class RiskScoringAgent(BaseAgent):
     TOPIC_PREDICTIONS = "acis.predictions"
     TOPIC_RISK = "acis.risk"
     TOPIC_CUSTOMERS = "acis.customers"  # Subscribe to customer profile context
+    TOPIC_METRICS = "acis.metrics"  # CRITICAL FIX #2: Subscribe to payment behavior metrics
 
     def __init__(
         self,
@@ -44,9 +45,9 @@ class RiskScoringAgent(BaseAgent):
     ):
         super().__init__(
             agent_name="RiskScoringAgent",
-            agent_version="2.1.0",  # Bumped: CRITICAL - Added customer context storage + external risk fusion
+            agent_version="2.2.0",  # Bumped: CRITICAL - Added acis.metrics subscription for payment behavior
             group_id="risk-scoring-group",
-            subscribed_topics=[self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS],
+            subscribed_topics=[self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS, self.TOPIC_METRICS],
             capabilities=[
                 "risk_scoring",
                 "risk_classification",
@@ -58,11 +59,17 @@ class RiskScoringAgent(BaseAgent):
         self.query_agent = query_agent
         self.memory_agent = memory_agent
 
-        # CRITICAL FIX: Store customer-level aggregated/external risk context
+        # CRITICAL FIX: Store customer-level aggregated/external risk context with TTL
+        # Structure: customer_id → {"data": {...}, "updated_at": timestamp}
         # Updated by _handle_customer_risk_profile() from acis.customers topic
         # Used by _refine_risk_with_context() to influence final invoice risk
-        # Structure: customer_id → {aggregated_risk, financial_risk, litigation_risk, severity}
         self._customer_risk_context: dict[str, dict[str, Any]] = {}
+
+        # TTL and memory management settings
+        self.CONTEXT_TTL_SECONDS = 86400  # 24 hours
+        self.MAX_CONTEXT_CUSTOMERS = 10000
+        self._last_cleanup_time = time.time()
+        self._cleanup_interval_seconds = 300  # Attempt cleanup every 5 minutes
 
     def set_query_agent(self, query_agent: Any) -> None:
         """Set QueryAgent reference for customer context lookup."""
@@ -76,7 +83,7 @@ class RiskScoringAgent(BaseAgent):
 
     def _handle_customer_risk_profile(self, event: Event) -> None:
         """
-        CRITICAL FIX: Store customer-level aggregated/external risk context.
+        CRITICAL FIX: Store customer-level aggregated/external risk context with TTL.
 
         This context is then used by _refine_risk_with_context() to influence final invoice-level risk.
 
@@ -85,7 +92,7 @@ class RiskScoringAgent(BaseAgent):
         2. ExternalDataAgent: external_risk, market signals
         3. Risk trends: deteriorating, stable, improving
 
-        Does NOT emit events - only updates internal context.
+        Does NOT emit events - only updates internal context with timestamp for TTL tracking.
         """
         data = event.payload or {}
         customer_id = data.get("customer_id")
@@ -94,7 +101,7 @@ class RiskScoringAgent(BaseAgent):
             return
 
         # Extract and store all available customer-level risk signals
-        context = {
+        context_data = {
             # Core aggregated/external risk
             "aggregated_risk": float(data.get("aggregated_risk", data.get("risk_score", 0.0))),
             "financial_risk": float(data.get("financial_risk", 0.0)),
@@ -104,32 +111,189 @@ class RiskScoringAgent(BaseAgent):
             # Risk characterization
             "severity": data.get("severity"),
             "trend": data.get("trend", "stable"),
-
-            # Timestamp for freshness tracking
-            "updated_at": time.time(),
         }
 
-        # Store in memory - will be used during invoice risk scoring
-        self._customer_risk_context[customer_id] = context
+        # TTL-BASED CLEANUP: Store with timestamp for TTL tracking and cleanup
+        self._customer_risk_context[customer_id] = {
+            "data": context_data,
+            "updated_at": time.time()
+        }
 
         logger.info(
-            f"[RiskScoringAgent] Updated customer context: customer={customer_id}, "
-            f"aggregated={context['aggregated_risk']:.4f}, financial={context['financial_risk']:.4f}, "
-            f"litigation={context['litigation_risk']:.4f}, external={context['external_risk']:.4f}, "
-            f"severity={context['severity']}, trend={context['trend']}"
+            f"[RiskScoringAgent] Stored customer context: customer={customer_id}, "
+            f"aggregated={context_data['aggregated_risk']:.4f}, financial={context_data['financial_risk']:.4f}, "
+            f"litigation={context_data['litigation_risk']:.4f}, external={context_data['external_risk']:.4f}, "
+            f"severity={context_data['severity']}, trend={context_data['trend']}"
         )
 
+        # Periodic cleanup: Run on time interval (every 5 minutes) instead of event count
+        # This is more predictable and doesn't depend on traffic patterns
+        current_time = time.time()
+        if current_time - self._last_cleanup_time > self._cleanup_interval_seconds:
+            self._cleanup_customer_context()
+            self._last_cleanup_time = current_time
+
+    def _cleanup_customer_context(self) -> None:
+        """
+        TTL-based cleanup: Remove stale customer context entries.
+
+        - Removes entries not updated in >24 hours
+        - Enforces MAX_CONTEXT_CUSTOMERS limit (removes oldest entries if exceeded)
+        - Runs periodically (not per-event) to minimize overhead
+        """
+        current_time = time.time()
+
+        # STEP 1: Remove expired entries (TTL > 24 hours)
+        expired_customers = []
+        for customer_id, entry in self._customer_risk_context.items():
+            age_seconds = current_time - entry.get("updated_at", current_time)
+            if age_seconds > self.CONTEXT_TTL_SECONDS:
+                expired_customers.append(customer_id)
+
+        for customer_id in expired_customers:
+            del self._customer_risk_context[customer_id]
+            logger.debug(f"[RiskScoringAgent] Cleaned up expired context: customer={customer_id}")
+
+        if expired_customers:
+            logger.info(f"[RiskScoringAgent] TTL cleanup: Removed {len(expired_customers)} expired entries")
+
+        # STEP 2: Enforce size limit (remove oldest entries if > MAX_CUSTOMERS)
+        if len(self._customer_risk_context) > self.MAX_CONTEXT_CUSTOMERS:
+            # Sort by updated_at timestamp, remove oldest (least recently updated)
+            sorted_entries = sorted(
+                self._customer_risk_context.items(),
+                key=lambda x: x[1].get("updated_at", 0)
+            )
+
+            num_to_remove = len(self._customer_risk_context) - self.MAX_CONTEXT_CUSTOMERS
+            for customer_id, _ in sorted_entries[:num_to_remove]:
+                del self._customer_risk_context[customer_id]
+
+            logger.warning(
+                f"[RiskScoringAgent] Memory limit cleanup: Removed {num_to_remove} oldest entries "
+                f"(total now: {len(self._customer_risk_context)})"
+            )
+
+    def _handle_customer_metrics(self, event: Event) -> None:
+        """
+        Handle customer.metrics.updated event from CustomerStateAgent.
+
+        CRITICAL FIX: Store payment behavior metrics as part of customer risk context.
+
+        Metrics include:
+        - avg_delay: Average payment delay in days
+        - on_time_ratio: Fraction of on-time payments
+        - total_outstanding: Total unpaid invoices
+        - last_payment_date: Most recent payment date
+
+        These signals influence final invoice-level risk scoring.
+        """
+        data = event.payload or {}
+        customer_id = data.get("customer_id")
+
+        if not customer_id:
+            return
+
+        # Extract payment behavior metrics
+        metrics_data = {
+            "avg_delay": float(data.get("avg_delay", 0.0)),
+            "on_time_ratio": float(data.get("on_time_ratio", 0.0)),
+            "total_outstanding": float(data.get("total_outstanding", 0.0)),
+            "last_payment_date": data.get("last_payment_date"),
+        }
+
+        # Store with timestamp for TTL tracking
+        if customer_id not in self._customer_risk_context:
+            self._customer_risk_context[customer_id] = {"data": {}, "updated_at": time.time()}
+
+        # Update metrics within existing context
+        self._customer_risk_context[customer_id]["data"].update(metrics_data)
+        self._customer_risk_context[customer_id]["updated_at"] = time.time()
+
+        logger.debug(
+            f"[RiskScoringAgent] Updated customer metrics: customer={customer_id}, "
+            f"avg_delay={metrics_data['avg_delay']:.2f}, on_time_ratio={metrics_data['on_time_ratio']:.2f}"
+        )
+
+    def _get_customer_context(self, customer_id: str) -> dict[str, Any]:
+        """
+        Lazy-loaded customer context with fallback.
+
+        STEP 1: Try cached context (with TTL check)
+        STEP 2: Lazy fallback to QueryAgent if cache miss or stale
+        STEP 3: Return context data or empty dict
+
+        This ensures:
+        - Fast path for recent data (cache hit)
+        - Graceful degradation if context is stale or missing
+        - Always returns valid dict (never None)
+        """
+        # STEP 1: Try cached context
+        entry = self._customer_risk_context.get(customer_id)
+        if entry:
+            context_data = entry.get("data", {})
+            age_seconds = time.time() - entry.get("updated_at", 0)
+
+            if age_seconds < self.CONTEXT_TTL_SECONDS:
+                logger.debug(
+                    f"[RiskScoringAgent] Context cache hit: customer={customer_id}, "
+                    f"age={age_seconds:.0f}s"
+                )
+                return context_data
+            else:
+                logger.debug(
+                    f"[RiskScoringAgent] Context cache stale: customer={customer_id}, "
+                    f"age={age_seconds:.0f}s > TTL={self.CONTEXT_TTL_SECONDS}s"
+                )
+
+        # STEP 2: Lazy fallback to QueryAgent for enriched data
+        # IMPROVEMENT: Optionally enrich context with available metrics
+        if self.query_agent:
+            try:
+                metrics = self.query_agent.get_customer_metrics(customer_id)
+                if metrics:
+                    logger.debug(
+                        f"[RiskScoringAgent] Lazy-loaded enriched context from QueryAgent: customer={customer_id}"
+                    )
+                    # Extract what we can infer from metrics
+                    # Infer trend from payment behavior
+                    on_time_ratio = float(metrics.get("on_time_ratio", 0.0))
+                    inferred_trend = "improving" if on_time_ratio > 0.7 else ("deteriorating" if on_time_ratio < 0.3 else "stable")
+
+                    return {
+                        "aggregated_risk": 0.0,  # Not available from metrics (requires AggregatorAgent)
+                        "financial_risk": 0.0,   # Not available from metrics (requires ExternalDataAgent)
+                        "litigation_risk": 0.0,  # Not available from metrics (requires LitigationAgent)
+                        "external_risk": 0.0,    # Not available from metrics (requires ExternalDataAgent)
+                        "severity": None,
+                        "trend": inferred_trend,  # Inferred from on_time_ratio
+                    }
+            except Exception as e:
+                logger.warning(f"[RiskScoringAgent] QueryAgent enrichment failed: {e}")
+
+        # STEP 3: Return safe defaults (won't influence risk, but won't crash)
+        logger.debug(f"[RiskScoringAgent] No context available: customer={customer_id}, using defaults")
+        return {
+            "aggregated_risk": 0.0,
+            "financial_risk": 0.0,
+            "litigation_risk": 0.0,
+            "external_risk": 0.0,
+            "severity": None,
+            "trend": "stable",
+        }
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
-        return [self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS]  # FIX 1: Also subscribe to customer profiles
+        return [self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS, self.TOPIC_METRICS]  # CRITICAL FIX: Added TOPIC_METRICS
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
         if event.event_type == "PaymentRiskPredicted":
             self.handle_event(event)
-        elif event.event_type == "risk.profile.updated":  # FIX 1: Handle customer-level risk context
+        elif event.event_type == "customer.profile.updated":  # BUG FIX #5: Match emitted event name from CustomerProfileAgent
             self._handle_customer_risk_profile(event)
+        elif event.event_type == "customer.metrics.updated":  # CRITICAL FIX: Handle payment metrics
+            self._handle_customer_metrics(event)
 
     def handle_event(self, event: Event) -> None:
         """Handle PaymentRiskPredicted event and refine risk score."""
@@ -308,9 +472,8 @@ class RiskScoringAgent(BaseAgent):
             # Formula: (target_ratio - actual_ratio) * sensitivity
             # Penalizes deviation from perfect on-time payment
             # on_time_ratio=0.9: (0.7 - 0.9) × 0.3 = -0.06 (reward!)
-            # on_time_ratio=0.5: (0.7 - 0.5) × 0.3 = +0.06 (penalty)
-            # on_time_ratio=0.3: (0.7 - 0.3) × 0.3 = +0.12 (high penalty)
-            on_time_ratio = customer.get("on_time_ratio", 0.5)
+            # on_time_ratio=0.0: (0.7 - 0.0) × 0.3 = +0.21 (high penalty for unknown/new customers)
+            on_time_ratio = customer.get("on_time_ratio", 0.0)
             payment_adjustment = max(-0.1, min(0.2, (0.7 - on_time_ratio) * 0.3))  # Bounded [-0.1, 0.2]
             reasons.append(f"payment behavior: on_time_ratio={on_time_ratio:.2f} → adjustment={payment_adjustment:+.3f}")
 
@@ -383,10 +546,11 @@ class RiskScoringAgent(BaseAgent):
                 # Note: confidence is multiplicative, not additive (handled separately)
             )
 
-            # CRITICAL FIX: Incorporate customer-level external risk context
-            # This is the key fix - use aggregated/financial/litigation risk from AggregatorAgent
+            # CRITICAL FIX: Incorporate customer-level external risk context with lazy loading
+            # Uses _get_customer_context() for safe retrieval with TTL checking and fallback
             external_risk_adjustment = 0
-            customer_context = self._customer_risk_context.get(customer_id)
+            customer_context = self._get_customer_context(customer_id)
+
             if customer_context:
                 # Blend external risk signals
                 aggregated_risk = customer_context.get("aggregated_risk", 0.0)
@@ -394,27 +558,31 @@ class RiskScoringAgent(BaseAgent):
                 litigation_risk = customer_context.get("litigation_risk", 0.0)
                 external_risk = customer_context.get("external_risk", 0.0)
 
-                # Weighted combination of external signals
-                # External factors have lower weight than behavioral (they're supplementary)
-                blended_external = (
-                    (0.40 * aggregated_risk) +          # Aggregated risk (40% of external signals)
-                    (0.30 * financial_risk) +           # Financial risk (30%)
-                    (0.20 * litigation_risk) +          # Litigation risk (20%)
-                    (0.10 * external_risk)              # Market/screener external risk (10%)
-                )
+                # Only apply boost if we have actual external signals (not all zeros)
+                if any([aggregated_risk, financial_risk, litigation_risk, external_risk]):
+                    # Weighted combination of external signals
+                    # External factors have lower weight than behavioral (they're supplementary)
+                    blended_external = (
+                        (0.40 * aggregated_risk) +          # Aggregated risk (40% of external signals)
+                        (0.30 * financial_risk) +           # Financial risk (30%)
+                        (0.20 * litigation_risk) +          # Litigation risk (20%)
+                        (0.10 * external_risk)              # Market/screener external risk (10%)
+                    )
 
-                # Apply as multiplicative boost to total_adjustment
-                # This way external risk amplifies behavioral signals, not overrides them
-                external_risk_adjustment = blended_external * 0.2  # Max 20% boost from external signals
-                total_adjustment += external_risk_adjustment
+                    # Apply as multiplicative boost to total_adjustment
+                    # This way external risk amplifies behavioral signals, not overrides them
+                    external_risk_adjustment = blended_external * 0.2  # Max 20% boost from external signals
+                    total_adjustment += external_risk_adjustment
 
-                reasons.append(
-                    f"external context: aggregated={aggregated_risk:.3f}, "
-                    f"financial={financial_risk:.3f}, litigation={litigation_risk:.3f}, "
-                    f"market={external_risk:.3f} → boost={external_risk_adjustment:+.3f}"
-                )
+                    reasons.append(
+                        f"external context: aggregated={aggregated_risk:.3f}, "
+                        f"financial={financial_risk:.3f}, litigation={litigation_risk:.3f}, "
+                        f"market={external_risk:.3f} → boost={external_risk_adjustment:+.3f}"
+                    )
+                else:
+                    reasons.append("external context: loaded but no signals available")
             else:
-                reasons.append("external context: not yet available (no customer profile received)")
+                reasons.append("external context: not yet available (lazy fallback used defaults)")
 
             # Apply confidence adjustment multiplicatively (not additive)
             # This way, low confidence increases by percentage, not flat amount

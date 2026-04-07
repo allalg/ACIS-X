@@ -113,6 +113,13 @@ ACIS_TOPIC_CONFIGS = {
         retention_ms=30 * 24 * 3600 * 1000,  # 30 days
         cleanup_policy="delete",
     ),
+    "acis.time": TopicConfig(
+        name="acis.time",
+        partitions=1,
+        replication_factor=1,
+        retention_ms=1 * 60 * 1000,  # 1 minute (time ticks are ephemeral)
+        cleanup_policy="delete",
+    ),
     "acis.agent.health": TopicConfig(
         name="acis.agent.health",
         partitions=2,

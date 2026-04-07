@@ -7,6 +7,7 @@ Starts the core runtime components:
 - SelfHealingAgent
 - RuntimeManager
 - PlacementEngine
+- TimeTickAgent (publishes time ticks every 5s for overdue detection)
 - ScenarioGeneratorAgent
 - PaymentPredictionAgent
 - RiskScoringAgent
@@ -35,6 +36,7 @@ from agents.scenario_generator.scenario_generator_agent import ScenarioGenerator
 from agents.storage.db_agent import DBAgent
 from agents.storage.memory_agent import MemoryAgent
 from agents.storage.query_agent import QueryAgent
+from agents.system.time_tick_agent import TimeTickAgent
 from monitoring.monitoring_agent import MonitoringAgent
 from registry.registry_service import RegistryService
 from runtime.kafka_client import KafkaClient, KafkaConfig
@@ -149,6 +151,7 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         SelfHealingAgent(kafka_client=_build_kafka_client()),
         RuntimeManager(kafka_client=_build_kafka_client()),
         PlacementEngine(kafka_client=_build_kafka_client()),
+        TimeTickAgent(kafka_client=_build_kafka_client()),  # Time infrastructure - required for overdue detection
         ScenarioGeneratorAgent(kafka_client=_build_kafka_client()),
         db_agent,
         memory_agent,

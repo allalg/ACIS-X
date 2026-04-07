@@ -214,6 +214,7 @@ class CustomerStateAgent(BaseAgent):
                     "total_outstanding": metrics["total_outstanding"],
                     "avg_delay": metrics["avg_delay"],
                     "on_time_ratio": metrics["on_time_ratio"],
+                    "last_payment_date": metrics.get("last_payment_date"),  # CRITICAL FIX #4
                     "total_paid_invoices": total_paid_invoices,
                     "total_on_time_count": total_on_time_count,
                     "sum_of_delays": sum_of_delays,
@@ -363,6 +364,7 @@ class CustomerStateAgent(BaseAgent):
 
                 cache["total_paid_invoices"] += 1
                 cache["sum_of_delays"] += delay_days
+                cache["last_payment_date"] = payment_date_str  # CRITICAL FIX #4: Track last payment date
                 if is_on_time:
                     cache["total_on_time_count"] += 1
 
@@ -566,6 +568,7 @@ class CustomerStateAgent(BaseAgent):
                 "total_outstanding": cache["total_outstanding"],
                 "avg_delay": cache["avg_delay"],
                 "on_time_ratio": cache["on_time_ratio"],
+                "last_payment_date": cache.get("last_payment_date"),  # CRITICAL FIX #4
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -582,6 +585,7 @@ class CustomerStateAgent(BaseAgent):
             "total_outstanding": payload["total_outstanding"],
             "avg_delay": payload["avg_delay"],
             "on_time_ratio": payload["on_time_ratio"],
+            "last_payment_date": payload.get("last_payment_date"),  # CRITICAL FIX #4
         }
         self._persist_metrics(customer_id, metrics_dict)
 
@@ -589,7 +593,8 @@ class CustomerStateAgent(BaseAgent):
             f"Published metrics for customer {customer_id}: "
             f"outstanding={payload['total_outstanding']:.2f}, "
             f"avg_delay={payload['avg_delay']:.2f}, "
-            f"on_time_ratio={payload['on_time_ratio']:.2f}"
+            f"on_time_ratio={payload['on_time_ratio']:.2f}, "
+            f"last_payment={payload.get('last_payment_date')}"
         )
 
     def _compute_customer_metrics(self, customer_id: str) -> Optional[Dict[str, float]]:
@@ -599,7 +604,7 @@ class CustomerStateAgent(BaseAgent):
         Used for cold start initialization only.
 
         Returns:
-            Dict with keys: total_outstanding, avg_delay, on_time_ratio
+            Dict with keys: total_outstanding, avg_delay, on_time_ratio, last_payment_date
             None if error occurs
         """
         try:
@@ -610,7 +615,8 @@ class CustomerStateAgent(BaseAgent):
                 return {
                     "total_outstanding": 0.0,
                     "avg_delay": 0.0,
-                    "on_time_ratio": 0.5,
+                    "on_time_ratio": 0.0,  # ISSUE 3 FIX: Changed from 0.5 to 0.0 (safer default)
+                    "last_payment_date": None,  # CRITICAL FIX #4
                 }
 
             invoice_ids = [
@@ -630,17 +636,25 @@ class CustomerStateAgent(BaseAgent):
             payments = self._get_payments_for_invoices(invoice_ids)
             avg_delay, on_time_ratio = self._compute_payment_metrics(invoices, payments)
 
+            # CRITICAL FIX #4: Calculate last_payment_date
+            last_payment_date = None
+            if payments:
+                latest_payment = max(payments, key=lambda x: x.get("payment_date", ""))
+                last_payment_date = latest_payment.get("payment_date")
+
             logger.debug(
                 f"Computed initial metrics for customer {customer_id}: "
                 f"{len(invoices)} invoices, "
                 f"avg_delay={avg_delay:.2f}, "
-                f"on_time_ratio={on_time_ratio:.2f}"
+                f"on_time_ratio={on_time_ratio:.2f}, "
+                f"last_payment={last_payment_date}"
             )
 
             return {
                 "total_outstanding": total_outstanding,
                 "avg_delay": avg_delay,
                 "on_time_ratio": on_time_ratio,
+                "last_payment_date": last_payment_date,  # CRITICAL FIX #4
             }
 
         except Exception as e:
@@ -703,7 +717,7 @@ class CustomerStateAgent(BaseAgent):
         paid_invoices = [inv for inv in invoices if inv.get("status") == "paid"]
 
         if not paid_invoices:
-            return 0.0, 0.5
+            return 0.0, 0.0  # ISSUE 3 FIX: Changed from 0.5 to 0.0 (safer default)
 
         delays = []
         on_time_count = 0
@@ -747,7 +761,7 @@ class CustomerStateAgent(BaseAgent):
         if paid_invoices:
             on_time_ratio = on_time_count / len(paid_invoices)
         else:
-            on_time_ratio = 0.5
+            on_time_ratio = 0.0  # ISSUE 3 FIX: Changed from 0.5 to 0.0 (safer default)
 
         return avg_delay, on_time_ratio
 
@@ -767,14 +781,15 @@ class CustomerStateAgent(BaseAgent):
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO customer_metrics
-                    (customer_id, total_outstanding, avg_delay, on_time_ratio, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    (customer_id, total_outstanding, avg_delay, on_time_ratio, last_payment_date, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """,
                     (
                         customer_id,
                         metrics["total_outstanding"],
                         metrics["avg_delay"],
                         metrics["on_time_ratio"],
+                        metrics.get("last_payment_date"),  # CRITICAL FIX #4
                         datetime.utcnow().isoformat(),
                     ),
                 )

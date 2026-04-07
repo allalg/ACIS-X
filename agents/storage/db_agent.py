@@ -496,6 +496,8 @@ class DBAgent(BaseAgent):
             logger.warning("customer.profile.updated event missing customer_id, skipping")
             return
 
+        # CRITICAL FIX #1: Map customer_name (from ScenarioGenerator) to name field
+        name = data.get("customer_name") or data.get("name")
         risk_score = data.get("risk_score", 0.0)
         credit_limit = data.get("credit_limit", 0.0)
         status = data.get("status", "active")
@@ -507,17 +509,18 @@ class DBAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    INSERT INTO customers (customer_id, risk_score, credit_limit, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO customers (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(customer_id) DO UPDATE SET
+                        name=excluded.name,
                         risk_score=excluded.risk_score,
                         credit_limit=excluded.credit_limit,
                         status=excluded.status,
                         updated_at=excluded.updated_at
-                """, (customer_id, risk_score, credit_limit, status, now, now))
+                """, (customer_id, name, risk_score, credit_limit, status, now, now))
 
                 conn.commit()
-                logger.info(f"[DBAgent] Updated customer profile: {customer_id} risk={risk_score} status={status} limit={credit_limit}")
+                logger.info(f"[DBAgent] Updated customer profile: {customer_id} name={name} risk={risk_score} status={status} limit={credit_limit}")
 
                 # Invalidate cache
                 if self._query_agent:

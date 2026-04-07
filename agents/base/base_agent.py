@@ -316,6 +316,8 @@ class BaseAgent(ABC):
             # Parse and validate event
             event = self._validate_event(message.value)
             if event is None:
+                # DIAGNOSTIC: Message was dropped due to validation failure
+                logger.warning(f"[{self.agent_name}] Dropping message from {topic}:{getattr(message, 'partition', '?')}:{getattr(message, 'offset', '?')} - validation failed")
                 return
 
             # Check idempotency
@@ -372,7 +374,18 @@ class BaseAgent(ABC):
             event = Event.model_validate(raw_data)
             return event
         except ValidationError as e:
-            logger.error(f"Event validation failed: {e}")
+            # DIAGNOSTIC: Log the raw data that failed validation
+            logger.error(f"❌ EVENT VALIDATION FAILED (Agent: {self.agent_name})")
+            logger.error(f"   Raw data: {raw_data}")
+            logger.error(f"   Validation errors: {e.errors()}")
+
+            # Log missing fields specifically
+            raw_keys = set(raw_data.keys()) if isinstance(raw_data, dict) else set()
+            required_fields = {'event_id', 'event_type', 'event_source', 'event_time', 'entity_id', 'payload'}
+            missing = required_fields - raw_keys
+            if missing:
+                logger.error(f"   Missing required fields: {missing}")
+
             return None
 
     # -------------------------------------------------------------------------
