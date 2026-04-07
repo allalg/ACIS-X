@@ -89,6 +89,8 @@ class RuntimeManager(BaseAgent):
         """Handle simulated runtime commands."""
         event_type = event.event_type
 
+        # FIX 9: Two phases of spawn/restart:
+        # Phase 1: Receive orchestration request → ask PlacementEngine for placement
         if event_type == SystemEventType.AGENT_SPAWN_REQUESTED.value:
             self._handle_spawn_requested(event)
         elif event_type == SystemEventType.AGENT_RESTART_REQUESTED.value:
@@ -98,65 +100,93 @@ class RuntimeManager(BaseAgent):
         elif event_type == SystemEventType.AGENT_SCALE_REQUESTED.value:
             self._handle_scale_requested(event)
 
+        # Phase 2: Receive placement decision → execute spawn/restart with that placement
+        elif event_type == SystemEventType.PLACEMENT_COMPLETED.value:  # FIX 9
+            self._handle_placement_completed(event)
+
     def _handle_spawn_requested(self, event: Event) -> None:
+        """
+        FIX 9: Phase 1 - Request placement from PlacementEngine.
+
+        Does NOT spawn directly. Instead:
+        1. Extract agent metadata from spawn request
+        2. Publish placement.requested event to PlacementEngine
+        3. Wait for placement.completed event
+        4. _handle_placement_completed() will then execute the spawn
+        """
         payload = event.payload
         agent_name = payload["agent_name"]
         agent_type = payload.get("agent_type")
         instance_id = payload.get("instance_id") or self._generate_instance_id(agent_name)
-        correlation_id = event.correlation_id
         replica_index = self._next_replica_index(agent_name)
-        replica_count = payload.get("replica_count")
+        replica_count = payload.get("replica_count", replica_index + 1)
         max_replicas = payload.get("max_replicas")
 
-        if replica_count is None:
-            replica_count = replica_index + 1
-
-        instance = SimulatedInstance(
-            agent_id=f"agent_{agent_name.lower()}_{instance_id}",
-            agent_name=agent_name,
-            agent_type=agent_type,
-            instance_id=instance_id,
-            host=self._assign_host(),
-            port=self._allocate_port(),
-            version="1.0.0",
-            group_id=f"{agent_name.lower()}-group",
-            status=AgentStatus.HEALTHY.value,
-            restart_count=0,
-            replica_index=replica_index,
-            replica_count=replica_count,
-            max_replicas=max_replicas,
+        logger.info(
+            f"[RuntimeManager] Phase 1: Received spawn request for {agent_name}, "
+            f"requesting placement from PlacementEngine"
         )
 
-        with self._instances_lock:
-            self._instances[instance.agent_id] = instance
+        # FIX 9: Request placement decision (don't decide host directly)
+        placement_request = {
+            "agent_name": agent_name,
+            "agent_type": agent_type or agent_name,
+            "instance_id": instance_id,
+            "preferred_hosts": payload.get("preferred_hosts"),
+            "excluded_hosts": payload.get("excluded_hosts"),
+            "replica_index": replica_index,
+            "replica_count": replica_count,
+            "max_replicas": max_replicas,
+            "correlation_id": event.correlation_id,
+            # Store original spawn request payload for Phase 2
+            "_original_spawn_request": payload,
+        }
 
-        self._publish_agent_spawned(instance, correlation_id)
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type=SystemEventType.PLACEMENT_REQUESTED.value,
+            entity_id=agent_name,
+            payload=placement_request,
+            correlation_id=event.correlation_id,
+        )
 
     def _handle_restart_requested(self, event: Event) -> None:
+        """
+        FIX 9: Phase 1 - Request placement for restart operation.
+
+        Similar to spawn: request placement decision from PlacementEngine
+        rather than assigning host directly.
+        """
         payload = event.payload
         agent_id = payload["agent_id"]
-        correlation_id = event.correlation_id
+        agent_name = payload.get("agent_name", agent_id.split("_")[1])
+        agent_type = payload.get("agent_type")
 
-        with self._instances_lock:
-            instance = self._instances.get(agent_id)
-            if instance is None:
-                instance = SimulatedInstance(
-                    agent_id=agent_id,
-                    agent_name=payload["agent_name"],
-                    agent_type=payload.get("agent_type"),
-                    instance_id=payload.get("instance_id", self._generate_instance_id(payload["agent_name"])),
-                    host=self._assign_host(),
-                    port=self._allocate_port(),
-                    version="1.0.0",
-                    group_id=f"{payload['agent_name'].lower()}-group",
-                    status=AgentStatus.HEALTHY.value,
-                )
-                self._instances[agent_id] = instance
+        logger.info(
+            f"[RuntimeManager] Phase 1: Received restart request for {agent_id}, "
+            f"requesting placement from PlacementEngine"
+        )
 
-            instance.restart_count += 1
-            instance.status = AgentStatus.HEALTHY.value
+        # FIX 9: Request placement decision for restart
+        placement_request = {
+            "agent_name": agent_name,
+            "agent_type": agent_type or agent_name,
+            "agent_id": agent_id,
+            "instance_id": payload.get("instance_id"),
+            "preferred_hosts": payload.get("preferred_hosts"),
+            "excluded_hosts": payload.get("excluded_hosts"),
+            "correlation_id": event.correlation_id,
+            "_operation": "restart",  # Mark this as restart for Phase 2
+            "_restart_payload": payload,
+        }
 
-        self._publish_restart_completed(instance, correlation_id)
+        self.publish_event(
+            topic=self.SYSTEM_TOPIC,
+            event_type=SystemEventType.PLACEMENT_REQUESTED.value,
+            entity_id=agent_name,
+            payload=placement_request,
+            correlation_id=event.correlation_id,
+        )
 
     def _handle_scale_requested(self, event: Event) -> None:
         payload = event.payload
@@ -210,6 +240,86 @@ class RuntimeManager(BaseAgent):
                 instance.status = AgentStatus.STOPPED.value
 
         self._publish_agent_stopped(instance, correlation_id)
+
+    def _handle_placement_completed(self, event: Event) -> None:
+        """
+        FIX 9: Phase 2 - Execute spawn/restart with placement decision.
+
+        Called after PlacementEngine publishes placement.completed.
+        Uses the placement decision (host, replica_index, group_id) to create/update the instance.
+        """
+        payload = event.payload
+        agent_name = payload.get("agent_name")
+        agent_type = payload.get("agent_type")
+        instance_id = payload.get("instance_id")
+        host = payload.get("host")
+        replica_index = payload.get("replica_index", 0)
+        replica_count = payload.get("replica_count", 1)
+        max_replicas = payload.get("max_replicas")
+        group_id = payload.get("group_id")
+        operation = payload.get("_operation", "spawn")  # spawn or restart
+        correlation_id = event.correlation_id
+
+        if not agent_name or not host:
+            logger.warning(f"[RuntimeManager] Invalid placement completed event: {payload}")
+            return
+
+        logger.info(
+            f"[RuntimeManager] Phase 2: Executing {operation} for {agent_name} "
+            f"on host {host} with replica_index={replica_index}"
+        )
+
+        if operation == "restart":
+            # Handle restart
+            agent_id = payload.get("agent_id")
+            with self._instances_lock:
+                instance = self._instances.get(agent_id)
+                if instance is None:
+                    instance = SimulatedInstance(
+                        agent_id=agent_id or f"agent_{agent_name.lower()}_{instance_id}",
+                        agent_name=agent_name,
+                        agent_type=agent_type,
+                        instance_id=instance_id or self._generate_instance_id(agent_name),
+                        host=host,
+                        port=self._allocate_port(),
+                        version="1.0.0",
+                        group_id=group_id or f"{agent_name.lower()}-group",
+                        status=AgentStatus.HEALTHY.value,
+                    )
+                    self._instances[agent_id] = instance
+                else:
+                    # Update existing instance with new placement
+                    instance.host = host
+                    instance.group_id = group_id or instance.group_id
+
+                instance.restart_count += 1
+                instance.status = AgentStatus.HEALTHY.value
+
+            self._publish_restart_completed(instance, correlation_id)
+
+        else:  # spawn
+            # Create instance for spawn
+            instance = SimulatedInstance(
+                agent_id=f"agent_{agent_name.lower()}_{instance_id}",
+                agent_name=agent_name,
+                agent_type=agent_type,
+                instance_id=instance_id or self._generate_instance_id(agent_name),
+                host=host,  # Use placement decision
+                port=self._allocate_port(),
+                version="1.0.0",
+                group_id=group_id or f"{agent_name.lower()}-group",  # Use placement decision
+                status=AgentStatus.HEALTHY.value,
+                restart_count=0,
+                replica_index=replica_index,
+                replica_count=replica_count,
+                max_replicas=max_replicas,
+            )
+
+            with self._instances_lock:
+                self._instances[instance.agent_id] = instance
+
+            # Publish agent.spawned with placement info
+            self._publish_agent_spawned(instance, correlation_id)
 
     def _ensure_replicas(
         self,

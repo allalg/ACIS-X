@@ -6,6 +6,12 @@ Generates litigation risk signals from Google News RSS:
 - Risk analysis (keyword + inference based)
 - Litigation inference (direction detection)
 
+Subscribes to:
+- acis.metrics (customer events)
+
+Produces:
+- acis.metrics (external.litigation.updated)
+
 Self-contained agent with NO external module dependencies.
 """
 
@@ -68,7 +74,7 @@ class ExternalScrapingAgent(BaseAgent):
     - acis.metrics (customer.metrics.updated, customer.profile.updated)
 
     Produces:
-    - acis.metrics (LitigationRiskUpdated)
+    - acis.metrics (external.litigation.updated)
 
     Responsibility:
     Generate litigation risk from Google News RSS (self-contained).
@@ -416,10 +422,10 @@ class ExternalScrapingAgent(BaseAgent):
             "generated_at": datetime.utcnow().isoformat()
         }
 
-        # Publish event
+        # Publish event (standardized naming)
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
-            event_type="LitigationRiskUpdated",
+            event_type="external.litigation.updated",
             entity_id=customer_id,
             payload=payload,
             correlation_id=event.correlation_id,

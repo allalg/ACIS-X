@@ -97,7 +97,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT customer_id, credit_limit, risk_score, last_updated
+                    SELECT customer_id, credit_limit, risk_score, updated_at
                     FROM customers
                     WHERE customer_id = ?
                 """, (customer_id,))
@@ -117,6 +117,132 @@ class QueryAgent(BaseAgent):
                 logger.error(f"Database error querying customer {customer_id}: {e}")
 
         return None
+
+    def get_customer_metrics(self, customer_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get ENRICHED customer data with computed metrics for risk scoring.
+
+        ISSUE 1 FIX: Tries MemoryAgent FIRST (real-time cache layer)
+        ISSUE 2 FIX: Establishes clear source of truth hierarchy:
+        - MemoryAgent = REAL-TIME source of truth (primary)
+        - DB = PERSISTENCE layer (fallback)
+
+        Returns:
+            Dict with:
+            - customer_id, credit_limit, risk_score (from customers)
+            - total_outstanding, avg_delay, on_time_ratio (from memory/metrics)
+            - overdue_count (from memory/computed from invoices)
+        """
+        if not customer_id:
+            return None
+
+        # ISSUE 1 FIX: Try MemoryAgent FIRST (real-time cache)
+        if self._memory_agent:
+            try:
+                memory_state = self._memory_agent.get_customer_state(customer_id)
+                if memory_state:
+                    logger.debug(f"[QueryAgent] Using MemoryAgent cache for {customer_id} (real-time source)")
+                    # Enrich with static data from DB (credit_limit only changes during administrative action)
+                    customer_static = self.get_customer(customer_id)
+                    if customer_static:
+                        return {
+                            "customer_id": customer_id,
+                            "credit_limit": customer_static.get("credit_limit", 0.0),
+                            "risk_score": memory_state.get("risk_score", 0.0),
+                            "total_outstanding": memory_state.get("total_outstanding", 0.0),
+                            "avg_delay": memory_state.get("avg_delay", 0.0),
+                            "on_time_ratio": memory_state.get("on_time_ratio", 0.5),
+                            "overdue_count": memory_state.get("overdue_count", 0),
+                        }
+            except Exception as e:
+                logger.debug(f"[QueryAgent] MemoryAgent lookup failed for {customer_id}: {e}, falling back to DB")
+
+        # FALLBACK: Use DB (when MemoryAgent unavailable)
+        logger.debug(f"[QueryAgent] Falling back to DB for {customer_id} (MemoryAgent unavailable)")
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                # Get customer base + metrics
+                cursor.execute("""
+                    SELECT
+                        c.customer_id,
+                        c.credit_limit,
+                        c.risk_score,
+                        COALESCE(m.total_outstanding, 0.0) as total_outstanding,
+                        COALESCE(m.avg_delay, 0.0) as avg_delay,
+                        COALESCE(m.on_time_ratio, 0.5) as on_time_ratio,
+                        m.last_payment_date,
+                        m.updated_at
+                    FROM customers c
+                    LEFT JOIN customer_metrics m ON c.customer_id = m.customer_id
+                    WHERE c.customer_id = ?
+                """, (customer_id,))
+
+                row = cursor.fetchone()
+                if not row:
+                    conn.close()
+                    return None
+
+                result = dict(row)
+
+                # Compute overdue_count from invoices
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM invoices
+                    WHERE customer_id = ? AND status = 'overdue'
+                """, (customer_id,))
+
+                overdue_row = cursor.fetchone()
+                result["overdue_count"] = overdue_row["count"] if overdue_row else 0
+
+                conn.close()
+
+                logger.debug(
+                    f"[QueryAgent] Fetched enriched metrics from DB for {customer_id}: "
+                    f"outstanding={result['total_outstanding']:.2f}, "
+                    f"overdue={result['overdue_count']}, "
+                    f"on_time_ratio={result['on_time_ratio']:.2f}"
+                )
+                return result
+
+            except sqlite3.Error as e:
+                logger.error(f"Database error fetching metrics for {customer_id}: {e}")
+
+        return None
+
+    def get_all_customers(self) -> List[Dict[str, Any]]:
+        """
+        Get all customers from DB for startup rebuild.
+
+        Returns:
+            List of customer dicts with customer_id, credit_limit, risk_score, updated_at
+        """
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT customer_id, credit_limit, risk_score, updated_at
+                    FROM customers
+                    ORDER BY customer_id
+                """)
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                result = [dict(row) for row in rows]
+                logger.info(f"Fetched {len(result)} customers from DB for rebuild")
+                return result
+
+            except sqlite3.Error as e:
+                logger.error(f"Database error querying all customers: {e}")
+
+        return []
 
     def get_invoice(self, invoice_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -148,7 +274,14 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
+                    SELECT
+                        invoice_id,
+                        customer_id,
+                        total_amount,
+                        paid_amount,
+                        (total_amount - paid_amount) AS remaining_amount,
+                        due_date,
+                        status
                     FROM invoices
                     WHERE invoice_id = ?
                 """, (invoice_id,))
@@ -189,7 +322,14 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
+                    SELECT
+                        invoice_id,
+                        customer_id,
+                        total_amount,
+                        paid_amount,
+                        (total_amount - paid_amount) AS remaining_amount,
+                        due_date,
+                        status
                     FROM invoices
                     WHERE customer_id = ?
                     AND status != 'paid'
@@ -227,7 +367,14 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
+                    SELECT
+                        invoice_id,
+                        customer_id,
+                        total_amount,
+                        paid_amount,
+                        (total_amount - paid_amount) AS remaining_amount,
+                        due_date,
+                        status
                     FROM invoices
                     WHERE customer_id = ?
                     ORDER BY due_date DESC
@@ -265,7 +412,14 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
+                    SELECT
+                        invoice_id,
+                        customer_id,
+                        total_amount,
+                        paid_amount,
+                        (total_amount - paid_amount) AS remaining_amount,
+                        due_date,
+                        status
                     FROM invoices
                     WHERE customer_id = ?
                     AND status = 'overdue'
@@ -291,7 +445,9 @@ class QueryAgent(BaseAgent):
             List[dict]: Each dict contains:
                 - invoice_id
                 - customer_id
-                - amount
+                - total_amount
+                - paid_amount
+                - remaining_amount (computed)
                 - due_date
                 - status
         """
@@ -301,7 +457,14 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT invoice_id, customer_id, amount, remaining_amount, due_date, status
+                    SELECT
+                        invoice_id,
+                        customer_id,
+                        total_amount,
+                        paid_amount,
+                        (total_amount - paid_amount) AS remaining_amount,
+                        due_date,
+                        status
                     FROM invoices
                     WHERE status = 'pending'
                 """)
@@ -314,10 +477,11 @@ class QueryAgent(BaseAgent):
                     invoices.append({
                         "invoice_id": row[0],
                         "customer_id": row[1],
-                        "amount": row[2],
-                        "remaining_amount": row[3],
-                        "due_date": row[4],
-                        "status": row[5],
+                        "total_amount": row[2],
+                        "paid_amount": row[3],
+                        "remaining_amount": row[4],
+                        "due_date": row[5],
+                        "status": row[6],
                     })
 
                 logger.debug(f"Fetched {len(invoices)} unpaid invoices from DB")

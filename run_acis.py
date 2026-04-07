@@ -27,7 +27,6 @@ from agents.intelligence.external_data_agent import ExternalDataAgent
 from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
 from agents.intelligence.aggregator_agent import AggregatorAgent
 from agents.invoice.overdue_detection_agent import OverdueDetectionAgent
-from agents.policy.credit_policy_agent import CreditPolicyAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
 from agents.risk.risk_scoring_agent import RiskScoringAgent
 from agents.customer.customer_profile_agent import CustomerProfileAgent
@@ -106,12 +105,24 @@ def _run_agent_service(agent: Any, shutdown_event: threading.Event) -> None:
 
 
 def _build_components() -> Tuple[RegistryService, List[Any]]:
-    registry_service = RegistryService(kafka_client=_build_kafka_client())
+    # FIX 5 - Architecture Design (CORRECTED):
+    # - ISSUE 2 FIX: Create ONE shared Kafka client for PRODUCER only
+    # - Each agent gets its OWN Kafka client for CONSUMER (prevents subscription overwrites)
+    # - Shared producer = 1 connection
+    # - Separate consumers per agent = isolated subscriptions and group IDs
 
-    memory_agent = MemoryAgent(kafka_client=_build_kafka_client())
-    query_agent = QueryAgent(
+    shared_kafka_client = _build_kafka_client()
+    logger.info("[Bootstrap] Created shared Kafka producer client")
+
+    registry_service = RegistryService(kafka_client=shared_kafka_client)
+
+    # Create QueryAgent FIRST (DB source of truth)
+    query_agent = QueryAgent(kafka_client=_build_kafka_client())
+
+    # Create MemoryAgent with QueryAgent dependency
+    memory_agent = MemoryAgent(
         kafka_client=_build_kafka_client(),
-        memory_agent=memory_agent
+        query_agent=query_agent
     )
 
     customer_state_agent = CustomerStateAgent(
@@ -129,13 +140,17 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         query_agent=query_agent
     )
 
+    # Create DBAgent and link with QueryAgent for cache invalidation
+    db_agent = DBAgent(kafka_client=_build_kafka_client())
+    db_agent.set_query_agent(query_agent)
+
     agents: List[Any] = [
         MonitoringAgent(kafka_client=_build_kafka_client()),
         SelfHealingAgent(kafka_client=_build_kafka_client()),
         RuntimeManager(kafka_client=_build_kafka_client()),
         PlacementEngine(kafka_client=_build_kafka_client()),
         ScenarioGeneratorAgent(kafka_client=_build_kafka_client()),
-        DBAgent(kafka_client=_build_kafka_client()),
+        db_agent,
         memory_agent,
         query_agent,
         customer_state_agent,
@@ -147,10 +162,14 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
             kafka_client=_build_kafka_client(),
             query_agent=query_agent
         ),
-        RiskScoringAgent(kafka_client=_build_kafka_client()),
+        RiskScoringAgent(
+            kafka_client=_build_kafka_client(),
+            query_agent=query_agent,
+            memory_agent=memory_agent  # For temporal trend detection
+        ),
         CustomerProfileAgent(kafka_client=_build_kafka_client()),
         collections_agent,
-        CreditPolicyAgent(kafka_client=_build_kafka_client()),
+        # REMOVED: CreditPolicyAgent - CollectionsAgent is now the sole decision engine
     ]
 
     return registry_service, agents

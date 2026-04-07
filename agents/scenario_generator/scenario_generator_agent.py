@@ -34,16 +34,65 @@ class ScenarioGeneratorAgent(BaseAgent):
     TOPIC_METRICS = "acis.metrics"
     TOPIC_COMMANDS = "acis.commands"
 
-    # Synthetic data constants
+    # India-only configuration
+    COUNTRIES = ["IN"]
+    CURRENCIES = ["INR"]
+
+    # Real Indian companies (Listed)
+    LISTED_INDIAN_COMPANIES = [
+        {"name": "Reliance Industries Ltd", "industry": "energy"},
+        {"name": "Tata Consultancy Services Ltd", "industry": "technology"},
+        {"name": "Infosys Ltd", "industry": "technology"},
+        {"name": "HDFC Bank Ltd", "industry": "finance"},
+        {"name": "ICICI Bank Ltd", "industry": "finance"},
+        {"name": "State Bank of India", "industry": "finance"},
+        {"name": "Larsen & Toubro Ltd", "industry": "construction"},
+        {"name": "Bharti Airtel Ltd", "industry": "telecommunications"},
+        {"name": "Wipro Ltd", "industry": "technology"},
+        {"name": "Adani Enterprises Ltd", "industry": "energy"},
+        {"name": "ITC Ltd", "industry": "consumer_goods"},
+        {"name": "Bajaj Auto Ltd", "industry": "automotive"},
+        {"name": "Hindustan Unilever Ltd", "industry": "consumer_goods"},
+        {"name": "Hero MotoCorp Ltd", "industry": "automotive"},
+        {"name": "Axis Bank Ltd", "industry": "finance"},
+        {"name": "Kotak Mahindra Bank Ltd", "industry": "finance"},
+        {"name": "Asian Paints Ltd", "industry": "manufacturing"},
+        {"name": "Maruti Suzuki India Ltd", "industry": "automotive"},
+        {"name": "HCL Technologies Ltd", "industry": "technology"},
+        {"name": "Tech Mahindra Ltd", "industry": "technology"},
+    ]
+
+    # Real Indian companies (Unlisted)
+    UNLISTED_INDIAN_COMPANIES = [
+        {"name": "Flipkart Internet Pvt Ltd", "industry": "retail"},
+        {"name": "BYJU'S Learning Pvt Ltd", "industry": "education"},
+        {"name": "Ola Electric Mobility Pvt Ltd", "industry": "automotive"},
+        {"name": "Swiggy Pvt Ltd", "industry": "logistics"},
+        {"name": "Zomato Pvt Ltd", "industry": "food_tech"},
+        {"name": "Razorpay Software Pvt Ltd", "industry": "finance"},
+        {"name": "Delhivery Pvt Ltd", "industry": "logistics"},
+        {"name": "Dream11 Gaming Pvt Ltd", "industry": "gaming"},
+        {"name": "Meesho Pvt Ltd", "industry": "ecommerce"},
+        {"name": "Udaan Pvt Ltd", "industry": "b2b_commerce"},
+        {"name": "Unacademy Pvt Ltd", "industry": "education"},
+        {"name": "PharmEasy Pvt Ltd", "industry": "healthcare"},
+        {"name": "Cure.fit Pvt Ltd", "industry": "healthcare"},
+        {"name": "Vedantu Online Learning Pvt Ltd", "industry": "education"},
+        {"name": "ShareChat Pvt Ltd", "industry": "technology"},
+        {"name": "Rupeekh Finance Pvt Ltd", "industry": "finance"},
+        {"name": "Freshworks Software Pvt Ltd", "industry": "technology"},
+        {"name": "InMobi Pvt Ltd", "industry": "technology"},
+        {"name": "Capillary Technologies Pvt Ltd", "industry": "technology"},
+        {"name": "Mosaic Brands Pvt Ltd", "industry": "retail"},
+    ]
+
+    # Synthetic data constants (for other fields)
     INDUSTRIES = [
         "manufacturing", "technology", "healthcare", "finance",
         "retail", "construction", "logistics", "energy",
-        "telecommunications", "pharmaceuticals"
+        "telecommunications", "pharmaceuticals", "education", "automotive",
+        "consumer_goods", "ecommerce", "gaming", "food_tech"
     ]
-
-    COUNTRIES = ["US", "GB", "DE", "FR", "CA", "AU", "JP", "SG", "NL", "CH"]
-
-    CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "SGD", "CHF"]
 
     RATINGS = ["AAA", "AA", "A", "BBB", "BB", "B", "CCC", "CC", "C", "D"]
 
@@ -51,16 +100,15 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     PAYMENT_METHODS = ["wire_transfer", "ach", "check", "credit_card", "direct_debit"]
 
-    COMPANY_PREFIXES = [
-        "Acme", "Global", "United", "Pacific", "Atlantic", "Summit",
-        "Pioneer", "Apex", "Vertex", "Horizon", "Quantum", "Synergy",
-        "Nexus", "Pinnacle", "Sterling", "Premier", "Elite", "Prime"
-    ]
-
-    COMPANY_SUFFIXES = [
-        "Corp", "Inc", "LLC", "Ltd", "Holdings", "Group", "Industries",
-        "Solutions", "Technologies", "Enterprises", "Partners", "Systems"
-    ]
+    # Industry normalization map (for future standardization)
+    INDUSTRY_MAP = {
+        "food_tech": "technology",
+        "ecommerce": "retail",
+        "b2b_commerce": "retail",
+        "gaming": "technology",
+        "education": "technology",
+        "pharmaceuticals": "healthcare",
+    }
 
     def __init__(
         self,
@@ -221,29 +269,46 @@ class ScenarioGeneratorAgent(BaseAgent):
         return self._create_customer(correlation_id)
 
     def _create_customer(self, correlation_id: str) -> str:
-        """Create a new customer."""
+        """Create a new customer with real Indian company."""
         self._customer_counter += 1
         customer_id = f"cust_{self._customer_counter:05d}"
 
-        country = random.choice(self.COUNTRIES)
-        currency = self._get_currency_for_country(country)
+        # Select real Indian company
+        company, company_type = self._select_indian_company()
+        company_base_name = company["name"]
+        industry_raw = company["industry"]
+
+        # IMPROVEMENT 1: Add unit suffix for uniqueness (e.g., "Infosys Ltd - Unit 7")
+        customer_name = f"{company_base_name} - Unit {random.randint(1, 50)}"
+
+        # IMPROVEMENT 2: Generate company ID (e.g., "INFOSYS" from "Infosys Ltd")
+        company_id = self._generate_company_id(company_base_name)
+
+        # IMPROVEMENT 3: Normalize industry (e.g., "food_tech" → "technology")
+        industry = self._normalize_industry(industry_raw)
+
+        # India-only: country = "IN", currency = "INR"
+        country = "IN"
+        currency = "INR"
 
         customer_data = {
             "customer_id": customer_id,
-            "customer_name": self._generate_company_name(),
+            "customer_name": customer_name,
+            "company_id": company_id,  # Added: standardized identifier
             "credit_limit": self._generate_credit_limit(),
             "currency": currency,
             "risk_level": random.choices(
                 self.RISK_LEVELS,
                 weights=[0.5, 0.3, 0.15, 0.05]  # Weighted toward lower risk
             )[0],
-            "industry": random.choice(self.INDUSTRIES),
+            "industry": industry,
             "country": country,
             "rating": random.choices(
                 self.RATINGS,
                 weights=[0.05, 0.1, 0.15, 0.25, 0.2, 0.1, 0.08, 0.04, 0.02, 0.01]
             )[0],
             "status": "active",
+            "company_type": company_type,  # "listed" or "unlisted"
             "updated_at": datetime.utcnow().isoformat(),
         }
 
@@ -259,7 +324,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             correlation_id=correlation_id,
         )
 
-        logger.info(f"Created customer: {customer_id}")
+        logger.info(f"Created customer: {customer_id} ({customer_name}, {company_type})")
         return customer_id
 
     def _update_customer(self, correlation_id: str) -> str:
@@ -454,6 +519,9 @@ class ScenarioGeneratorAgent(BaseAgent):
             status = "completed"
             remaining = 0
 
+        # IMPROVEMENT 1: Use actual payment method in reference (not always wire_transfer)
+        method = random.choice(self.PAYMENT_METHODS)
+
         payment_data = {
             "payment_id": payment_id,
             "invoice_id": invoice_id,
@@ -461,9 +529,9 @@ class ScenarioGeneratorAgent(BaseAgent):
             "amount": amount,
             "currency": invoice["currency"],
             "payment_date": datetime.utcnow().isoformat(),
-            "payment_method": random.choice(self.PAYMENT_METHODS),
+            "payment_method": method,
             "status": status,
-            "reference": f"{self.PAYMENT_METHODS[0].upper()[:2]}-{datetime.utcnow().strftime('%Y-%m-%d')}-{payment_id}",
+            "reference": f"{method.upper()[:2]}-{datetime.utcnow().strftime('%Y-%m-%d')}-{payment_id}",
         }
 
         if is_partial:
@@ -792,11 +860,46 @@ class ScenarioGeneratorAgent(BaseAgent):
     # Helper methods
     # -------------------------------------------------------------------------
 
-    def _generate_company_name(self) -> str:
-        """Generate a random company name."""
-        prefix = random.choice(self.COMPANY_PREFIXES)
-        suffix = random.choice(self.COMPANY_SUFFIXES)
-        return f"{prefix} {suffix}"
+    def _select_indian_company(self) -> tuple:
+        """Select a real Indian company (listed or unlisted)."""
+        category = random.choices(
+            ["listed", "unlisted"],
+            weights=[0.6, 0.4]
+        )[0]
+
+        if category == "listed":
+            company = random.choice(self.LISTED_INDIAN_COMPANIES)
+        else:
+            company = random.choice(self.UNLISTED_INDIAN_COMPANIES)
+
+        return company, category
+
+    def _generate_company_id(self, company_name: str) -> str:
+        """Generate standardized company ID from company name.
+
+        Examples:
+        - "Infosys Ltd" → "INFOSYS"
+        - "Tata Consultancy Services Ltd" → "TATA_CONSULTANCY"
+        - "State Bank of India" → "STATE_INDIA" (skips "of", "the")
+        - "Ola Electric Mobility Pvt Ltd" → "OLA_ELECTRIC"
+        """
+        # IMPROVEMENT 2: Remove legal suffixes and filter stop words
+        # Remove legal entity markers first
+        cleaned = company_name.replace(" Ltd", "").replace(" Pvt", "").replace("Ltd", "").replace("Pvt", "")
+
+        # Split and filter out common stop words ("of", "the", "and")
+        words = [w for w in cleaned.split()
+                 if w.lower() not in ["of", "the", "and", "at", "&"]]
+
+        # Take first 2 significant words, uppercase, join with underscore
+        company_id = "_".join(words[:2]).upper()
+
+        # Clean special characters
+        return company_id.replace("'", "").replace(".", "").replace("+", "")
+
+    def _normalize_industry(self, industry: str) -> str:
+        """Normalize industry using mapping (for future standardization)."""
+        return self.INDUSTRY_MAP.get(industry, industry)
 
     def _generate_credit_limit(self) -> float:
         """Generate a realistic credit limit."""
@@ -844,20 +947,10 @@ class ScenarioGeneratorAgent(BaseAgent):
         return items
 
     def _get_currency_for_country(self, country: str) -> str:
-        """Get appropriate currency for country."""
-        country_currency = {
-            "US": "USD",
-            "GB": "GBP",
-            "DE": "EUR",
-            "FR": "EUR",
-            "CA": "CAD",
-            "AU": "AUD",
-            "JP": "JPY",
-            "SG": "SGD",
-            "NL": "EUR",
-            "CH": "CHF",
-        }
-        return country_currency.get(country, "USD")
+        """Get appropriate currency for country (India-only: INR)."""
+        if country == "IN":
+            return "INR"
+        return "INR"  # Default to INR for any unexpected country
 
     # -------------------------------------------------------------------------
     # Registry override

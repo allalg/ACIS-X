@@ -11,7 +11,11 @@ class CreditPolicyAgent(BaseAgent):
     """
     Credit Policy Agent for ACIS-X.
 
-    Subscribes to RiskScoreUpdated events and triggers policy actions.
+    ⚠️ DEPRECATED: This agent duplicates CollectionsAgent logic.
+    Subscribes to risk.scored events and triggers policy actions.
+
+    NOTE: CollectionsAgent is the primary decision engine.
+    This agent will be replaced by CollectionsAgent.
 
     Produces:
     - PolicyActionTriggered events
@@ -43,11 +47,11 @@ class CreditPolicyAgent(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
-        if event.event_type == "RiskScoreUpdated":
+        if event.event_type == "risk.scored":  # FIX: standardized name
             self.handle_event(event)
 
     def handle_event(self, event: Event) -> None:
-        """Handle RiskScoreUpdated event and trigger policy action."""
+        """Handle risk.scored event and trigger policy action."""
         logger.info(f"Received event: {event.event_type} for entity {event.entity_id}")
 
         # Step 1: Extract data

@@ -474,9 +474,30 @@ class CustomerStateAgent(BaseAgent):
 
     def _maybe_reconcile_cache(self, customer_id: str) -> None:
         """
-        Probabilistically trigger cache reconciliation (5% chance).
-        Low overhead - keeps cache honest without constant DB queries.
+        FIX 4: Deterministic retry logic.
+
+        Trigger cache reconciliation when:
+        1. Pending payments exist for this customer (deterministic retry)
+        2. Otherwise, use low-overhead probabilistic reconciliation (5% chance)
+
+        This ensures reliability: pending payments are ALWAYS retried,
+        while still maintaining cache coherency without excessive DB queries.
         """
+        # FIX 4: First check if there are PENDING PAYMENTS for this customer
+        # If yes, ALWAYS retry (deterministic)
+        with self._pending_lock:
+            has_pending = any(
+                (cid, iid) for (cid, iid) in self._pending_payments.keys()
+                if cid == customer_id
+            )
+
+        if has_pending:
+            logger.debug(f"Pending payments exist for {customer_id}, triggering deterministic retry")
+            self._reconcile_with_db(customer_id)
+            return
+
+        # FIX 4: Otherwise use probabilistic reconciliation (5% chance)
+        # This is safe for normal operation - keeps cache fresh without constant DB queries
         if random.random() < 0.05:
             self._reconcile_with_db(customer_id)
 

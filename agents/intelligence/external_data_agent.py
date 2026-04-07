@@ -34,6 +34,8 @@ class ExternalDataAgent(BaseAgent):
     TOPIC_OUTPUT = "acis.metrics"
     DB_PATH = "acis.db"
     CACHE_TTL_HOURS = 24
+    # FIX 8: Throttle external data fetches to prevent burst API calls
+    THROTTLE_MIN_HOURS = 24  # Don't fetch same company twice within 24 hours
 
     def __init__(
         self,
@@ -42,7 +44,7 @@ class ExternalDataAgent(BaseAgent):
     ):
         super().__init__(
             agent_name="ExternalDataAgent",
-            agent_version="2.0.0",
+            agent_version="2.0.1",  # Bumped: FIX 8 added fetch throttling
             group_id="external-data-group",
             subscribed_topics=[self.TOPIC_INPUT],
             capabilities=["external_data_enrichment", "screener_scraping"],
@@ -54,6 +56,8 @@ class ExternalDataAgent(BaseAgent):
         self._session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
+        # FIX 8: In-memory throttle tracking (per company_id)
+        self._last_fetch_time: Dict[str, float] = {}
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -471,18 +475,52 @@ class ExternalDataAgent(BaseAgent):
         # Step 2: Resolve slug FIRST (consistent cache key)
         slug = self._resolve_slug(company_name)
 
+        # FIX 8: THROTTLE - Check if we've fetched this company recently
+        current_time = time.time()
+        last_fetch = self._last_fetch_time.get(slug, 0)
+        time_since_fetch = (current_time - last_fetch) / 3600  # Convert to hours
+
         # Step 3: Check DB cache using slug
         cached = self._get_cached_financials(slug)
 
         if cached:
             # Use cached data
+            logger.info(
+                f"[ExternalDataAgent] Using cached data for {slug} "
+                f"(fetched {time_since_fetch:.1f} hours ago)"
+            )
             external_risk = cached["risk"]
             financial_data = cached
         else:
-            # Scrape fresh data from Screener
-            financial_data = self._fetch_screener_data(company_name, slug)
-            self._store_financials(financial_data)
-            external_risk = financial_data["risk"]
+            # FIX 8: Check throttle before fetching fresh data
+            if last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
+                logger.info(
+                    f"[ExternalDataAgent] Throttled for {slug}: "
+                    f"last fetch was {time_since_fetch:.1f}h ago, "
+                    f"min interval is {self.THROTTLE_MIN_HOURS}h"
+                )
+                # Don't fetch, use default risk
+                external_risk = 0.3
+                financial_data = {
+                    "company_name": slug,
+                    "risk": external_risk,
+                    "pe": None,
+                    "roe": None,
+                    "roce": None,
+                    "debt": None,
+                    "market_cap": None,
+                    "sales_growth": None,
+                    "profit_growth": None,
+                    "operating_margin": None,
+                    "interest_coverage": None,
+                }
+            else:
+                # FIX 8: Fetch fresh data and update throttle time
+                logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug}")
+                financial_data = self._fetch_screener_data(company_name, slug)
+                self._store_financials(financial_data)
+                external_risk = financial_data["risk"]
+                self._last_fetch_time[slug] = current_time  # Update throttle time
 
         # Step 4: Create enriched payload with all financial signals
         external_payload = {

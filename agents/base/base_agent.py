@@ -81,6 +81,11 @@ class BaseAgent(ABC):
         self.replica_count = replica_count
         self.max_replicas = max_replicas
 
+        # ISSUE 1 FIX: Track actual Kafka group_id (with instance suffix) separately
+        # self.group_id stays as base for identity
+        # self._actual_group_id is what Kafka actually uses
+        self._actual_group_id: Optional[str] = None
+
         # State management
         self._running = False
         self._shutdown_event = threading.Event()
@@ -171,7 +176,12 @@ class BaseAgent(ABC):
         # Subscribe to topics FIRST (so registry has correct topic list)
         topics = self.subscribe()
         self.subscribed_topics = topics
-        self.kafka_client.subscribe(topics, self.group_id)
+
+        # ISSUE 1 FIX: Create unique group_id and store as _actual_group_id
+        # This tracks the ACTUAL Kafka group_id used (with instance suffix)
+        self._actual_group_id = f"{self.group_id}-{self.instance_id}"
+        self.kafka_client.subscribe(topics, self._actual_group_id)
+        logger.info(f"Subscribed to topics {topics} with actual group_id: {self._actual_group_id}")
 
         # THEN register with registry
         self._register_with_registry()
@@ -239,8 +249,15 @@ class BaseAgent(ABC):
 
         while self._running:
             try:
-                # Poll for messages with timeout
-                messages = self.kafka_client.poll(timeout_ms=1000)
+                # FIX 2: Safe polling with explicit exception handling
+                try:
+                    messages = self.kafka_client.poll(timeout_ms=1000)
+                except Exception as e:
+                    logger.error(f"Polling error (will retry): {e}")
+                    with self._metrics_lock:
+                        self._error_count += 1
+                    # Continue without breaking - consumer will retry on next iteration
+                    continue
 
                 # Update queue depth metric
                 with self._metrics_lock:
@@ -252,8 +269,17 @@ class BaseAgent(ABC):
 
                     self._handle_message(message)
 
+                    # ISSUE 3 FIX: Manual commit after successful processing
+                    # Ensures message is not reprocessed if agent crashes
+                    try:
+                        self.kafka_client.commit(message)
+                        logger.debug(f"Committed offset {message.offset} for {message.topic}")
+                    except Exception as e:
+                        logger.warning(f"Failed to commit offset: {e}")
+                        # Don't break on commit failure - continue processing
+
             except Exception as e:
-                logger.error(f"Error in consumer loop: {e}")
+                logger.error(f"Fatal error in consumer loop: {e}")
                 with self._metrics_lock:
                     self._error_count += 1
                 if self._running:
@@ -604,7 +630,8 @@ class BaseAgent(ABC):
             "replica_index": self.replica_index,
             "details": {
                 "subscribed_topics": self.subscribed_topics,
-                "group_id": self.group_id,
+                # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
+                "group_id": self._actual_group_id or self.group_id,
                 "version": self.agent_version,
             }
         }
@@ -652,7 +679,8 @@ class BaseAgent(ABC):
             # Kafka context
             "topic": self.subscribed_topics[0] if self.subscribed_topics else None,
             "partition": None,
-            "consumer_group": self.group_id,
+            # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
+            "consumer_group": self._actual_group_id or self.group_id,
 
             # Replica info
             "replica_count": self.replica_count,
@@ -742,7 +770,8 @@ class BaseAgent(ABC):
 
                 # Kafka context
                 "topic": self.subscribed_topics[0] if self.subscribed_topics else None,
-                "consumer_group": self.group_id,
+                # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
+                "consumer_group": self._actual_group_id or self.group_id,
 
                 # Replica info
                 "replica_count": self.replica_count,
@@ -797,7 +826,8 @@ class BaseAgent(ABC):
             "partition": partition,
             "lag": lag,
             "threshold": self.LAG_DETECTION_THRESHOLD,
-            "consumer_group": self.group_id,
+            # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
+            "consumer_group": self._actual_group_id or self.group_id,
             "detected_at": now.isoformat(),
             "replica_count": self.replica_count,
             "max_replicas": self.max_replicas,

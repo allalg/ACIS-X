@@ -2,6 +2,7 @@ import json
 import logging
 import sqlite3
 import threading
+import time
 from datetime import datetime
 from typing import List, Any, Optional
 
@@ -38,6 +39,7 @@ class DBAgent(BaseAgent):
         self,
         kafka_client: Any,
         db_path: Optional[str] = None,
+        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="DBAgent",
@@ -61,14 +63,23 @@ class DBAgent(BaseAgent):
 
         self._db_path = db_path or self.DB_PATH
         self._db_lock = threading.Lock()
+        self._query_agent = query_agent
         self._init_database()
+
+    def set_query_agent(self, query_agent: Any) -> None:
+        """Set reference to QueryAgent for cache invalidation."""
+        self._query_agent = query_agent
+        logger.info("QueryAgent reference set for cache invalidation")
 
     def _init_database(self) -> None:
         """Initialize SQLite database and create tables if not exists."""
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
+
+                # Enable foreign key constraints
+                cursor.execute("PRAGMA foreign_keys = ON")
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS customers (
@@ -86,7 +97,8 @@ class DBAgent(BaseAgent):
                     CREATE TABLE IF NOT EXISTS invoices (
                         invoice_id TEXT PRIMARY KEY,
                         customer_id TEXT,
-                        amount REAL,
+                        total_amount REAL,
+                        paid_amount REAL DEFAULT 0,
                         issued_date TEXT,
                         due_date TEXT,
                         status TEXT DEFAULT 'pending',
@@ -169,8 +181,23 @@ class DBAgent(BaseAgent):
                 """)
 
                 cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_invoice_id
+                    ON invoices(invoice_id)
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_invoice_customer
+                    ON invoices(customer_id)
+                """)
+
+                cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_litigation_customer
                     ON external_litigation(customer_id)
+                """)
+
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_payments_invoice
+                    ON payments(invoice_id)
                 """)
 
                 cursor.execute("""
@@ -218,9 +245,9 @@ class DBAgent(BaseAgent):
             self._handle_collection_action(event)
         elif event_type == "customer.profile.updated":
             self._handle_customer_profile(event)
-        elif event_type == "LitigationRiskUpdated":
+        elif event_type == "external.litigation.updated":  # FIX: standardized name
             self._handle_litigation_event(event)
-        elif event_type == "CustomerRiskProfileUpdated":
+        elif event_type == "risk.profile.updated":  # FIX: standardized name
             self._handle_customer_risk_profile(event)
 
     def _handle_invoice_upsert(self, event: Event) -> None:
@@ -235,7 +262,7 @@ class DBAgent(BaseAgent):
         data = event.payload or {}
         invoice_id = data.get("invoice_id")
         customer_id = data.get("customer_id")
-        amount = data.get("amount")
+        total_amount = data.get("amount") or data.get("total_amount")  # Accept both field names
         due_date = data.get("due_date")
         status = data.get("status", "pending")
         issued_date = data.get("created_at") or data.get("issued_date")
@@ -249,7 +276,7 @@ class DBAgent(BaseAgent):
             issued_date = now
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
 
@@ -257,32 +284,32 @@ class DBAgent(BaseAgent):
                     INSERT INTO invoices (
                         invoice_id,
                         customer_id,
-                        amount,
+                        total_amount,
+                        paid_amount,
                         issued_date,
                         due_date,
                         status,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(invoice_id) DO UPDATE SET
                         customer_id=excluded.customer_id,
-                        amount=excluded.amount,
+                        total_amount=excluded.total_amount,
                         due_date=excluded.due_date,
                         status=excluded.status,
                         updated_at=excluded.updated_at
                 """, (
                     invoice_id,
                     customer_id,
-                    amount,
+                    total_amount,
+                    0,  # Initialize paid_amount to 0
                     issued_date,
                     due_date,
                     status,
                     now,
                     now
                 ))
-
-                logger.info(f"Upserted invoice: {invoice_id} status={status}")
 
                 # Ensure customer exists
                 if customer_id:
@@ -292,11 +319,18 @@ class DBAgent(BaseAgent):
                     """, (customer_id, now, now))
 
                 conn.commit()
+                logger.info(f"[DBAgent] Upserted invoice: {invoice_id} status={status} total_amount={total_amount}")
+
+                # Invalidate cache
+                if self._query_agent:
+                    self._query_agent.invalidate_invoice_cache(invoice_id)
+                    if customer_id:
+                        self._query_agent.invalidate_customer_cache(customer_id)
             finally:
                 conn.close()
 
     def _handle_payment_received(self, event: Event) -> None:
-        """Handle payment.received event - insert payment and update invoice status."""
+        """Handle payment.received event - insert payment and update invoice paid_amount and status."""
         data = event.payload or {}
         payment_id = data.get("payment_id")
         invoice_id = data.get("invoice_id")
@@ -309,22 +343,31 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
 
                 # Resolve customer_id from invoice if not provided
+                # WITH RETRY: payment may arrive before invoice insert (race condition)
                 customer_id = data.get("customer_id")
                 if not customer_id and invoice_id:
-                    cursor.execute(
-                        "SELECT customer_id FROM invoices WHERE invoice_id = ?",
-                        (invoice_id,)
-                    )
-                    row = cursor.fetchone()
-                    customer_id = row[0] if row else None
-                    logger.info(
-                        f"Resolved customer_id from invoice lookup: invoice_id={invoice_id}, customer_id={customer_id}"
-                    )
+                    for attempt in range(3):
+                        cursor.execute(
+                            "SELECT customer_id FROM invoices WHERE invoice_id = ?",
+                            (invoice_id,)
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            customer_id = row[0]
+                            logger.info(f"[DBAgent] Resolved customer_id from invoice: {invoice_id} -> {customer_id}")
+                            break
+                        elif attempt < 2:
+                            logger.warning(f"[DBAgent] Invoice {invoice_id} not found, retrying... (attempt {attempt + 1}/3)")
+                            time.sleep(0.1)
+
+                    if not customer_id:
+                        logger.error(f"[DBAgent] Could not find invoice {invoice_id} after 3 retries, cannot process payment")
+                        return
 
                 # Insert payment (idempotent)
                 cursor.execute("""
@@ -340,19 +383,52 @@ class DBAgent(BaseAgent):
                 """, (payment_id, invoice_id, customer_id, amount, payment_date, now))
 
                 if cursor.rowcount > 0:
-                    logger.info(f"Inserted payment: {payment_id} for invoice: {invoice_id}, customer: {customer_id}")
+                    logger.info(f"[DBAgent] Inserted payment: {payment_id} for invoice: {invoice_id}, amount={amount}")
 
-                    # Update invoice status to paid
+                    # Update invoice paid_amount and determine status
                     if invoice_id:
-                        cursor.execute("""
-                            UPDATE invoices SET status = 'paid', updated_at = ? WHERE invoice_id = ?
-                        """, (now, invoice_id))
-                        if cursor.rowcount > 0:
-                            logger.info(f"Updated invoice {invoice_id} status to 'paid'")
+                        # Get current invoice state
+                        cursor.execute(
+                            "SELECT total_amount, paid_amount FROM invoices WHERE invoice_id = ?",
+                            (invoice_id,)
+                        )
+                        invoice_row = cursor.fetchone()
+                        if invoice_row:
+                            total_amount = invoice_row[0]
+                            current_paid = invoice_row[1] or 0
+                            new_paid = current_paid + (amount or 0)
+
+                            # Determine status based on remaining amount
+                            remaining = total_amount - new_paid if total_amount else 0
+                            if remaining <= 0:
+                                status = "paid"
+                            elif new_paid > 0:
+                                status = "partial"
+                            else:
+                                status = "pending"
+
+                            cursor.execute("""
+                                UPDATE invoices
+                                SET paid_amount = ?, status = ?, updated_at = ?
+                                WHERE invoice_id = ?
+                            """, (new_paid, status, now, invoice_id))
+
+                            logger.info(
+                                f"[DBAgent] Updated invoice: {invoice_id} paid={new_paid} remaining={remaining} status={status}"
+                            )
+                        else:
+                            logger.warning(f"[DBAgent] Invoice {invoice_id} not found for payment update")
                 else:
-                    logger.debug(f"Payment {payment_id} already exists, skipped")
+                    logger.debug(f"[DBAgent] Payment {payment_id} already exists, skipped")
 
                 conn.commit()
+
+                # Invalidate cache
+                if self._query_agent:
+                    if invoice_id:
+                        self._query_agent.invalidate_invoice_cache(invoice_id)
+                    if customer_id:
+                        self._query_agent.invalidate_customer_cache(customer_id)
             finally:
                 conn.close()
 
@@ -379,7 +455,7 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -404,6 +480,10 @@ class DBAgent(BaseAgent):
                     )
                 else:
                     logger.debug(f"[DBAgent] Collection log {collection_id} already exists, skipped")
+
+                # Invalidate caches
+                if self._query_agent and customer_id:
+                    self._query_agent.invalidate_customer_cache(customer_id)
             finally:
                 conn.close()
 
@@ -422,7 +502,7 @@ class DBAgent(BaseAgent):
         now = datetime.utcnow().isoformat()
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
 
@@ -437,7 +517,11 @@ class DBAgent(BaseAgent):
                 """, (customer_id, risk_score, credit_limit, status, now, now))
 
                 conn.commit()
-                logger.info(f"Upserted customer profile: {customer_id} risk={risk_score} status={status} limit={credit_limit}")
+                logger.info(f"[DBAgent] Updated customer profile: {customer_id} risk={risk_score} status={status} limit={credit_limit}")
+
+                # Invalidate cache
+                if self._query_agent:
+                    self._query_agent.invalidate_customer_cache(customer_id)
             finally:
                 conn.close()
 
@@ -460,7 +544,7 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
 
@@ -507,6 +591,10 @@ class DBAgent(BaseAgent):
                     )
                 else:
                     logger.debug(f"[DBAgent] Litigation record {event.event_id} already exists, skipped")
+
+                # Invalidate cache
+                if self._query_agent:
+                    self._query_agent.invalidate_customer_cache(customer_id)
             finally:
                 conn.close()
 
@@ -533,7 +621,7 @@ class DBAgent(BaseAgent):
         created_at = datetime.utcnow().isoformat()
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path)
+            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
             try:
                 cursor = conn.cursor()
 
@@ -576,6 +664,10 @@ class DBAgent(BaseAgent):
                     logger.debug(
                         f"[DBAgent] Risk profile {event.event_id} already exists, skipped"
                     )
+
+                # Invalidate cache
+                if self._query_agent:
+                    self._query_agent.invalidate_customer_cache(customer_id)
 
             finally:
                 conn.close()

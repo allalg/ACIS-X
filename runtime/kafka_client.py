@@ -62,12 +62,13 @@ class KafkaConfig:
     producer_linger_ms: int = 10
 
     # Consumer settings
+    # FIX 3: Reduce rebalance chaos with stable session settings
     consumer_auto_offset_reset: str = "earliest"  # earliest, latest, none
     consumer_enable_auto_commit: bool = True  # Keep config aligned with consumer behavior
     consumer_max_poll_records: int = 500
-    consumer_max_poll_interval_ms: int = 300000  # 5 minutes
-    consumer_session_timeout_ms: int = 30000  # 30 seconds
-    consumer_heartbeat_interval_ms: int = 3000  # 3 seconds
+    consumer_max_poll_interval_ms: int = 300000  # 5 minutes - generous interval
+    consumer_session_timeout_ms: int = 10000  # 10 seconds - reduced from 30s for faster detection
+    consumer_heartbeat_interval_ms: int = 3000  # 3 seconds - frequent heartbeats prevent eviction
     consumer_fetch_min_bytes: int = 1
     consumer_fetch_max_wait_ms: int = 500
 
@@ -133,6 +134,11 @@ class KafkaClient:
     - DLQ handling
     - Retry logic
     - Consumer lag tracking
+
+    FIX 5 - Architecture Design:
+    - Single shared producer instance (used by all agents)
+    - Separate consumer per agent (via unique group_id with instance_id)
+    - This prevents connection resource leaks and rebalance chaos
     """
 
     def __init__(
