@@ -97,7 +97,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT customer_id, credit_limit, risk_score, updated_at
+                    SELECT customer_id, name, credit_limit, risk_score, updated_at
                     FROM customers
                     WHERE customer_id = ?
                 """, (customer_id,))
@@ -169,6 +169,7 @@ class QueryAgent(BaseAgent):
                 cursor.execute("""
                     SELECT
                         c.customer_id,
+                        c.name,
                         c.credit_limit,
                         c.risk_score,
                         COALESCE(m.total_outstanding, 0.0) as total_outstanding,
@@ -218,7 +219,7 @@ class QueryAgent(BaseAgent):
         Get all customers from DB for startup rebuild.
 
         Returns:
-            List of customer dicts with customer_id, credit_limit, risk_score, updated_at
+            List of customer dicts with customer_id, name, credit_limit, risk_score, updated_at
         """
         with self._db_lock:
             try:
@@ -227,7 +228,7 @@ class QueryAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT customer_id, credit_limit, risk_score, updated_at
+                    SELECT customer_id, name, credit_limit, risk_score, updated_at
                     FROM customers
                     ORDER BY customer_id
                 """)
@@ -545,3 +546,23 @@ class QueryAgent(BaseAgent):
             self._customer_cache.clear()
             self._invoice_cache.clear()
         logger.info("Cleared all query agent caches")
+
+    def update_customer_cache(self, customer_id: str, customer_data: Dict[str, Any]) -> None:
+        """
+        FIX #2: Pre-populate customer cache with data from DBAgent.
+        Called by DBAgent after successfully persisting customer to DB.
+        This prevents cache misses for recent writes.
+        """
+        with self._cache_lock:
+            self._customer_cache[customer_id] = customer_data
+        logger.debug(f"[FIX #2] Pre-populated customer cache for {customer_id}")
+
+    def update_invoice_cache(self, invoice_id: str, invoice_data: Dict[str, Any]) -> None:
+        """
+        FIX #2: Pre-populate invoice cache with data from DBAgent.
+        Called by DBAgent after successfully persisting invoice to DB.
+        This prevents cache misses for recent writes.
+        """
+        with self._cache_lock:
+            self._invoice_cache[invoice_id] = invoice_data
+        logger.debug(f"[FIX #2] Pre-populated invoice cache for {invoice_id}")

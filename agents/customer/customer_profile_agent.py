@@ -108,6 +108,7 @@ class CustomerProfileAgent(BaseAgent):
                 "litigation_risk": 0.0,
                 "severity": None,
                 "credit_limit": 100000.0,  # FIX 1: Add credit_limit to state
+                "company_name": None,  # FIX 7: Forward customer name through pipeline
                 "previous_risk_score": None,  # FIX 5: Track for event spam check
                 # FIX 6: Track time for TTL-based cleanup
                 "_last_updated_time": time.time(),
@@ -142,6 +143,10 @@ class CustomerProfileAgent(BaseAgent):
         # FIX 2: Update credit_limit from metrics (dynamic, not static)
         if "credit_limit" in data:
             state["credit_limit"] = float(data.get("credit_limit", 100000.0))
+
+        # FIX 7: Capture company_name from metrics to forward to profile
+        if "company_name" in data:
+            state["company_name"] = data.get("company_name")
 
         self._emit_profile(customer_id, event)
 
@@ -549,6 +554,7 @@ class CustomerProfileAgent(BaseAgent):
 
         payload = {
             "customer_id": customer_id,
+            "customer_name": state.get("company_name"),  # FIX 7: Forward customer name to DBAgent
             "risk_score": round(risk_score, 4),
             "total_outstanding": round(outstanding, 2),
             "avg_delay": round(delay, 2),

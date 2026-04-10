@@ -7,6 +7,8 @@ from typing import List, Any, Optional, Dict
 from datetime import datetime, timedelta
 
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
@@ -41,6 +43,7 @@ class ExternalDataAgent(BaseAgent):
         self,
         kafka_client: Any,
         db_path: Optional[str] = None,
+        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="ExternalDataAgent",
@@ -52,7 +55,22 @@ class ExternalDataAgent(BaseAgent):
             agent_type="ExternalDataAgent",
         )
         self._db_path = db_path or self.DB_PATH
+        self._query_agent = query_agent
+
+        # FIX: Configure session with connection pooling and retry logic
         self._session = requests.Session()
+
+        # Retry strategy: exponential backoff on connection failures
+        retry_strategy = Retry(
+            total=3,  # Max retries
+            backoff_factor=1,  # 1s, 2s, 4s wait between retries
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
+            allowed_methods=["GET"]  # Only retry GET requests
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=10)
+        self._session.mount("http://", adapter)
+        self._session.mount("https://", adapter)
+
         self._session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
@@ -180,7 +198,8 @@ class ExternalDataAgent(BaseAgent):
         url = f"https://www.screener.in/company/{normalized}/"
 
         try:
-            response = self._session.get(url, timeout=10, allow_redirects=True)
+            # FIX: Increased timeout from 10 to 20 seconds
+            response = self._session.get(url, timeout=20, allow_redirects=True)
             if response.status_code == 200:
                 logger.info(f"[ExternalDataAgent] Slug resolved directly: {normalized}")
                 return normalized
@@ -190,7 +209,8 @@ class ExternalDataAgent(BaseAgent):
         # Fallback: search page
         try:
             search_url = f"https://www.screener.in/api/company/search/?q={company_name}"
-            response = self._session.get(search_url, timeout=10)
+            # FIX: Increased timeout from 10 to 20 seconds
+            response = self._session.get(search_url, timeout=20)
             if response.status_code == 200:
                 results = response.json()
                 if results and len(results) > 0:
@@ -469,10 +489,24 @@ class ExternalDataAgent(BaseAgent):
             logger.warning("Missing customer_id in metrics event")
             return
 
-        company_name = payload.get("company_name") or customer_id
+        # Step 2: Resolve company name with improved fallback chain
+        # Priority: payload -> QueryAgent lookup -> customer_id
+        company_name = payload.get("company_name")
+        if not company_name and self._query_agent:
+            try:
+                customer = self._query_agent.get_customer(customer_id)
+                if customer:
+                    company_name = customer.get("name")
+                    if company_name:
+                        logger.debug(f"[ExternalDataAgent] Resolved company name from DB: {company_name}")
+            except Exception as e:
+                logger.debug(f"[ExternalDataAgent] Failed to lookup customer from QueryAgent: {e}")
+
+        # Final fallback: use customer_id
+        company_name = company_name or customer_id
         company_name = company_name.strip()[:100]
 
-        # Step 2: Resolve slug FIRST (consistent cache key)
+        # Step 3: Resolve slug FIRST (consistent cache key)
         slug = self._resolve_slug(company_name)
 
         # FIX 8: THROTTLE - Check if we've fetched this company recently
@@ -480,7 +514,7 @@ class ExternalDataAgent(BaseAgent):
         last_fetch = self._last_fetch_time.get(slug, 0)
         time_since_fetch = (current_time - last_fetch) / 3600  # Convert to hours
 
-        # Step 3: Check DB cache using slug
+        # Step 4: Check DB cache using slug
         cached = self._get_cached_financials(slug)
 
         if cached:
@@ -522,7 +556,7 @@ class ExternalDataAgent(BaseAgent):
                 external_risk = financial_data["risk"]
                 self._last_fetch_time[slug] = current_time  # Update throttle time
 
-        # Step 4: Create enriched payload with all financial signals
+        # Step 5: Create enriched payload with all financial signals
         external_payload = {
             "customer_id": customer_id,
             "company_name": company_name,
@@ -540,7 +574,7 @@ class ExternalDataAgent(BaseAgent):
             "generated_at": datetime.utcnow().isoformat()
         }
 
-        # Step 5: Publish event
+        # Step 6: Publish event
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
             event_type="ExternalDataEnriched",

@@ -156,7 +156,7 @@ class KafkaClient:
         self.config = config
         self.backend = backend
 
-        # Producer and consumer instances (lazy init)
+        # Producer and consumer instances (lazily initialized)
         self._producer: Optional[Any] = None
         self._consumer: Optional[Any] = None
         self._subscribed_topics: List[str] = []
@@ -176,10 +176,7 @@ class KafkaClient:
         self._topic_partition_offsets: Dict[str, Dict[int, int]] = {}
         self._topic_partition_watermarks: Dict[str, Dict[int, int]] = {}
 
-        # Initialize producer
-        self._init_producer()
-
-        logger.info(f"KafkaClient initialized (backend: {backend}, client_id: {config.client_id})")
+        logger.info(f"KafkaClient initialized (backend: {backend}, client_id: {config.client_id}, lazy init enabled)")
 
     # -------------------------------------------------------------------------
     # Initialization
@@ -355,8 +352,9 @@ class KafkaClient:
             headers: Optional headers (merged with correlation_id)
             partition: Optional specific partition (otherwise uses key hash)
         """
+        # Lazy initialize producer on first publish
         if self._producer is None:
-            raise RuntimeError("Producer not initialized")
+            self._init_producer()
 
         # Extract partition key from event if not provided
         if key is None:
@@ -819,7 +817,13 @@ class KafkaClient:
     def _serialize(self, data: Dict[str, Any]) -> bytes:
         """Serialize event data based on configured format."""
         if self.config.serialization_format == SerializationFormat.JSON:
-            return json.dumps(data, default=str).encode("utf-8")
+            # FIX: Properly serialize datetime objects to ISO format (not str which adds space)
+            def serialize_datetime(obj: Any) -> str:
+                if isinstance(obj, datetime):
+                    return obj.isoformat()  # ✅ isoformat() not str() - produces T not space
+                return str(obj)
+
+            return json.dumps(data, default=serialize_datetime).encode("utf-8")
         elif self.config.serialization_format == SerializationFormat.AVRO:
             # TODO: Implement Avro serialization with schema registry
             raise NotImplementedError("Avro serialization not yet implemented")

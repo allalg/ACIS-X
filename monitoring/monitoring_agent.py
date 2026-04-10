@@ -353,6 +353,7 @@ class MonitoringAgent(BaseAgent):
 
     def _evaluate_agent(self, agent_id: str, reason: str) -> None:
         """Evaluate one agent against health thresholds."""
+        age_seconds = None
         with self._agents_lock:
             agent = self._agents.get(agent_id)
             if agent is None or agent.agent_name == self.agent_name:

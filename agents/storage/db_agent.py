@@ -73,10 +73,65 @@ class DBAgent(BaseAgent):
 
     def _init_database(self) -> None:
         """Initialize SQLite database and create tables if not exists."""
+        import time
+
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            # FIX #6: Handle corrupted database by detecting and cleaning it up
+            corruption_detected = False
+
+            try:
+                # First, try to detect corruption by attempting to open and parse the database
+                test_conn = sqlite3.connect(self._db_path, timeout=10.0)
+                test_cursor = test_conn.cursor()
+                test_cursor.execute("PRAGMA integrity_check")
+                integrity = test_cursor.fetchone()[0]
+                test_conn.close()  # Close connection BEFORE deleting
+
+                if integrity != "ok":
+                    logger.warning(f"Database integrity check failed: {integrity}, removing corrupted file")
+                    corruption_detected = True
+            except sqlite3.DatabaseError as e:
+                # Database is corrupted
+                if "malformed" in str(e).lower():
+                    logger.warning(f"Database corrupted, preparing cleanup: {e}")
+                    corruption_detected = True
+                test_conn = None
+
+            # If corruption detected, delete the corrupted files
+            if corruption_detected:
+                import os
+                for attempt in range(3):
+                    try:
+                        # Try to remove main file and WAL files
+                        for suffix in ["", "-wal", "-shm"]:
+                            filepath = self._db_path + suffix
+                            if os.path.exists(filepath):
+                                try:
+                                    os.remove(filepath)
+                                    logger.info(f"Deleted corrupted database file: {filepath}")
+                                except:
+                                    pass
+                        break
+                    except Exception as e:
+                        if attempt < 2:
+                            logger.debug(f"Delete attempt {attempt + 1} failed, retrying: {e}")
+                            time.sleep(0.5)
+                        else:
+                            logger.error(f"Could not remove corrupted database after 3 attempts: {e}")
+                            raise
+
+            # Now open with fresh database (or cleaned-up file)
+            # Use timeout and WAL mode for better concurrent access
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
+
+                # FIX #6: Use DEFERRED and optimized pragmas (WAL removed - was causing issues)
+                # WAL mode can corrupt on older SQLite versions, so use standard mode with proper timeouts
+                cursor.execute("PRAGMA synchronous=NORMAL")  # Balance safety and speed
+                cursor.execute("PRAGMA cache_size=-32000")   # 32MB cache
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                cursor.execute("PRAGMA journal_mode=TRUNCATE")  # More stable than DELETE
 
                 # Enable foreign key constraints
                 cursor.execute("PRAGMA foreign_keys = ON")
@@ -276,7 +331,7 @@ class DBAgent(BaseAgent):
             issued_date = now
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
 
@@ -321,9 +376,19 @@ class DBAgent(BaseAgent):
                 conn.commit()
                 logger.info(f"[DBAgent] Upserted invoice: {invoice_id} status={status} total_amount={total_amount}")
 
-                # Invalidate cache
+                # FIX #2: Pre-populate cache instead of just invalidating
+                # This prevents cache misses for agents querying immediately after write
                 if self._query_agent:
-                    self._query_agent.invalidate_invoice_cache(invoice_id)
+                    invoice_cache_data = {
+                        "invoice_id": invoice_id,
+                        "customer_id": customer_id,
+                        "total_amount": total_amount,
+                        "paid_amount": 0,
+                        "remaining_amount": total_amount,
+                        "due_date": due_date,
+                        "status": status,
+                    }
+                    self._query_agent.update_invoice_cache(invoice_id, invoice_cache_data)
                     if customer_id:
                         self._query_agent.invalidate_customer_cache(customer_id)
             finally:
@@ -343,7 +408,7 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
 
@@ -423,9 +488,11 @@ class DBAgent(BaseAgent):
 
                 conn.commit()
 
-                # Invalidate cache
+                # FIX #2: Pre-populate cache instead of just invalidating
                 if self._query_agent:
                     if invoice_id:
+                        # After payment, invoice state has changed (paid_amount, status)
+                        # Invalidate to force refresh on next read
                         self._query_agent.invalidate_invoice_cache(invoice_id)
                     if customer_id:
                         self._query_agent.invalidate_customer_cache(customer_id)
@@ -455,7 +522,7 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -496,7 +563,8 @@ class DBAgent(BaseAgent):
             logger.warning("customer.profile.updated event missing customer_id, skipping")
             return
 
-        # CRITICAL FIX #1: Map customer_name (from ScenarioGenerator) to name field
+        # CRITICAL FIX #7: Only update name if provided (don't overwrite with NULL)
+        # CustomerProfileAgent publishes events without customer_name - we should preserve existing names
         name = data.get("customer_name") or data.get("name")
         risk_score = data.get("risk_score", 0.0)
         credit_limit = data.get("credit_limit", 0.0)
@@ -504,27 +572,50 @@ class DBAgent(BaseAgent):
         now = datetime.utcnow().isoformat()
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
 
-                cursor.execute("""
-                    INSERT INTO customers (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(customer_id) DO UPDATE SET
-                        name=excluded.name,
-                        risk_score=excluded.risk_score,
-                        credit_limit=excluded.credit_limit,
-                        status=excluded.status,
-                        updated_at=excluded.updated_at
-                """, (customer_id, name, risk_score, credit_limit, status, now, now))
+                # FIX #7: Use conditional UPDATE for name field
+                # If name is provided, update it; if not, preserve existing value
+                if name:
+                    # Name is provided - update it
+                    cursor.execute("""
+                        INSERT INTO customers (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(customer_id) DO UPDATE SET
+                            name=excluded.name,
+                            risk_score=excluded.risk_score,
+                            credit_limit=excluded.credit_limit,
+                            status=excluded.status,
+                            updated_at=excluded.updated_at
+                    """, (customer_id, name, risk_score, credit_limit, status, now, now))
+                else:
+                    # Name not provided - preserve existing value with COALESCE
+                    cursor.execute("""
+                        INSERT INTO customers (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
+                        VALUES (?, NULL, ?, ?, ?, ?, ?)
+                        ON CONFLICT(customer_id) DO UPDATE SET
+                            name=COALESCE(excluded.name, customers.name),
+                            risk_score=excluded.risk_score,
+                            credit_limit=excluded.credit_limit,
+                            status=excluded.status,
+                            updated_at=excluded.updated_at
+                    """, (customer_id, risk_score, credit_limit, status, now, now))
 
                 conn.commit()
-                logger.info(f"[DBAgent] Updated customer profile: {customer_id} name={name} risk={risk_score} status={status} limit={credit_limit}")
+                log_name = name if name else "(preserved existing)"
+                logger.info(f"[DBAgent] Updated customer profile: {customer_id} name={log_name} risk={risk_score} status={status} limit={credit_limit}")
 
-                # Invalidate cache
+                # FIX #2: Pre-populate customer cache after successful DB write
                 if self._query_agent:
-                    self._query_agent.invalidate_customer_cache(customer_id)
+                    customer_cache_data = {
+                        "customer_id": customer_id,
+                        "credit_limit": credit_limit,
+                        "risk_score": risk_score,
+                        "updated_at": now,
+                    }
+                    self._query_agent.update_customer_cache(customer_id, customer_cache_data)
             finally:
                 conn.close()
 
@@ -547,7 +638,7 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
 
@@ -624,7 +715,7 @@ class DBAgent(BaseAgent):
         created_at = datetime.utcnow().isoformat()
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
+            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
             try:
                 cursor = conn.cursor()
 

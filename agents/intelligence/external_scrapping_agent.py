@@ -22,8 +22,10 @@ import requests
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote_plus
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 from datetime import datetime, timedelta, timezone
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
 
@@ -85,7 +87,7 @@ class ExternalScrapingAgent(BaseAgent):
     TOPIC_OUTPUT = "acis.metrics"
     GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 
-    def __init__(self, kafka_client: Any):
+    def __init__(self, kafka_client: Any, query_agent: Optional[Any] = None):
         super().__init__(
             agent_name="ExternalScrapingAgent",
             agent_version="3.0.0",
@@ -100,13 +102,29 @@ class ExternalScrapingAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="ExternalScrapingAgent",
         )
+        self._query_agent = query_agent
         self._cache = {}
+
+        # FIX: Configure session with connection pooling and retry logic for Google News
         self._session = requests.Session()
+
+        # Retry strategy: exponential backoff on connection failures
+        retry_strategy = Retry(
+            total=3,  # Max retries
+            backoff_factor=1,  # 1s, 2s, 4s wait between retries
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
+            allowed_methods=["GET"]  # Only retry GET requests
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=10)
+        self._session.mount("http://", adapter)
+        self._session.mount("https://", adapter)
+
+        # Headers with User-Agent for better compatibility
         self._session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0"
         })
 
-        logger.info("[ExternalScrapingAgent] Initialized with Google News RSS integration")
+        logger.info("[ExternalScrapingAgent] Initialized with Google News RSS integration (retries enabled)")
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -138,7 +156,9 @@ class ExternalScrapingAgent(BaseAgent):
 
             logger.info(f"[ExternalScrapingAgent] Fetching Google News for: {company_name}")
 
-            response = self._session.get(url, timeout=10)
+            # FIX: Increased timeout from 10 to 25 seconds (Google News can be slow)
+            # Retry strategy is configured in __init__ via HTTPAdapter
+            response = self._session.get(url, timeout=25)
 
             if response.status_code != 200:
                 logger.warning(f"[ExternalScrapingAgent] Google News returned {response.status_code}")
@@ -373,7 +393,21 @@ class ExternalScrapingAgent(BaseAgent):
             logger.warning("Missing customer_id in event")
             return
 
-        company_name = data.get("company_name") or customer_id
+        # Resolve company name with improved fallback chain
+        # Priority: payload -> QueryAgent lookup -> customer_id
+        company_name = data.get("company_name")
+        if not company_name and self._query_agent:
+            try:
+                customer = self._query_agent.get_customer(customer_id)
+                if customer:
+                    company_name = customer.get("name")
+                    if company_name:
+                        logger.debug(f"[ExternalScrapingAgent] Resolved company name from DB: {company_name}")
+            except Exception as e:
+                logger.debug(f"[ExternalScrapingAgent] Failed to lookup customer from QueryAgent: {e}")
+
+        # Final fallback: use customer_id
+        company_name = company_name or customer_id
         company_name = company_name.strip()[:100]
 
         # Check cache (TTL = 24h)
@@ -386,7 +420,6 @@ class ExternalScrapingAgent(BaseAgent):
                 news_data = cache_entry["news_data"]
                 logger.info(f"[ExternalScrapingAgent] Cache hit for {customer_id}")
             else:
-                time.sleep(1)
                 articles = self._fetch_news(company_name)
                 news_data = self._analyze_news(articles, company_name)
                 self._cache[cache_key] = {
@@ -395,7 +428,6 @@ class ExternalScrapingAgent(BaseAgent):
                 }
                 logger.info(f"[ExternalScrapingAgent] Cache expired, fetched new data for {customer_id}")
         else:
-            time.sleep(1)
             articles = self._fetch_news(company_name)
             news_data = self._analyze_news(articles, company_name)
             self._cache[cache_key] = {

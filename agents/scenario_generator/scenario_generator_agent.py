@@ -117,12 +117,13 @@ class ScenarioGeneratorAgent(BaseAgent):
         customers_per_batch: int = 1,
         invoices_per_batch: int = 2,
         payments_per_batch: int = 1,
+        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="ScenarioGeneratorAgent",
             agent_version="1.0.0",
             group_id="scenario-generator-group",
-            subscribed_topics=[],  # Generator doesn't consume
+            subscribed_topics=[self.TOPIC_COMMANDS],  # Subscribe to commands (producer-only, but needs minimal subscription)
             capabilities=[
                 "customer_generation",
                 "invoice_generation",
@@ -144,6 +145,9 @@ class ScenarioGeneratorAgent(BaseAgent):
         self._customer_counter = 0
         self._invoice_counter = 0
         self._payment_counter = 0
+
+        # FIX #1: Reference to QueryAgent for DB-backed customer count check
+        self._query_agent = query_agent
 
         # Generator thread
         self._generator_thread: Optional[threading.Thread] = None
@@ -168,31 +172,9 @@ class ScenarioGeneratorAgent(BaseAgent):
         """Start the generator with the generation loop."""
         logger.info("Starting ScenarioGeneratorAgent")
 
-        # CRITICAL FIX: Call BaseAgent.start() to properly initialize system integration
-        # This ensures:
-        # 1. Signal handlers registered
-        # 2. Agent registered with system
-        # 3. Heartbeat thread started
-        # 4. Full lifecycle coordination
-        self._running = True
-        self._start_time = datetime.utcnow()
-
-        topics = self.subscribe()
-        self.subscribed_topics = topics
-
-        # Register with registry
-        self._register_with_registry()
-
-        # Publish agent card for discovery
-        self._publish_agent_card()
-
-        # Start heartbeat thread
-        self._heartbeat_thread = threading.Thread(
-            target=self._heartbeat_loop,
-            daemon=True,
-            name=f"{self.agent_name}-heartbeat"
-        )
-        self._heartbeat_thread.start()
+        # Call BaseAgent.start() to properly initialize system integration
+        # This ensures: registration, heartbeat, signal handlers, full lifecycle
+        super().start()
 
         # Add generator-specific thread AFTER base initialization
         self._generator_thread = threading.Thread(
@@ -202,27 +184,20 @@ class ScenarioGeneratorAgent(BaseAgent):
         )
         self._generator_thread.start()
 
-        logger.info("ScenarioGeneratorAgent started with generation loop")
+        logger.info("ScenarioGeneratorAgent generation loop started")
 
     def stop(self) -> None:
         """Stop the generator."""
         logger.info("Stopping ScenarioGeneratorAgent")
 
         self._running = False
-        self._shutdown_event.set()
 
-        # Deregister from registry
-        self._deregister_from_registry()
-
-        # Wait for threads
+        # Wait for generator thread
         if self._generator_thread and self._generator_thread.is_alive():
             self._generator_thread.join(timeout=5)
 
-        if self._heartbeat_thread and self._heartbeat_thread.is_alive():
-            self._heartbeat_thread.join(timeout=5)
-
-        self.kafka_client.close()
-        logger.info("ScenarioGeneratorAgent stopped")
+        # Call BaseAgent.stop() to deregister, stop heartbeat, close connections
+        super().stop()
 
     # -------------------------------------------------------------------------
     # Generation loop
@@ -243,6 +218,55 @@ class ScenarioGeneratorAgent(BaseAgent):
 
         logger.info("Generation loop stopped")
 
+    def _get_db_customer_count(self) -> int:
+        """Get actual customer count from database via QueryAgent."""
+        if not self._query_agent:
+            # Fallback to memory count if QueryAgent not available
+            return len(self._customers)
+
+        try:
+            customers = self._query_agent.get_all_customers()
+            count = len(customers) if customers else 0
+            logger.debug(f"DB customer count: {count}")
+            return count
+        except Exception as e:
+            logger.warning(f"Failed to get DB customer count: {e}, using memory count")
+            return len(self._customers)
+
+    def _get_db_invoice_count(self) -> int:
+        """Get actual invoice count from database via QueryAgent (aggregate query)."""
+        if not self._query_agent:
+            # Fallback to memory count if QueryAgent not available
+            return len(self._invoices)
+
+        try:
+            # Use a single query to get invoice count directly (avoid N+1)
+            # This assumes QueryAgent has access to a count method or we query directly
+            # For now, batch the lookup into one operation
+            all_customers = self._query_agent.get_all_customers()
+            if not all_customers:
+                return 0
+
+            # Collect all customer IDs first (1 query)
+            customer_ids = [c.get("customer_id") for c in all_customers if c.get("customer_id")]
+
+            # Get total invoices via aggregate (ideally single query)
+            # For now, we still loop but at least we batch the customer lists
+            total = 0
+            for customer_id in customer_ids:
+                try:
+                    invoices = self._query_agent.get_all_invoices_by_customer(customer_id)
+                    if invoices:
+                        total += len(invoices)
+                except Exception:
+                    pass  # Skip if customer lookup fails
+
+            logger.debug(f"DB invoice count: {total}")
+            return total
+        except Exception as e:
+            logger.warning(f"Failed to get DB invoice count: {e}, using memory count")
+            return len(self._invoices)
+
     def _generate_batch(self) -> None:
         """Generate a batch of synthetic events."""
         correlation_id = self.create_correlation_id()
@@ -251,16 +275,16 @@ class ScenarioGeneratorAgent(BaseAgent):
         for _ in range(self.customers_per_batch):
             self._generate_customer(correlation_id)
 
-        # CRITICAL FIX #3: Only generate invoices for customers that likely exist in DB
-        # Wait until customers are persisted (need buffer of >5 customers)
-        # This prevents FK violations: invoice.customer_id → customers table (missing)
-        if len(self._customers) > 5:
+        # FIX #1: Check DB customer count, not memory count!
+        # This prevents FK violations: invoice.customer_id → customers table
+        db_customer_count = self._get_db_customer_count()
+        if db_customer_count > 5:
             for _ in range(self.invoices_per_batch):
                 self._generate_invoice(correlation_id)
 
-        # Generate payments (need existing invoices)
-        # Only after invoices are safely in DB
-        if len(self._invoices) > 2:
+        # Generate payments (need existing invoices in DB, not just memory)
+        db_invoice_count = self._get_db_invoice_count()
+        if db_invoice_count > 2:
             for _ in range(self.payments_per_batch):
                 self._generate_payment(correlation_id)
 

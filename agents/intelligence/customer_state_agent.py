@@ -558,19 +558,29 @@ class CustomerStateAgent(BaseAgent):
         self, customer_id: str, correlation_id: Optional[str] = None
     ) -> None:
         """Publish and persist metrics from cache."""
+        # Get cache data INSIDE lock, release before external calls
         with self._cache_lock:
             cache = self._metrics_cache.get(customer_id)
             if cache is None:
                 return
+            # Copy cache data to dict (release lock ASAP)
+            cache_data = dict(cache)
 
-            payload = {
-                "customer_id": customer_id,
-                "total_outstanding": cache["total_outstanding"],
-                "avg_delay": cache["avg_delay"],
-                "on_time_ratio": cache["on_time_ratio"],
-                "last_payment_date": cache.get("last_payment_date"),  # CRITICAL FIX #4
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+        # Call external QueryAgent OUTSIDE lock to avoid lock contention
+        customer = self._query_agent.get_customer(customer_id)
+        company_name = customer.get("name") if customer else None
+        credit_limit = customer.get("credit_limit") if customer else 0
+
+        payload = {
+            "customer_id": customer_id,
+            "company_name": company_name,
+            "credit_limit": credit_limit,
+            "total_outstanding": cache_data["total_outstanding"],
+            "avg_delay": cache_data["avg_delay"],
+            "on_time_ratio": cache_data["on_time_ratio"],
+            "last_payment_date": cache_data.get("last_payment_date"),  # CRITICAL FIX #4
+            "timestamp": datetime.utcnow().isoformat(),
+        }
 
         self.publish_event(
             topic=self.TOPIC_METRICS,
@@ -594,7 +604,8 @@ class CustomerStateAgent(BaseAgent):
             f"outstanding={payload['total_outstanding']:.2f}, "
             f"avg_delay={payload['avg_delay']:.2f}, "
             f"on_time_ratio={payload['on_time_ratio']:.2f}, "
-            f"last_payment={payload.get('last_payment_date')}"
+            f"last_payment={payload.get('last_payment_date')}, "
+            f"company_name={company_name}"
         )
 
     def _compute_customer_metrics(self, customer_id: str) -> Optional[Dict[str, float]]:

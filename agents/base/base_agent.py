@@ -43,7 +43,7 @@ class BaseAgent(ABC):
     HEALTH_TOPIC = "acis.agent.health"
     SYSTEM_TOPIC = "acis.system"
     REGISTRY_TOPIC = "acis.registry"
-    HEARTBEAT_INTERVAL_SECONDS = 2  # Send heartbeat every 2 seconds
+    HEARTBEAT_INTERVAL_SECONDS = 10  # FIX #4: Increased from 2 to 10 to reduce Kafka lag
     OVERLOAD_COOLDOWN_SECONDS = 60
     LAG_DETECTION_THRESHOLD = 5000
     LAG_DETECTION_COOLDOWN_SECONDS = 120
@@ -80,11 +80,6 @@ class BaseAgent(ABC):
         self.replica_index = replica_index
         self.replica_count = replica_count
         self.max_replicas = max_replicas
-
-        # ISSUE 1 FIX: Track actual Kafka group_id (with instance suffix) separately
-        # self.group_id stays as base for identity
-        # self._actual_group_id is what Kafka actually uses
-        self._actual_group_id: Optional[str] = None
 
         # State management
         self._running = False
@@ -177,11 +172,11 @@ class BaseAgent(ABC):
         topics = self.subscribe()
         self.subscribed_topics = topics
 
-        # ISSUE 1 FIX: Create unique group_id and store as _actual_group_id
-        # This tracks the ACTUAL Kafka group_id used (with instance suffix)
-        self._actual_group_id = f"{self.group_id}-{self.instance_id}"
-        self.kafka_client.subscribe(topics, self._actual_group_id)
-        logger.info(f"Subscribed to topics {topics} with actual group_id: {self._actual_group_id}")
+        # Use canonical group_id (shared across all replicas of this agent type)
+        # This enables Kafka to distribute partitions among replicas
+        # instance_id is tracked separately for identity/health, not for consumer group
+        self.kafka_client.subscribe(topics, self.group_id)
+        logger.info(f"Subscribed to topics {topics} with consumer group: {self.group_id} (instance: {self.instance_id})")
 
         # THEN register with registry
         self._register_with_registry()
@@ -643,8 +638,7 @@ class BaseAgent(ABC):
             "replica_index": self.replica_index,
             "details": {
                 "subscribed_topics": self.subscribed_topics,
-                # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
-                "group_id": self._actual_group_id or self.group_id,
+                "group_id": self.group_id,
                 "version": self.agent_version,
             }
         }
@@ -692,8 +686,7 @@ class BaseAgent(ABC):
             # Kafka context
             "topic": self.subscribed_topics[0] if self.subscribed_topics else None,
             "partition": None,
-            # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
-            "consumer_group": self._actual_group_id or self.group_id,
+            "consumer_group": self.group_id,
 
             # Replica info
             "replica_count": self.replica_count,
@@ -783,8 +776,7 @@ class BaseAgent(ABC):
 
                 # Kafka context
                 "topic": self.subscribed_topics[0] if self.subscribed_topics else None,
-                # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
-                "consumer_group": self._actual_group_id or self.group_id,
+                "consumer_group": self.group_id,
 
                 # Replica info
                 "replica_count": self.replica_count,
@@ -839,8 +831,7 @@ class BaseAgent(ABC):
             "partition": partition,
             "lag": lag,
             "threshold": self.LAG_DETECTION_THRESHOLD,
-            # ISSUE 1 FIX: Use _actual_group_id for Kafka group tracking
-            "consumer_group": self._actual_group_id or self.group_id,
+            "consumer_group": self.group_id,
             "detected_at": now.isoformat(),
             "replica_count": self.replica_count,
             "max_replicas": self.max_replicas,

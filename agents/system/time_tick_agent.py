@@ -62,22 +62,27 @@ class TimeTickAgent(BaseAgent):
         pass
 
     def start(self) -> None:
-        """Start the time tick generator loop."""
-        logger.info("[TimeTickAgent] Starting time tick generator")
-        self._running = True
-        self._tick_thread = threading.Thread(target=self._tick_loop, daemon=True)
-        self._tick_thread.start()
-        logger.info(
-            f"[TimeTickAgent] Time tick thread started (interval: {self.TICK_INTERVAL_SECONDS}s)"
+        """Start the time tick agent with full lifecycle."""
+        # Register, publish card, start heartbeat (from BaseAgent)
+        super().start()
+
+        # Then start the tick generator loop
+        logger.info("[TimeTickAgent] Starting time tick generator loop")
+        self._tick_thread = threading.Thread(
+            target=self._tick_loop,
+            daemon=True,
+            name="TimeTickAgent-tick"
         )
+        self._tick_thread.start()
 
     def stop(self) -> None:
-        """Stop the time tick generator."""
-        logger.info("[TimeTickAgent] Stopping time tick generator")
+        """Stop the time tick agent gracefully."""
+        logger.info("[TimeTickAgent] Stopping time tick agent")
         self._running = False
         if self._tick_thread:
             self._tick_thread.join(timeout=2)
-        logger.info("[TimeTickAgent] Time tick generator stopped")
+        # Deregister, stop heartbeat (from BaseAgent)
+        super().stop()
 
     def _tick_loop(self) -> None:
         """Main loop: publish time ticks every 5 seconds."""

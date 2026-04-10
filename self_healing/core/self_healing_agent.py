@@ -459,7 +459,7 @@ class SelfHealingAgent(BaseAgent):
             return
 
         if snapshot.consumer_lag >= self.CRITICAL_LAG_THRESHOLD:
-            replicas, max_replicas = self._get_replica_info(snapshot)
+            replicas, max_replicas = self._get_replica_info(snapshot.agent_name)
             if replicas < max_replicas:
                 self._emit_recovery_triggered(snapshot, "scale", "CRITICAL_LAG")
                 if self._can_scale(snapshot, now):
@@ -477,7 +477,7 @@ class SelfHealingAgent(BaseAgent):
             return
 
         if snapshot.consumer_lag >= self.LAG_SCALE_THRESHOLD or trigger == "lag":
-            replicas, max_replicas = self._get_replica_info(snapshot)
+            replicas, max_replicas = self._get_replica_info(snapshot.agent_name)
             if replicas < max_replicas:
                 self._emit_recovery_triggered(snapshot, "scale", "LAG_DETECTED")
                 if self._can_scale(snapshot, now):
@@ -768,7 +768,7 @@ class SelfHealingAgent(BaseAgent):
         replica_count, max_replicas = self._get_replica_info(state.agent_name)
 
         if max_replicas is not None and replica_count >= max_replicas:
-            self.logger.info(
+            logger.info(
                 f"[SelfHealing] max replicas reached for {state.agent_name}"
             )
             return
