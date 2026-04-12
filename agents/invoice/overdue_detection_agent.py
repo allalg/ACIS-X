@@ -128,6 +128,8 @@ class OverdueDetectionAgent(BaseAgent):
                     self._emit_overdue(
                         invoice_id=invoice_id,
                         customer_id=customer_id,
+                        total_amount=invoice.get("total_amount"),
+                        remaining_amount=invoice.get("remaining_amount"),
                         due_date=due_date,
                         current_time=current_time,
                         correlation_id=event.correlation_id,
@@ -140,6 +142,8 @@ class OverdueDetectionAgent(BaseAgent):
         self,
         invoice_id: str,
         customer_id: str,
+        total_amount: Optional[Any],
+        remaining_amount: Optional[Any],
         due_date: datetime,
         current_time: datetime,
         correlation_id: Optional[str] = None,
@@ -157,6 +161,8 @@ class OverdueDetectionAgent(BaseAgent):
         overdue_payload = {
             "invoice_id": invoice_id,
             "customer_id": customer_id,
+            "total_amount": max(float(total_amount or 0.0), 0.0),
+            "remaining_amount": max(float(remaining_amount or total_amount or 0.0), 0.0),
             "due_date": due_date.isoformat(),
             "overdue_days": overdue_days,
             "timestamp": current_time.isoformat(),

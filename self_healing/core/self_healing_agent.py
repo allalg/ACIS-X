@@ -145,6 +145,7 @@ class SelfHealingAgent(BaseAgent):
     SCORE_DEGRADED = 0.4   # restart
     SCORE_SCALE = HEALTH_SCORE_THRESHOLD  # scale (configurable, default 0.8)
     SCORE_CRITICAL = 0.9   # spawn
+    IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     # Agent capability mapping for registry-based discovery
     AGENT_CAPABILITY_MAP = {
@@ -211,6 +212,9 @@ class SelfHealingAgent(BaseAgent):
     def process_event(self, event: Event) -> None:
         """Consume monitoring and registry events and emit recovery decisions."""
         if event.event_source == self.agent_name:
+            return
+        if self._start_time and event.event_time < self._start_time:
+            logger.debug("Ignoring stale event %s from %s", event.event_type, event.event_time)
             return
 
         event_type = event.event_type
@@ -759,7 +763,7 @@ class SelfHealingAgent(BaseAgent):
                 current.last_scale_requested = datetime.utcnow()
 
     def _publish_spawn_and_placement(self, state: AgentRecoveryState, reason: str, decision_rule: str) -> None:
-        """Publish agent.spawn.requested and placement.requested when capacity recovery is needed."""
+        """Publish a single spawn request and let RuntimeManager request placement."""
         now = datetime.utcnow()
         if not self._can_spawn(state, now):
             return
@@ -796,6 +800,8 @@ class SelfHealingAgent(BaseAgent):
             host=None,
             config=None,
             priority="high",
+            preferred_hosts=placement_hints.get("preferred_hosts"),
+            excluded_hosts=placement_hints.get("excluded_hosts"),
             source_agent_id=state.agent_id,
             source_instance_id=state.instance_id,
             replica_count=replica_count,
@@ -806,38 +812,10 @@ class SelfHealingAgent(BaseAgent):
         )
         self.kafka_client.publish(self.SYSTEM_TOPIC, spawn_event)
 
-        if self._can_request_placement(state, now):
-            placement_payload = {
-                "agent_type": agent_type,
-                "agent_name": state.agent_name,
-                "instance_id": None,
-                "requirements": {
-                    "reason": reason,
-                    "source_agent_id": state.agent_id,
-                },
-                "preferred_hosts": placement_hints.get("preferred_hosts"),
-                "excluded_hosts": placement_hints.get("excluded_hosts"),
-                "requester": self.agent_name,
-                "priority": "high",
-                "decision_rule": decision_rule,
-                "decision_score": 0.9,
-                "replica_count": replica_count,
-                "max_replicas": max_replicas,
-                "placement_hints": placement_hints,
-            }
-            self.publish_event(
-                topic=self.SYSTEM_TOPIC,
-                event_type=SystemEventType.PLACEMENT_REQUESTED.value,
-                entity_id=state.agent_name,
-                payload=placement_payload,
-                correlation_id=self.create_correlation_id(),
-            )
-
         with self._state_lock:
             current = self._states.get(state.agent_id)
             if current is not None:
                 current.last_spawn_requested = now
-                current.last_placement_requested = now
 
     def _maybe_publish_fallback(self, state: AgentRecoveryState, decision_rule: str) -> None:
         """Publish fallback.agent.selected when a fallback is configured."""

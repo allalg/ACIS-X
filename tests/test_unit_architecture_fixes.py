@@ -1,6 +1,7 @@
 """Unit tests for Phase 1 & 2 architecture fixes and data contracts."""
 
 import pytest
+import sqlite3
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 from schemas.event_schema import Event
@@ -159,6 +160,38 @@ def test_producer_only_agent_lifecycle():
 
 
 @pytest.mark.unit
+def test_base_agent_start_skips_kafka_subscription_for_producer_only_agent(mock_kafka_client):
+    """Producer-only agents should start cleanly without subscribing to Kafka."""
+    from agents.base.base_agent import BaseAgent
+
+    class ProducerOnlyAgent(BaseAgent):
+        def __init__(self, kafka_client):
+            super().__init__(
+                agent_name="ProducerOnlyAgent",
+                agent_version="1.0.0",
+                group_id="producer-only-group",
+                subscribed_topics=[],
+                capabilities=["producer_only"],
+                kafka_client=kafka_client,
+            )
+
+        def subscribe(self):
+            return []
+
+        def process_event(self, event):
+            raise AssertionError("producer-only agent should not consume events")
+
+    agent = ProducerOnlyAgent(mock_kafka_client)
+
+    try:
+        agent.start()
+        assert agent._consumer_thread is None, "Producer-only agents should not start a consumer thread"
+        assert mock_kafka_client._consumer.subscribe.call_count == 0, "Kafka subscribe() should not be called"
+    finally:
+        agent.stop()
+
+
+@pytest.mark.unit
 def test_lazy_kafka_producer_init():
     """
     Test Phase 2: Lazy producer initialization.
@@ -175,6 +208,261 @@ def test_lazy_kafka_producer_init():
 
     # Producer would be initialized on first publish() call
     # (We don't actually call publish in this test to avoid connecting to Kafka)
+
+
+@pytest.mark.unit
+def test_runtime_manager_spawn_request_requests_single_placement_with_incremented_replica_count(mock_kafka_client):
+    """RuntimeManager should convert current replica count into the next placement target."""
+    from runtime.runtime_manager import RuntimeManager
+
+    manager = RuntimeManager(kafka_client=mock_kafka_client)
+    event = Event(
+        event_id="evt_spawn_001",
+        event_type="agent.spawn.requested",
+        event_source="SelfHealingAgent",
+        event_time=datetime.utcnow(),
+        entity_id="ScenarioGeneratorAgent",
+        payload={
+            "agent_name": "ScenarioGeneratorAgent",
+            "agent_type": "ScenarioGeneratorAgent",
+            "replica_count": 2,
+            "preferred_hosts": ["host-a"],
+            "decision_rule": "TEST_RULE",
+            "decision_score": 0.9,
+        },
+    )
+
+    manager._handle_spawn_requested(event)
+
+    assert len(mock_kafka_client.published_events) == 1
+    published = mock_kafka_client.published_events[0]["event"]
+    assert published["event_type"] == "placement.requested"
+    assert published["payload"]["replica_index"] == 2
+    assert published["payload"]["replica_count"] == 3
+    assert published["payload"]["preferred_hosts"] == ["host-a"]
+    assert published["payload"]["requester"] == "RuntimeManager"
+
+
+@pytest.mark.unit
+def test_placement_engine_preserves_restart_context(mock_kafka_client):
+    """PlacementEngine should preserve restart metadata for RuntimeManager phase 2."""
+    from runtime.placement_engine import PlacementEngine
+
+    engine = PlacementEngine(kafka_client=mock_kafka_client)
+    event = Event(
+        event_id="evt_place_001",
+        event_type="placement.requested",
+        event_source="RuntimeManager",
+        event_time=datetime.utcnow(),
+        entity_id="RuntimeManager",
+        payload={
+            "agent_name": "RuntimeManager",
+            "agent_type": "RuntimeManager",
+            "agent_id": "agent_runtime_001",
+            "instance_id": "instance_runtime_001",
+            "_operation": "restart",
+        },
+    )
+
+    engine._handle_placement_requested(event)
+
+    assert len(mock_kafka_client.published_events) == 1
+    payload = mock_kafka_client.published_events[0]["event"]["payload"]
+    assert payload["agent_id"] == "agent_runtime_001"
+    assert payload["_operation"] == "restart"
+    assert payload["operation"] == "restart"
+
+
+@pytest.mark.unit
+def test_self_healing_emits_single_spawn_request_with_placement_hints(mock_kafka_client):
+    """SelfHealing should publish one spawn request and let RuntimeManager request placement."""
+    from self_healing.core.self_healing_agent import SelfHealingAgent, AgentRecoveryState
+
+    agent = SelfHealingAgent(kafka_client=mock_kafka_client)
+    state = AgentRecoveryState(
+        agent_id="agent_runtime_001",
+        agent_name="RuntimeManager",
+        agent_type="RuntimeManager",
+        instance_id="instance_runtime_001",
+    )
+
+    agent._publish_spawn_and_placement(state, "test spawn", "TEST_RULE")
+
+    event_types = [item["event"]["event_type"] for item in mock_kafka_client.published_events]
+    assert event_types == ["agent.spawn.requested"]
+    payload = mock_kafka_client.published_events[0]["event"]["payload"]
+    assert payload["preferred_hosts"] == []
+    assert payload["excluded_hosts"] == []
+
+
+@pytest.mark.unit
+def test_db_agent_preserves_existing_invoice_total_when_status_update_omits_amount(
+    mock_kafka_client,
+    temp_db_path,
+):
+    """Invoice status updates should not overwrite a known total with NULL."""
+    from agents.storage.db_agent import DBAgent
+
+    agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+    now = datetime.utcnow().isoformat()
+
+    created = Event(
+        event_id="evt_invoice_created",
+        event_type="invoice.created",
+        event_source="test",
+        event_time=datetime.utcnow(),
+        entity_id="inv_001",
+        payload={
+            "invoice_id": "inv_001",
+            "customer_id": "cust_001",
+            "amount": 125.5,
+            "issued_date": now,
+            "due_date": now,
+            "status": "pending",
+        },
+    )
+    overdue = Event(
+        event_id="evt_invoice_overdue",
+        event_type="invoice.overdue",
+        event_source="test",
+        event_time=datetime.utcnow(),
+        entity_id="inv_001",
+        payload={
+            "invoice_id": "inv_001",
+            "customer_id": "cust_001",
+            "due_date": now,
+            "status": "overdue",
+        },
+    )
+
+    agent._handle_invoice_upsert(created)
+    agent._handle_invoice_upsert(overdue)
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT total_amount, status FROM invoices WHERE invoice_id = ?",
+        ("inv_001",),
+    )
+    row = cursor.fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == pytest.approx(125.5)
+    assert row[1] == "overdue"
+
+
+@pytest.mark.unit
+def test_memory_agent_recompute_state_tolerates_null_invoice_amounts(mock_kafka_client):
+    """MemoryAgent should treat legacy NULL invoice amounts as zero during recompute."""
+    from agents.storage.memory_agent import MemoryAgent
+
+    query_agent = MagicMock()
+    query_agent.get_invoices_by_customer.return_value = [
+        {"remaining_amount": None, "total_amount": None},
+        {"remaining_amount": -10.0, "total_amount": 90.0},
+        {"remaining_amount": 25.0, "total_amount": 25.0},
+    ]
+    query_agent.get_overdue_invoices.return_value = [{"invoice_id": "inv_001"}]
+
+    agent = MemoryAgent(kafka_client=mock_kafka_client, query_agent=query_agent)
+    state = agent._recompute_state("cust_001")
+
+    assert state["total_outstanding"] == pytest.approx(25.0)
+    assert state["overdue_count"] == 1
+
+
+@pytest.mark.unit
+def test_customer_state_metrics_tolerate_null_invoice_amounts(mock_kafka_client):
+    """CustomerStateAgent should not fail when a legacy invoice row has NULL totals."""
+    from agents.intelligence.customer_state_agent import CustomerStateAgent
+
+    query_agent = MagicMock()
+    query_agent.get_all_invoices_by_customer.return_value = [
+        {
+            "invoice_id": "inv_001",
+            "remaining_amount": None,
+            "amount": None,
+            "status": "overdue",
+        },
+        {
+            "invoice_id": "inv_002",
+            "remaining_amount": -5.0,
+            "amount": 40.0,
+            "status": "pending",
+        },
+        {
+            "invoice_id": "inv_003",
+            "remaining_amount": 40.0,
+            "amount": 40.0,
+            "status": "pending",
+        },
+    ]
+
+    agent = CustomerStateAgent(kafka_client=mock_kafka_client, query_agent=query_agent)
+
+    with patch.object(agent, "_get_payments_for_invoices", return_value=[]):
+        metrics = agent._compute_customer_metrics("cust_001")
+
+    assert metrics is not None
+    assert metrics["total_outstanding"] == pytest.approx(40.0)
+    assert metrics["avg_delay"] == 0.0
+    assert metrics["on_time_ratio"] == 0.0
+
+
+@pytest.mark.unit
+def test_query_agent_clamps_negative_remaining_amounts(mock_kafka_client, temp_db_path):
+    """QueryAgent should never expose a negative remaining amount for overpaid invoices."""
+    from agents.storage.db_agent import DBAgent
+    from agents.storage.query_agent import QueryAgent
+
+    DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    cursor.execute(
+        """
+        INSERT INTO customers (customer_id, created_at, updated_at)
+        VALUES (?, ?, ?)
+        """,
+        ("cust_001", now, now),
+    )
+    cursor.execute(
+        """
+        INSERT INTO invoices (
+            invoice_id,
+            customer_id,
+            total_amount,
+            paid_amount,
+            issued_date,
+            due_date,
+            status,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "inv_overpaid",
+            "cust_001",
+            100.0,
+            125.0,
+            now,
+            now,
+            "pending",
+            now,
+            now,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    query_agent = QueryAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+    invoice = query_agent.get_invoice("inv_overpaid")
+
+    assert invoice is not None
+    assert invoice["remaining_amount"] == 0.0
 
 
 @pytest.mark.unit

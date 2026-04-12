@@ -76,6 +76,8 @@ class ExternalDataAgent(BaseAgent):
         })
         # FIX 8: In-memory throttle tracking (per company_id)
         self._last_fetch_time: Dict[str, float] = {}
+        # FIX 9: Track published external_risk values to prevent duplicate events
+        self._last_published_risk: Dict[str, float] = {}
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -574,6 +576,15 @@ class ExternalDataAgent(BaseAgent):
             "generated_at": datetime.utcnow().isoformat()
         }
 
+        # FIX 9: DEDUPLICATION - Skip publishing if external_risk unchanged
+        last_risk = self._last_published_risk.get(customer_id)
+        if last_risk is not None and last_risk == round(external_risk, 4):
+            logger.debug(
+                f"[ExternalDataAgent] Skipping publish for {customer_id}: "
+                f"external_risk={external_risk:.4f} (unchanged)"
+            )
+            return
+
         # Step 6: Publish event
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
@@ -582,6 +593,9 @@ class ExternalDataAgent(BaseAgent):
             payload=external_payload,
             correlation_id=event.correlation_id,
         )
+
+        # FIX 9: Track published risk to prevent duplicate events
+        self._last_published_risk[customer_id] = round(external_risk, 4)
 
         logger.info(
             f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk:.4f}"

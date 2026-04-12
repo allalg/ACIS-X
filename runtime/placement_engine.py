@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class PlacementEngine(BaseAgent):
     """Simulated placement engine that decides placement but does not spawn agents."""
+    IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     def __init__(
         self,
@@ -61,6 +62,9 @@ class PlacementEngine(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Handle placement.requested events only."""
+        if self._start_time and event.event_time < self._start_time:
+            logger.debug("[PlacementEngine] Ignoring stale event %s from %s", event.event_type, event.event_time)
+            return
         if event.event_type == SystemEventType.PLACEMENT_REQUESTED.value:
             self._handle_placement_requested(event)
 
@@ -69,6 +73,9 @@ class PlacementEngine(BaseAgent):
         payload = event.payload
         agent_name = payload.get("agent_name")
         agent_type = payload.get("agent_type")
+        if not agent_name:
+            logger.warning("[PlacementEngine] placement.requested missing agent_name: %s", payload)
+            return
         instance_id = payload.get("instance_id") or f"instance_{agent_name.lower()}_{datetime.utcnow().strftime('%H%M%S')}"
         preferred_hosts = payload.get("preferred_hosts")
         excluded_hosts = payload.get("excluded_hosts")
@@ -90,15 +97,21 @@ class PlacementEngine(BaseAgent):
         if host is None:
             host = self._select_host(preferred_hosts or [], set(excluded_hosts or []))
 
-        replica_index = self._next_replica_index(agent_name)
+        replica_index = payload.get("replica_index")
+        if replica_index is None and payload.get("replica_count") is not None:
+            replica_index = max(int(payload["replica_count"]) - 1, 0)
+        if replica_index is None:
+            replica_index = self._next_replica_index(agent_name)
         group_id = self._derive_group_id(agent_name, payload)
 
         placement_payload = {
+            "agent_id": payload.get("agent_id"),
             "agent_type": agent_type,
             "agent_name": agent_name,
             "instance_id": instance_id,
             "host": host,
             "port": None,
+            "operation": payload.get("_operation", "spawn"),
             "placement_decision": (
                 f"Placed on {host} with replica_index={replica_index} "
                 f"and group_id={group_id}"
@@ -110,7 +123,10 @@ class PlacementEngine(BaseAgent):
             "decision_rule": decision_rule,
             "decision_score": decision_score,
             "replica_index": replica_index,
+            "replica_count": payload.get("replica_count"),
+            "max_replicas": payload.get("max_replicas"),
             "group_id": group_id,
+            "_operation": payload.get("_operation", "spawn"),
         }
 
         self.publish_event(

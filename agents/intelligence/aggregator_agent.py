@@ -63,8 +63,17 @@ class AggregatorAgent(BaseAgent):
         self._cache: Dict[str, Dict[str, Any]] = {}
         # FIX 7: Track last cleanup time
         self._last_cleanup = time.time()
+        # FIX 9: Track published risk values to prevent duplicate events
+        self._last_published: Dict[str, Dict[str, float]] = {}
+        # FIX 12: QueryAgent reference for company name resolution
+        self._query_agent = None
 
         logger.info("[AggregatorAgent] Initialized - aggregating financial + litigation risk")
+
+    def set_query_agent(self, query_agent: Any) -> None:
+        """Set reference to QueryAgent for company name resolution."""
+        self._query_agent = query_agent
+        logger.info("QueryAgent reference set for company name resolution")
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -239,6 +248,20 @@ class AggregatorAgent(BaseAgent):
         financial_risk = financial_data.get("risk", 0.0)
         litigation_risk = litigation_data.get("risk", 0.0)
 
+        # FIX 9: DEDUPLICATION - Only publish if risk values actually changed
+        # Compare against last published values to prevent duplicate events
+        last_published = self._last_published.get(customer_id, {})
+        last_fin_risk = last_published.get("financial_risk", None)
+        last_lit_risk = last_published.get("litigation_risk", None)
+
+        # If both financial and litigation risks haven't changed, skip publishing
+        if last_fin_risk == financial_risk and last_lit_risk == litigation_risk:
+            logger.debug(
+                f"[AggregatorAgent] Skipping publish for {customer_id}: "
+                f"financial={financial_risk:.4f}, litigation={litigation_risk:.4f} (unchanged)"
+            )
+            return
+
         # Compute combined risk
         combined_risk = (self.FINANCIAL_WEIGHT * financial_risk) + (self.LITIGATION_WEIGHT * litigation_risk)
         combined_risk = max(0.0, min(1.0, combined_risk))  # Clamp to [0, 1]
@@ -252,7 +275,26 @@ class AggregatorAgent(BaseAgent):
             severity = "low"
 
         # Get company name (prefer financial source)
-        company_name = financial_data.get("company_name") or litigation_data.get("company_name") or customer_id
+        company_name = financial_data.get("company_name") or litigation_data.get("company_name")
+
+        # If still missing, try to fetch from database
+        if not company_name or company_name == customer_id:
+            try:
+                # Attempt to get real company name from database via QueryAgent
+                if hasattr(self, '_query_agent') and self._query_agent:
+                    customer = self._query_agent.get_customer(customer_id)
+                    if customer and customer.get("name"):
+                        company_name = customer.get("name")
+                        logger.debug(f"[AggregatorAgent] Resolved company_name from DB for {customer_id}: {company_name}")
+            except Exception as e:
+                logger.debug(f"[AggregatorAgent] Failed to fetch company_name from DB: {e}")
+
+        # Final validation: never store customer_id as company_name
+        if not company_name or company_name == customer_id:
+            logger.warning(f"[AggregatorAgent] No valid company_name found for {customer_id}, cannot aggregate without real name")
+            return
+
+        company_name = company_name.strip()
 
         # Compute confidence (average of available confidences)
         fin_confidence = financial_data.get("payload", {}).get("confidence", 0.8)
@@ -284,6 +326,12 @@ class AggregatorAgent(BaseAgent):
             payload=payload,
             correlation_id=correlation_id,
         )
+
+        # FIX 9: Track published values to prevent duplicate events on next cycle
+        self._last_published[customer_id] = {
+            "financial_risk": financial_risk,
+            "litigation_risk": litigation_risk,
+        }
 
         logger.info(
             f"[AggregatorAgent] Published risk.profile.updated: customer={customer_id}, "

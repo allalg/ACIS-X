@@ -49,11 +49,32 @@ from runtime.topic_manager import TopicAdmin
 from self_healing.core.self_healing_agent import SelfHealingAgent
 
 
+def _configure_console_streams() -> None:
+    """
+    Make console logging resilient on Windows terminals with legacy encodings.
+
+    We keep the existing console encoding, but switch error handling away from
+    "strict" so one non-ASCII log line cannot crash the runtime.
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except Exception:
+            # Some wrapped streams do not support reconfigure(); keep going.
+            pass
+
+
+_configure_console_streams()
+
 logging.basicConfig(
     level=os.getenv("ACIS_LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler("acis.log", mode="w"),
+        logging.FileHandler("acis.log", mode="w", encoding="utf-8"),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -74,11 +95,11 @@ def _kafka_backend() -> str:
 
 def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> None:
     """
-    Reset consumer group offsets to "earliest" on first run only.
+    Delete committed consumer groups on first run only.
 
-    This ensures all agents consume messages from the beginning of topics,
-    preventing the "latest" offset trap where new consumer groups miss
-    historical messages.
+    This forces Kafka to recreate offsets using the current client defaults on
+    the next subscribe call. It is used to keep "fresh start" behavior honest
+    instead of relying on a marker plus a comment that never changed offsets.
 
     Marker file: .acis_consumer_groups_initialized
     """
@@ -88,7 +109,7 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
         logger.info("[ConsumerGroup] Marker file exists - skipping offset reset (not first run)")
         return
 
-    logger.info("[ConsumerGroup] First run detected - resetting consumer group offsets to 'earliest'")
+    logger.info("[ConsumerGroup] First run detected - deleting committed consumer groups")
 
     try:
         admin = KafkaAdminClient(
@@ -96,37 +117,30 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
             client_id="acis-consumer-group-init"
         )
 
-        # List of critical consumer groups to reset
+        # Stable consumer groups that should be recreated on a fresh bootstrap.
         consumer_groups_to_reset = [
-            "db_agent_group_id",
-            "query_agent_group_id",
-            "memory_agent_group_id",
-            "overdue_detection_group_id",
-            "customer_state_agent_group_id",
-            "collections_agent_group_id",
-            "external_data_agent_group_id",
-            "external_scraping_agent_group_id",
-            "risk_scoring_agent_group_id",
-            "customer_profile_agent_group_id",
-            "aggregator_agent_group_id",
-            "payment_prediction_agent_group_id",
-            "monitoring_agent_group_id",
-            "self_healing_agent_group_id",
+            "db-agent-group",
+            "memory-agent-group",
+            "customer-state-group",
+            "overdue-detection-group",
+            "collections-group",
+            "external-data-group",
+            "litigation-agent-group",
+            "risk-scoring-group",
+            "customer-profile-group",
+            "aggregator-agent-group",
+            "payment-prediction-group",
         ]
 
         reset_count = 0
         for group_id in consumer_groups_to_reset:
             try:
-                # Get current group info
-                group_info = admin.describe_consumer_groups([group_id])
-                if group_info["groups"] and len(group_info["groups"]) > 0:
-                    logger.info(f"[ConsumerGroup] Resetting offsets for group: {group_id}")
-                    # Note: Direct offset reset via admin API varies by backend
-                    # The actual reset will happen when consumer group subscribes
-                    reset_count += 1
+                admin.delete_consumer_groups([group_id])
+                logger.info("[ConsumerGroup] Deleted consumer group: %s", group_id)
+                reset_count += 1
             except Exception as e:
-                # Group may not exist yet - this is OK
-                logger.debug(f"[ConsumerGroup] Group {group_id} not found (expected on first run): {str(e)[:50]}")
+                # Group may not exist yet - this is OK.
+                logger.debug("[ConsumerGroup] Skipped group %s: %s", group_id, str(e)[:80])
 
         admin.close()
 
@@ -139,16 +153,50 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
         )
 
         logger.info(f"[ConsumerGroup] Marker file created: {marker_file}")
-        logger.info("[ConsumerGroup] Offset reset initialization complete")
-        logger.info("[ConsumerGroup] Note: auto_offset_reset='earliest' in agent configs will apply from offset 0")
+        logger.info("[ConsumerGroup] Consumer group cleanup complete (%s groups deleted)", reset_count)
 
     except Exception as e:
-        logger.warning(f"[ConsumerGroup] Failed to initialize consumer groups: {e}")
-        logger.warning("[ConsumerGroup] System will continue - agents will use auto_offset_reset setting")
+        logger.warning(f"[ConsumerGroup] Failed to clean consumer groups: {e}")
+        logger.warning("[ConsumerGroup] System will continue with existing committed offsets")
 
 
-def _build_kafka_client() -> KafkaClient:
-    config = KafkaConfig(bootstrap_servers=_bootstrap_servers())
+def _reset_control_plane_consumer_groups(bootstrap_servers: List[str]) -> None:
+    """Always recreate control-plane consumer groups so orchestration starts clean."""
+    control_plane_groups = [
+        "runtime-manager-group",
+        "placement-engine-group",
+        "monitoring-group",
+        "self-healing-group",
+        "acis-registry-service",
+    ]
+
+    try:
+        admin = KafkaAdminClient(
+            bootstrap_servers=bootstrap_servers,
+            client_id="acis-control-plane-reset"
+        )
+        try:
+            deleted = 0
+            for group_id in control_plane_groups:
+                try:
+                    admin.delete_consumer_groups([group_id])
+                    logger.info("[ConsumerGroup] Reset control-plane group: %s", group_id)
+                    deleted += 1
+                except Exception as exc:
+                    logger.debug("[ConsumerGroup] Control-plane group %s unchanged: %s", group_id, str(exc)[:80])
+
+            logger.info("[ConsumerGroup] Control-plane reset complete (%s groups deleted)", deleted)
+        finally:
+            admin.close()
+    except Exception as exc:
+        logger.warning("[ConsumerGroup] Failed to reset control-plane groups: %s", exc)
+
+
+def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
+    config = KafkaConfig(
+        bootstrap_servers=_bootstrap_servers(),
+        consumer_auto_offset_reset=auto_offset_reset,
+    )
     return KafkaClient(config=config, backend=_kafka_backend())
 
 
@@ -192,7 +240,7 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
     # - Shared producer = 1 connection
     # - Separate consumers per agent = isolated subscriptions and group IDs
 
-    shared_kafka_client = _build_kafka_client()
+    shared_kafka_client = _build_kafka_client(auto_offset_reset="latest")
     logger.info("[Bootstrap] Created shared Kafka producer client")
 
     registry_service = RegistryService(kafka_client=shared_kafka_client)
@@ -225,11 +273,21 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
     db_agent = DBAgent(kafka_client=_build_kafka_client())
     db_agent.set_query_agent(query_agent)
 
+    # Create AggregatorAgent and link with QueryAgent for company name resolution (FIX #12)
+    aggregator_agent = AggregatorAgent(kafka_client=_build_kafka_client())
+    aggregator_agent.set_query_agent(query_agent)
+
     agents: List[Any] = [
-        MonitoringAgent(kafka_client=_build_kafka_client()),
-        SelfHealingAgent(kafka_client=_build_kafka_client()),
-        RuntimeManager(kafka_client=_build_kafka_client()),
-        PlacementEngine(kafka_client=_build_kafka_client()),
+        MonitoringAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
+        SelfHealingAgent(
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
+            registry=registry_service,
+        ),
+        RuntimeManager(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
+        PlacementEngine(
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
+            registry=registry_service,
+        ),
         TimeTickAgent(kafka_client=_build_kafka_client()),  # Time infrastructure - required for overdue detection
         ScenarioGeneratorAgent(
             kafka_client=_build_kafka_client(),
@@ -248,7 +306,7 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
             kafka_client=_build_kafka_client(),
             query_agent=query_agent
         ),
-        AggregatorAgent(kafka_client=_build_kafka_client()),
+        aggregator_agent,
         PaymentPredictionAgent(
             kafka_client=_build_kafka_client(),
             query_agent=query_agent
@@ -269,6 +327,7 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
 def main() -> None:
     shutdown_event = threading.Event()
     _create_topics()
+    _reset_control_plane_consumer_groups(_bootstrap_servers())
 
     # FIX 8: Reset consumer group offsets on first run to prevent skipping historical messages
     _reset_consumer_group_offsets_on_first_run(_bootstrap_servers())

@@ -346,7 +346,10 @@ class CustomerProfileAgent(BaseAgent):
         # FIX 3: Blend with aggregated risk if available
         if aggregated is not None:
             blended_risk = (0.7 * aggregated) + (0.3 * base_risk)
-            logger.debug(f"[RiskBlending] aggregated={aggregated:.3f} + computed={base_risk:.3f} → blended={blended_risk:.3f}")
+            logger.debug(
+                f"[RiskBlending] aggregated={aggregated:.3f} + computed={base_risk:.3f} "
+                f"-> blended={blended_risk:.3f}"
+            )
             return max(0.0, min(1.0, blended_risk))
 
         return base_risk
@@ -414,7 +417,7 @@ class CustomerProfileAgent(BaseAgent):
         logger.debug(
             f"[InvoiceAggregation] invoices={len(scores)} credit_limit={credit_limit:.0f} "
             f"max={max_risk:.3f} weighted_avg={weighted_avg:.3f} "
-            f"concentration={concentration:.3f} → base_risk={base_risk:.3f}"
+            f"concentration={concentration:.3f} -> base_risk={base_risk:.3f}"
         )
 
         return base_risk

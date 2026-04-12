@@ -216,6 +216,11 @@ class RegistryService:
         if self._cleanup_thread and self._cleanup_thread.is_alive():
             self._cleanup_thread.join(timeout=5)
 
+        try:
+            self.kafka_client.close()
+        except Exception as exc:
+            logger.warning(f"Error closing RegistryService Kafka client: {exc}")
+
         logger.info("RegistryService stopped")
 
     # -------------------------------------------------------------------------

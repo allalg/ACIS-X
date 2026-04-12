@@ -43,6 +43,7 @@ class SimulatedInstance:
 
 class RuntimeManager(BaseAgent):
     """Simulated runtime manager that fulfills orchestration commands via events."""
+    IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     def __init__(
         self,
@@ -87,6 +88,10 @@ class RuntimeManager(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Handle simulated runtime commands."""
+        if self._start_time and event.event_time < self._start_time:
+            logger.debug("[RuntimeManager] Ignoring stale event %s from %s", event.event_type, event.event_time)
+            return
+
         event_type = event.event_type
 
         # FIX 9: Two phases of spawn/restart:
@@ -118,9 +123,13 @@ class RuntimeManager(BaseAgent):
         agent_name = payload["agent_name"]
         agent_type = payload.get("agent_type")
         instance_id = payload.get("instance_id") or self._generate_instance_id(agent_name)
-        replica_index = self._next_replica_index(agent_name)
-        replica_count = payload.get("replica_count", replica_index + 1)
+        current_replicas = int(payload.get("replica_count") or 0)
+        replica_index = current_replicas
+        replica_count = current_replicas + 1
         max_replicas = payload.get("max_replicas")
+        preferred_hosts = payload.get("preferred_hosts")
+        if preferred_hosts is None and payload.get("host"):
+            preferred_hosts = [payload["host"]]
 
         logger.info(
             f"[RuntimeManager] Phase 1: Received spawn request for {agent_name}, "
@@ -132,12 +141,14 @@ class RuntimeManager(BaseAgent):
             "agent_name": agent_name,
             "agent_type": agent_type or agent_name,
             "instance_id": instance_id,
-            "preferred_hosts": payload.get("preferred_hosts"),
+            "preferred_hosts": preferred_hosts,
             "excluded_hosts": payload.get("excluded_hosts"),
             "replica_index": replica_index,
             "replica_count": replica_count,
             "max_replicas": max_replicas,
-            "correlation_id": event.correlation_id,
+            "requester": self.agent_name,
+            "decision_rule": payload.get("decision_rule"),
+            "decision_score": payload.get("decision_score"),
             # Store original spawn request payload for Phase 2
             "_original_spawn_request": payload,
         }
@@ -173,9 +184,11 @@ class RuntimeManager(BaseAgent):
             "agent_type": agent_type or agent_name,
             "agent_id": agent_id,
             "instance_id": payload.get("instance_id"),
-            "preferred_hosts": payload.get("preferred_hosts"),
+            "preferred_hosts": payload.get("preferred_hosts") or ([payload["host"]] if payload.get("host") else None),
             "excluded_hosts": payload.get("excluded_hosts"),
-            "correlation_id": event.correlation_id,
+            "requester": self.agent_name,
+            "decision_rule": payload.get("decision_rule"),
+            "decision_score": payload.get("decision_score"),
             "_operation": "restart",  # Mark this as restart for Phase 2
             "_restart_payload": payload,
         }
@@ -257,7 +270,7 @@ class RuntimeManager(BaseAgent):
         replica_count = payload.get("replica_count", 1)
         max_replicas = payload.get("max_replicas")
         group_id = payload.get("group_id")
-        operation = payload.get("_operation", "spawn")  # spawn or restart
+        operation = payload.get("_operation") or payload.get("operation") or "spawn"  # spawn or restart
         correlation_id = event.correlation_id
 
         if not agent_name or not host:
@@ -272,11 +285,12 @@ class RuntimeManager(BaseAgent):
         if operation == "restart":
             # Handle restart
             agent_id = payload.get("agent_id")
+            target_agent_id = agent_id or f"agent_{agent_name.lower()}_{instance_id}"
             with self._instances_lock:
-                instance = self._instances.get(agent_id)
+                instance = self._instances.get(target_agent_id)
                 if instance is None:
                     instance = SimulatedInstance(
-                        agent_id=agent_id or f"agent_{agent_name.lower()}_{instance_id}",
+                        agent_id=target_agent_id,
                         agent_name=agent_name,
                         agent_type=agent_type,
                         instance_id=instance_id or self._generate_instance_id(agent_name),
@@ -286,7 +300,7 @@ class RuntimeManager(BaseAgent):
                         group_id=group_id or f"{agent_name.lower()}-group",
                         status=AgentStatus.HEALTHY.value,
                     )
-                    self._instances[agent_id] = instance
+                    self._instances[target_agent_id] = instance
                 else:
                     # Update existing instance with new placement
                     instance.host = host
@@ -377,8 +391,8 @@ class RuntimeManager(BaseAgent):
         payload = {
             "agent_id": instance.agent_id,
             "agent_type": instance.agent_type,
-            "agent_name": instance.agent_name,
-            "instance_id": instance.instance_id,
+                "agent_name": instance.agent_name,
+                "instance_id": instance.instance_id,
             "host": instance.host,
             "port": instance.port,
             "version": instance.version,

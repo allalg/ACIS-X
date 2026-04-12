@@ -64,7 +64,7 @@ class KafkaConfig:
     # Consumer settings
     # FIX 3: Reduce rebalance chaos with stable session settings
     consumer_auto_offset_reset: str = "earliest"  # earliest, latest, none
-    consumer_enable_auto_commit: bool = True  # Keep config aligned with consumer behavior
+    consumer_enable_auto_commit: bool = False  # Offsets are committed explicitly after successful handling
     consumer_max_poll_records: int = 500
     consumer_max_poll_interval_ms: int = 300000  # 5 minutes - generous interval
     consumer_session_timeout_ms: int = 10000  # 10 seconds - reduced from 30s for faster detection
@@ -270,8 +270,8 @@ class KafkaClient:
                 "bootstrap.servers": ",".join(self.config.bootstrap_servers),
                 "client.id": self.config.client_id,
                 "group.id": group_id,
-                "auto.offset.reset": "earliest",
-                "enable.auto.commit": True,
+                "auto.offset.reset": self.config.consumer_auto_offset_reset,
+                "enable.auto.commit": self.config.consumer_enable_auto_commit,
                 "max.poll.interval.ms": self.config.consumer_max_poll_interval_ms,
                 "session.timeout.ms": self.config.consumer_session_timeout_ms,
                 "heartbeat.interval.ms": self.config.consumer_heartbeat_interval_ms,

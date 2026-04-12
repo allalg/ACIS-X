@@ -314,8 +314,8 @@ class ScenarioGeneratorAgent(BaseAgent):
         company_base_name = company["name"]
         industry_raw = company["industry"]
 
-        # IMPROVEMENT 1: Add unit suffix for uniqueness (e.g., "Infosys Ltd - Unit 7")
-        customer_name = f"{company_base_name} - Unit {random.randint(1, 50)}"
+        # Use clean company name with customer_id for uniqueness
+        customer_name = company_base_name
 
         # IMPROVEMENT 2: Generate company ID (e.g., "INFOSYS" from "Infosys Ltd")
         company_id = self._generate_company_id(company_base_name)

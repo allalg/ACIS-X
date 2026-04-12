@@ -47,6 +47,7 @@ class BaseAgent(ABC):
     OVERLOAD_COOLDOWN_SECONDS = 60
     LAG_DETECTION_THRESHOLD = 5000
     LAG_DETECTION_COOLDOWN_SECONDS = 120
+    IGNORE_STALE_EVENTS_ON_STARTUP = False
 
     def __init__(
         self,
@@ -172,11 +173,18 @@ class BaseAgent(ABC):
         topics = self.subscribe()
         self.subscribed_topics = topics
 
-        # Use canonical group_id (shared across all replicas of this agent type)
-        # This enables Kafka to distribute partitions among replicas
-        # instance_id is tracked separately for identity/health, not for consumer group
-        self.kafka_client.subscribe(topics, self.group_id)
-        logger.info(f"Subscribed to topics {topics} with consumer group: {self.group_id} (instance: {self.instance_id})")
+        if topics:
+            # Use canonical group_id (shared across all replicas of this agent type)
+            # This enables Kafka to distribute partitions among replicas
+            # instance_id is tracked separately for identity/health, not for consumer group
+            self.kafka_client.subscribe(topics, self.group_id)
+            logger.info(f"Subscribed to topics {topics} with consumer group: {self.group_id} (instance: {self.instance_id})")
+        else:
+            logger.info(
+                "No subscribed topics for %s; starting in producer-only mode (instance: %s)",
+                self.agent_name,
+                self.instance_id,
+            )
 
         # THEN register with registry
         self._register_with_registry()
@@ -192,13 +200,14 @@ class BaseAgent(ABC):
         )
         self._heartbeat_thread.start()
 
-        # Start consumer loop
-        self._consumer_thread = threading.Thread(
-            target=self._consumer_loop,
-            daemon=True,
-            name=f"{self.agent_name}-consumer"
-        )
-        self._consumer_thread.start()
+        if topics:
+            # Start consumer loop only for agents that actually consume topics.
+            self._consumer_thread = threading.Thread(
+                target=self._consumer_loop,
+                daemon=True,
+                name=f"{self.agent_name}-consumer"
+            )
+            self._consumer_thread.start()
 
         logger.info(f"Agent {self.agent_name} started successfully on {self.host}")
 
@@ -291,7 +300,33 @@ class BaseAgent(ABC):
             offset = getattr(message, 'offset', None)
             high_watermark = getattr(message, 'high_watermark', None)
 
-            # Track offsets for lag calculation
+            # Parse and validate event
+            event = self._validate_event(message.value)
+            if event is None:
+                # DIAGNOSTIC: Message was dropped due to validation failure
+                logger.warning(f"[{self.agent_name}] Dropping message from {topic}:{getattr(message, 'partition', '?')}:{getattr(message, 'offset', '?')} - validation failed")
+                return
+
+            if (
+                self.IGNORE_STALE_EVENTS_ON_STARTUP
+                and self._start_time is not None
+                and event.event_time < self._start_time
+            ):
+                logger.debug(
+                    "[%s] Ignoring stale event %s from %s",
+                    self.agent_name,
+                    event.event_type,
+                    event.event_time,
+                )
+                return
+
+            # Check idempotency
+            if self._is_duplicate(event.event_id):
+                logger.debug(f"Duplicate event {event.event_id}, skipping")
+                return
+
+            # Track offsets for lag calculation only for live events. This avoids
+            # converting old backlog replay into fresh lag alarms during startup.
             if topic and partition is not None and offset is not None:
                 with self._metrics_lock:
                     if topic not in self._partition_offsets:
@@ -303,22 +338,9 @@ class BaseAgent(ABC):
                             self._partition_high_watermarks[topic] = {}
                         self._partition_high_watermarks[topic][partition] = high_watermark
 
-                        # Calculate lag for this partition
                         lag = high_watermark - offset
                         if lag > self.LAG_DETECTION_THRESHOLD:
                             self._check_and_emit_lag_detected(topic, partition, lag)
-
-            # Parse and validate event
-            event = self._validate_event(message.value)
-            if event is None:
-                # DIAGNOSTIC: Message was dropped due to validation failure
-                logger.warning(f"[{self.agent_name}] Dropping message from {topic}:{getattr(message, 'partition', '?')}:{getattr(message, 'offset', '?')} - validation failed")
-                return
-
-            # Check idempotency
-            if self._is_duplicate(event.event_id):
-                logger.debug(f"Duplicate event {event.event_id}, skipping")
-                return
 
             # Set correlation context
             self._current_correlation_id = event.correlation_id
@@ -370,7 +392,7 @@ class BaseAgent(ABC):
             return event
         except ValidationError as e:
             # DIAGNOSTIC: Log the raw data that failed validation
-            logger.error(f"❌ EVENT VALIDATION FAILED (Agent: {self.agent_name})")
+            logger.error("EVENT VALIDATION FAILED (Agent: %s)", self.agent_name)
             logger.error(f"   Raw data: {raw_data}")
             logger.error(f"   Validation errors: {e.errors()}")
 

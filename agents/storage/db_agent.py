@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -34,6 +35,7 @@ class DBAgent(BaseAgent):
     TOPIC_RISK = "acis.risk"
 
     DB_PATH = "acis.db"
+    UNIT_SUFFIX_PATTERN = re.compile(r"\s*-\s*Unit\s+\d+\b.*$", re.IGNORECASE)
 
     def __init__(
         self,
@@ -257,8 +259,8 @@ class DBAgent(BaseAgent):
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS customer_risk_profile (
-                        id TEXT PRIMARY KEY,
-                        customer_id TEXT,
+                        customer_id TEXT PRIMARY KEY,
+                        id TEXT UNIQUE,
                         company_name TEXT,
                         financial_risk REAL,
                         litigation_risk REAL,
@@ -267,15 +269,75 @@ class DBAgent(BaseAgent):
                         financial_source TEXT,
                         litigation_source TEXT,
                         confidence REAL,
-                        created_at TEXT
+                        created_at TEXT,
+                        updated_at TEXT
                     )
                 """)
 
                 conn.commit()
+                self._cleanup_legacy_company_names(conn)
                 logger.info(f"Database initialized at {self._db_path}")
                 logger.info("Upgraded database schema to v5 (customer risk profile ready)")
             finally:
                 conn.close()
+
+    def _sanitize_company_name(self, name: Optional[str]) -> Optional[str]:
+        """Normalize company names by stripping synthetic '- Unit <n>' suffixes."""
+        if not name:
+            return name
+
+        cleaned = self.UNIT_SUFFIX_PATTERN.sub("", name).strip()
+        return cleaned or name
+
+    def _cleanup_legacy_company_names(self, conn: sqlite3.Connection) -> None:
+        """Backfill cleanup for already-persisted synthetic unit suffixes."""
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT customer_id, name
+            FROM customers
+            WHERE name IS NOT NULL AND name LIKE '% - Unit %'
+            """
+        )
+        customer_rows = cursor.fetchall()
+
+        cleaned_customers = 0
+        for customer_id, name in customer_rows:
+            sanitized = self._sanitize_company_name(name)
+            if sanitized != name:
+                cursor.execute(
+                    "UPDATE customers SET name=?, updated_at=? WHERE customer_id=?",
+                    (sanitized, datetime.utcnow().isoformat(), customer_id),
+                )
+                cleaned_customers += 1
+
+        cursor.execute(
+            """
+            SELECT customer_id, company_name
+            FROM customer_risk_profile
+            WHERE company_name IS NOT NULL AND company_name LIKE '% - Unit %'
+            """
+        )
+        risk_rows = cursor.fetchall()
+
+        cleaned_risk_profiles = 0
+        for customer_id, company_name in risk_rows:
+            sanitized = self._sanitize_company_name(company_name)
+            if sanitized != company_name:
+                cursor.execute(
+                    "UPDATE customer_risk_profile SET company_name=?, updated_at=? WHERE customer_id=?",
+                    (sanitized, datetime.utcnow().isoformat(), customer_id),
+                )
+                cleaned_risk_profiles += 1
+
+        if cleaned_customers or cleaned_risk_profiles:
+            conn.commit()
+            logger.info(
+                "[DBAgent] Cleaned legacy company names: customers=%s, customer_risk_profile=%s",
+                cleaned_customers,
+                cleaned_risk_profiles,
+            )
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -317,11 +379,24 @@ class DBAgent(BaseAgent):
         data = event.payload or {}
         invoice_id = data.get("invoice_id")
         customer_id = data.get("customer_id")
-        total_amount = data.get("amount") or data.get("total_amount")  # Accept both field names
+        raw_total_amount = data.get("amount")
+        if raw_total_amount is None:
+            raw_total_amount = data.get("total_amount")
         due_date = data.get("due_date")
         status = data.get("status", "pending")
         issued_date = data.get("created_at") or data.get("issued_date")
         now = datetime.utcnow().isoformat()
+
+        total_amount = None
+        if raw_total_amount is not None:
+            try:
+                total_amount = float(raw_total_amount)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "[DBAgent] Invalid invoice amount for %s: %r; preserving existing amount if available",
+                    invoice_id,
+                    raw_total_amount,
+                )
 
         if not invoice_id:
             logger.warning("Invoice event missing invoice_id, skipping")
@@ -349,21 +424,22 @@ class DBAgent(BaseAgent):
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(invoice_id) DO UPDATE SET
-                        customer_id=excluded.customer_id,
-                        total_amount=excluded.total_amount,
-                        due_date=excluded.due_date,
+                        customer_id=COALESCE(excluded.customer_id, invoices.customer_id),
+                        total_amount=COALESCE(?, invoices.total_amount, 0.0),
+                        due_date=COALESCE(excluded.due_date, invoices.due_date),
                         status=excluded.status,
                         updated_at=excluded.updated_at
                 """, (
                     invoice_id,
                     customer_id,
-                    total_amount,
-                    0,  # Initialize paid_amount to 0
+                    total_amount if total_amount is not None else 0.0,
+                    0.0,  # Initialize paid_amount to 0
                     issued_date,
                     due_date,
                     status,
                     now,
-                    now
+                    now,
+                    total_amount,
                 ))
 
                 # Ensure customer exists
@@ -373,8 +449,29 @@ class DBAgent(BaseAgent):
                         VALUES (?, ?, ?)
                     """, (customer_id, now, now))
 
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(total_amount, 0.0),
+                        COALESCE(paid_amount, 0.0)
+                    FROM invoices
+                    WHERE invoice_id = ?
+                    """,
+                    (invoice_id,),
+                )
+                invoice_row = cursor.fetchone()
+                resolved_total_amount = float(invoice_row[0]) if invoice_row else 0.0
+                resolved_paid_amount = float(invoice_row[1]) if invoice_row else 0.0
+                resolved_remaining_amount = max(
+                    resolved_total_amount - resolved_paid_amount,
+                    0.0,
+                )
+
                 conn.commit()
-                logger.info(f"[DBAgent] Upserted invoice: {invoice_id} status={status} total_amount={total_amount}")
+                logger.info(
+                    f"[DBAgent] Upserted invoice: {invoice_id} status={status} "
+                    f"total_amount={resolved_total_amount}"
+                )
 
                 # FIX #2: Pre-populate cache instead of just invalidating
                 # This prevents cache misses for agents querying immediately after write
@@ -382,9 +479,9 @@ class DBAgent(BaseAgent):
                     invoice_cache_data = {
                         "invoice_id": invoice_id,
                         "customer_id": customer_id,
-                        "total_amount": total_amount,
-                        "paid_amount": 0,
-                        "remaining_amount": total_amount,
+                        "total_amount": resolved_total_amount,
+                        "paid_amount": resolved_paid_amount,
+                        "remaining_amount": resolved_remaining_amount,
                         "due_date": due_date,
                         "status": status,
                     }
@@ -559,6 +656,8 @@ class DBAgent(BaseAgent):
         data = event.payload or {}
         customer_id = data.get("customer_id")
 
+        logger.info(f"[DBAgent] _handle_customer_profile called for {customer_id}, data keys: {list(data.keys())}")
+
         if not customer_id:
             logger.warning("customer.profile.updated event missing customer_id, skipping")
             return
@@ -566,6 +665,8 @@ class DBAgent(BaseAgent):
         # CRITICAL FIX #7: Only update name if provided (don't overwrite with NULL)
         # CustomerProfileAgent publishes events without customer_name - we should preserve existing names
         name = data.get("customer_name") or data.get("name")
+        name = self._sanitize_company_name(name)
+        logger.debug(f"[DBAgent] Extracted name for {customer_id}: {repr(name)}")
         risk_score = data.get("risk_score", 0.0)
         credit_limit = data.get("credit_limit", 0.0)
         status = data.get("status", "active")
@@ -624,6 +725,7 @@ class DBAgent(BaseAgent):
         data = event.payload or {}
         customer_id = data.get("customer_id")
         company_name = data.get("company_name")
+        company_name = self._sanitize_company_name(company_name)
         litigation_risk = data.get("litigation_risk", 0.0)
         severity = data.get("severity")
         case_count = data.get("case_count", 0)
@@ -698,6 +800,7 @@ class DBAgent(BaseAgent):
 
         customer_id = data.get("customer_id")
         company_name = data.get("company_name")
+        company_name = self._sanitize_company_name(company_name)
 
         if not customer_id:
             logger.warning("CustomerRiskProfileUpdated missing customer_id, skipping")
@@ -720,9 +823,9 @@ class DBAgent(BaseAgent):
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    INSERT OR IGNORE INTO customer_risk_profile (
-                        id,
+                    INSERT OR REPLACE INTO customer_risk_profile (
                         customer_id,
+                        id,
                         company_name,
                         financial_risk,
                         litigation_risk,
@@ -731,12 +834,15 @@ class DBAgent(BaseAgent):
                         financial_source,
                         litigation_source,
                         confidence,
-                        created_at
+                        created_at,
+                        updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            COALESCE((SELECT created_at FROM customer_risk_profile WHERE customer_id=?), ?),
+                            ?)
                 """, (
-                    event.event_id,
                     customer_id,
+                    event.event_id,
                     company_name,
                     financial_risk,
                     litigation_risk,
@@ -745,7 +851,9 @@ class DBAgent(BaseAgent):
                     financial_source,
                     litigation_source,
                     confidence,
-                    created_at
+                    customer_id,  # For COALESCE check
+                    created_at,
+                    datetime.utcnow().isoformat()  # updated_at
                 ))
 
                 conn.commit()

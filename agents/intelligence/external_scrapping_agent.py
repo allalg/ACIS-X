@@ -123,6 +123,8 @@ class ExternalScrapingAgent(BaseAgent):
         self._session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0"
         })
+        # FIX 9: Track published litigation_risk values to prevent duplicate events
+        self._last_published_risk: Dict[str, float] = {}
 
         logger.info("[ExternalScrapingAgent] Initialized with Google News RSS integration (retries enabled)")
 
@@ -454,6 +456,16 @@ class ExternalScrapingAgent(BaseAgent):
             "generated_at": datetime.utcnow().isoformat()
         }
 
+        # FIX 9: DEDUPLICATION - Skip publishing if litigation_risk unchanged
+        last_risk = self._last_published_risk.get(customer_id)
+        litigation_risk = round(news_data["risk_score"], 4)
+        if last_risk is not None and last_risk == litigation_risk:
+            logger.debug(
+                f"[ExternalScrapingAgent] Skipping publish for {customer_id}: "
+                f"litigation_risk={litigation_risk:.4f} (unchanged)"
+            )
+            return
+
         # Publish event (standardized naming)
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
@@ -462,6 +474,9 @@ class ExternalScrapingAgent(BaseAgent):
             payload=payload,
             correlation_id=event.correlation_id,
         )
+
+        # FIX 9: Track published risk to prevent duplicate events
+        self._last_published_risk[customer_id] = litigation_risk
 
         logger.info(
             f"[ExternalScrapingAgent] company={company_name} "

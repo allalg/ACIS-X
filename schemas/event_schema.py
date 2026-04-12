@@ -221,6 +221,8 @@ class AgentSpawnRequestPayload(BaseModel):
     reason: str = Field(..., description="Reason for spawning")
     requester: str = Field(..., description="Agent/service that requested spawn")
     priority: str = Field("normal", description="Spawn priority (low, normal, high, critical)")
+    preferred_hosts: Optional[List[str]] = Field(None, description="Preferred placement hosts")
+    excluded_hosts: Optional[List[str]] = Field(None, description="Hosts to avoid for placement")
 
     # Source agent context (for tracking which agent triggered the spawn)
     source_agent_id: Optional[str] = Field(None, description="Agent ID that triggered spawn request")
@@ -425,15 +427,20 @@ class PlacementCompletedPayload(BaseModel):
     """Payload for placement.completed event."""
 
     agent_type: Optional[str] = Field(None, description="Logical agent type (FIX 4)")
+    agent_id: Optional[str] = Field(None, description="Agent instance being placed/restarted")
     agent_name: str
     instance_id: str
     host: str
     port: Optional[int] = None
+    operation: Optional[str] = Field(None, description="spawn or restart")
     placement_decision: str = Field(..., description="Reason for placement decision")
     alternatives_considered: Optional[List[str]] = Field(None, description="Other hosts considered")
     placement_duration_ms: Optional[int] = None
     status: str = Field("completed", description="completed, failed")
     error_message: Optional[str] = None
+    replica_index: Optional[int] = Field(None, ge=0, description="Replica index for spawned instance")
+    replica_count: Optional[int] = Field(None, ge=0, description="Replica count after placement")
+    max_replicas: Optional[int] = Field(None, ge=1, description="Maximum allowed replicas")
 
     # Decision context (FIX 3)
     decision_rule: Optional[str] = Field(None, description="Rule used for placement")
@@ -707,6 +714,8 @@ def create_spawn_request_event(
     host: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
     priority: str = "normal",
+    preferred_hosts: Optional[List[str]] = None,
+    excluded_hosts: Optional[List[str]] = None,
     source_agent_id: Optional[str] = None,
     source_instance_id: Optional[str] = None,
     replica_count: Optional[int] = None,
@@ -728,6 +737,8 @@ def create_spawn_request_event(
         reason=reason,
         requester=event_source,
         priority=priority,
+        preferred_hosts=preferred_hosts,
+        excluded_hosts=excluded_hosts,
         source_agent_id=source_agent_id,
         source_instance_id=source_instance_id,
         replica_count=replica_count,

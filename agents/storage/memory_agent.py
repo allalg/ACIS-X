@@ -36,6 +36,7 @@ class MemoryAgent(BaseAgent):
     TOPIC_RISK = "acis.risk"
     TOPIC_METRICS = "acis.metrics"
     TOPIC_MEMORY = "acis.memory"
+    IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     def __init__(
         self,
@@ -221,9 +222,12 @@ class MemoryAgent(BaseAgent):
             # Get all non-paid invoices
             invoices = self.query_agent.get_invoices_by_customer(customer_id)
 
-            # Compute total outstanding from remaining amounts
+            # Compute total outstanding from remaining amounts.
+            # Older rows may still contain NULL amounts from previous runs, so
+            # we normalize them defensively during recompute.
             total_outstanding = sum(
-                inv.get("remaining_amount", 0.0) for inv in invoices
+                max(float(inv.get("remaining_amount") or inv.get("total_amount") or 0.0), 0.0)
+                for inv in invoices
             )
 
             # Get overdue invoices

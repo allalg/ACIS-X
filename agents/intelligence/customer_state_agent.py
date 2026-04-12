@@ -34,6 +34,7 @@ class CustomerStateAgent(BaseAgent):
     TOPIC_PAYMENTS = "acis.payments"
     TOPIC_METRICS = "acis.metrics"
     DB_PATH = "acis.db"
+    IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     def __init__(
         self,
@@ -638,7 +639,7 @@ class CustomerStateAgent(BaseAgent):
             # Use remaining_amount if available (to account for partial payments)
             # Otherwise fall back to full amount
             total_outstanding = sum(
-                float(inv.get("remaining_amount", inv.get("amount", 0)))
+                max(float(inv.get("remaining_amount") or inv.get("amount") or 0.0), 0.0)
                 for inv in invoices
                 if inv.get("status") != "paid"
             )

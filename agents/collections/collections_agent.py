@@ -69,7 +69,7 @@ class CollectionsAgent(BaseAgent):
         )
         self._query_agent = query_agent
 
-        # Priority mapping: string → numeric score (for queuing, ML, ranking)
+        # Priority mapping: string -> numeric score (for queuing, ML, ranking)
         self._priority_scores = {
             "medium": 0.5,
             "high": 0.8,
@@ -229,10 +229,10 @@ class CollectionsAgent(BaseAgent):
 
             logger.info(
                 f"[CollectionsAgent] [{action_id}] Severity calculation (weighted blend): "
-                f"0.6×{final_risk:.3f} + 0.15×{exposure_factor:.3f} (limit={credit_limit:.0f}) + "
-                f"0.15×{delay_factor:.3f} + 0.1×{behavior_penalty:.3f}"
+                f"0.6x{final_risk:.3f} + 0.15x{exposure_factor:.3f} (limit={credit_limit:.0f}) + "
+                f"0.15x{delay_factor:.3f} + 0.1x{behavior_penalty:.3f}"
                 + (f" + {reason_for_trend}" if reason_for_trend else "")
-                + f" → severity={severity_score:.3f}"
+                + f" -> severity={severity_score:.3f}"
             )
 
             # ===== STEP 5: DECISION ENGINE =====
@@ -309,7 +309,7 @@ class CollectionsAgent(BaseAgent):
         """
         Compute action and priority using config-driven decision rules.
 
-        Uses policy_config["thresholds"] for severity → action mapping.
+        Uses policy_config["thresholds"] for severity -> action mapping.
         State-aware escalations:
         - If overdue_count > 3: escalate to next severity
         - If avg_delay > 45d: escalate to next severity
@@ -345,9 +345,9 @@ class CollectionsAgent(BaseAgent):
 
         # Add trend signal to reason
         if risk_trend == "deteriorating_fast":
-            reason_parts.append("⚠️ Rapid risk deterioration")
+            reason_parts.append("Rapid risk deterioration")
         elif risk_trend == "improving":
-            reason_parts.append("✓ Improving payment behavior")
+            reason_parts.append("Improving payment behavior")
 
         # === STEP 6: State-aware escalation ===
         escalated_action = base_action
@@ -453,7 +453,7 @@ class CollectionsAgent(BaseAgent):
             delay_factor = min(1.0, avg_delay / 60.0)
             behavior_penalty = 1.0 - on_time_ratio
 
-            # IMPROVEMENT 2✅: Severity weighted blend (not additive)
+            # IMPROVEMENT 2: Severity weighted blend (not additive)
             # Initialize severity_score first
             severity_score = (
                 (0.6 * customer_risk_score) +
@@ -595,7 +595,7 @@ class CollectionsAgent(BaseAgent):
         )
 
         logger.info(
-            f"[CollectionsAgent] [{action_id}] customer={customer_id}, invoice={invoice_id} → "
+            f"[CollectionsAgent] [{action_id}] customer={customer_id}, invoice={invoice_id} -> "
             f"action={action}, priority={priority}, severity={severity_score:.3f}"
         )
 

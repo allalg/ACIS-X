@@ -278,9 +278,13 @@ class QueryAgent(BaseAgent):
                     SELECT
                         invoice_id,
                         customer_id,
-                        total_amount,
-                        paid_amount,
-                        (total_amount - paid_amount) AS remaining_amount,
+                        COALESCE(total_amount, 0.0) AS total_amount,
+                        COALESCE(paid_amount, 0.0) AS paid_amount,
+                        CASE
+                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
+                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
+                            ELSE 0.0
+                        END AS remaining_amount,
                         due_date,
                         status
                     FROM invoices
@@ -326,9 +330,13 @@ class QueryAgent(BaseAgent):
                     SELECT
                         invoice_id,
                         customer_id,
-                        total_amount,
-                        paid_amount,
-                        (total_amount - paid_amount) AS remaining_amount,
+                        COALESCE(total_amount, 0.0) AS total_amount,
+                        COALESCE(paid_amount, 0.0) AS paid_amount,
+                        CASE
+                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
+                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
+                            ELSE 0.0
+                        END AS remaining_amount,
                         due_date,
                         status
                     FROM invoices
@@ -371,9 +379,13 @@ class QueryAgent(BaseAgent):
                     SELECT
                         invoice_id,
                         customer_id,
-                        total_amount,
-                        paid_amount,
-                        (total_amount - paid_amount) AS remaining_amount,
+                        COALESCE(total_amount, 0.0) AS total_amount,
+                        COALESCE(paid_amount, 0.0) AS paid_amount,
+                        CASE
+                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
+                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
+                            ELSE 0.0
+                        END AS remaining_amount,
                         due_date,
                         status
                     FROM invoices
@@ -416,9 +428,13 @@ class QueryAgent(BaseAgent):
                     SELECT
                         invoice_id,
                         customer_id,
-                        total_amount,
-                        paid_amount,
-                        (total_amount - paid_amount) AS remaining_amount,
+                        COALESCE(total_amount, 0.0) AS total_amount,
+                        COALESCE(paid_amount, 0.0) AS paid_amount,
+                        CASE
+                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
+                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
+                            ELSE 0.0
+                        END AS remaining_amount,
                         due_date,
                         status
                     FROM invoices
@@ -461,9 +477,13 @@ class QueryAgent(BaseAgent):
                     SELECT
                         invoice_id,
                         customer_id,
-                        total_amount,
-                        paid_amount,
-                        (total_amount - paid_amount) AS remaining_amount,
+                        COALESCE(total_amount, 0.0) AS total_amount,
+                        COALESCE(paid_amount, 0.0) AS paid_amount,
+                        CASE
+                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
+                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
+                            ELSE 0.0
+                        END AS remaining_amount,
                         due_date,
                         status
                     FROM invoices

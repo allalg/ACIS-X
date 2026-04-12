@@ -115,6 +115,7 @@ class MonitoringAgent(BaseAgent):
     THROUGHPUT_EVENT_COOLDOWN_SECONDS = 60
     METRICS_PUBLISH_COOLDOWN_SECONDS = 30
     ERROR_EVENT_COOLDOWN_SECONDS = 60
+    IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     def __init__(
         self,
@@ -171,6 +172,9 @@ class MonitoringAgent(BaseAgent):
     def process_event(self, event: Event) -> None:
         """Process events from Kafka and update monitoring state."""
         if event.event_source == self.agent_name:
+            return
+        if self._start_time and event.event_time < self._start_time:
+            logger.debug("Ignoring stale event %s from %s", event.event_type, event.event_time)
             return
 
         event_type = event.event_type
