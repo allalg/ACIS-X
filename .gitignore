@@ -21,3 +21,4 @@ build/
 .acis_consumer_groups_initialized
 acis.db-wal
 acis.db-shm
+.github

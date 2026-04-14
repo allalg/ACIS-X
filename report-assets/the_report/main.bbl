@@ -1,0 +1,82 @@
+\begin{thebibliography}{15}
+
+\bibitem{hand1997credit}
+D.~J. Hand and W.~E. Henley,
+``Statistical classification methods in consumer credit scoring: A review,''
+\emph{Journal of the Royal Statistical Society: Series A}, vol. 160, no. 3, pp.
+523--541, 1997.
+
+\bibitem{thomas2000survey}
+L.~C. Thomas,
+``A survey of credit and behavioural scoring: Forecasting financial risk of lending to consumers,''
+\emph{International Journal of Forecasting}, vol. 16, no. 2, pp. 149--172, 2000.
+
+\bibitem{baesens2003benchmarking}
+B.~Baesens, T.~Van Gestel, S.~Viaene, M.~Stepanova, J.~Suykens, and J.~Vanthienen,
+``Benchmarking state-of-the-art classification algorithms for credit scoring,''
+\emph{Journal of the Operational Research Society}, vol. 54, no. 6, pp. 627--635, 2003.
+
+\bibitem{crook2007recent}
+J.~N. Crook, D.~B. Edelman, and L.~C. Thomas,
+``Recent developments in consumer credit risk assessment,''
+\emph{European Journal of Operational Research}, vol. 183, no. 3, pp. 1447--1465, 2007.
+
+\bibitem{bellotti2009svm}
+T.~Bellotti and J.~Crook,
+``Support vector machines for credit scoring and discovery of significant features,''
+\emph{Expert Systems with Applications}, vol. 36, no. 2, pp. 3302--3308, 2009.
+
+\bibitem{khandani2010ml}
+A.~E. Khandani, A.~J. Kim, and A.~W. Lo,
+``Consumer credit-risk models via machine-learning algorithms,''
+\emph{Journal of Banking and Finance}, vol. 34, no. 11, pp. 2767--2787, 2010.
+
+\bibitem{finlay2011multiple}
+S.~Finlay,
+``Multiple classifier architectures and their application to credit risk assessment,''
+\emph{European Journal of Operational Research}, vol. 210, no. 2, pp. 368--378, 2011.
+
+\bibitem{wang2011ensemble}
+G.~Wang, J.~Hao, J.~Ma, and H.~Jiang,
+``A comparative assessment of ensemble learning for credit scoring,''
+\emph{Expert Systems with Applications}, vol. 38, no. 1, pp. 223--230, 2011.
+
+\bibitem{brown2012imbalanced}
+I.~Brown and C.~Mues,
+``An experimental comparison of classification algorithms for imbalanced credit scoring data sets,''
+\emph{Expert Systems with Applications}, vol. 39, no. 3, pp. 3446--3453, 2012.
+
+\bibitem{kruppa2013individual}
+J.~Kruppa, A.~Schwarz, G.~Arminger, and A.~Ziegler,
+``Consumer credit risk: Individual probability estimates using machine learning,''
+\emph{Expert Systems with Applications}, vol. 40, no. 13, pp. 5125--5131, 2013.
+
+\bibitem{verbraken2014profit}
+T.~Verbraken, C.~Bravo, R.~Weber, and B.~Baesens,
+``Development and application of consumer credit scoring models using profit-based classification measures,''
+\emph{European Journal of Operational Research}, vol. 238, no. 2, pp. 505--513, 2014.
+
+\bibitem{lessmann2015update}
+S.~Lessmann, B.~Baesens, H.-V. Seow, and L.~C. Thomas,
+``Benchmarking state-of-the-art classification algorithms for credit scoring: An update of research,''
+\emph{European Journal of Operational Research}, vol. 247, no. 1, pp. 124--136, 2015.
+
+\bibitem{zaharia2013discretized}
+M.~Zaharia, T.~Das, H.~Li, T.~Hunter, S.~Shenker, and I.~Stoica,
+``Discretized streams: Fault-tolerant streaming computation at scale,'' in
+\emph{Proceedings of the Twenty-Fourth ACM Symposium on Operating Systems Principles},
+pp. 423--438, 2013.
+
+\bibitem{akidau2015dataflow}
+T.~Akidau, R.~Bradshaw, C.~Chambers, S.~Chernyak, R.~J. Fernandez-Moctezuma,
+R.~Lax, S.~McVeety, D.~Mills, F.~Perry, E.~Schmidt, and S.~Whittle,
+``The dataflow model: A practical approach to balancing correctness, latency, and cost in massive-scale, unbounded, out-of-order data processing,''
+\emph{Proceedings of the VLDB Endowment}, vol. 8, no. 12, pp. 1792--1803, 2015.
+
+\bibitem{chen2016xgboost}
+T.~Chen and C.~Guestrin,
+``XGBoost: A scalable tree boosting system,'' in
+\emph{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+pp. 785--794, 2016.
+
+\end{thebibliography}

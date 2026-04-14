@@ -1,0 +1,1221 @@
+\UseRawInputEncoding
+\documentclass[a4paper, 12pt]{report}
+\usepackage[a4paper, top=1in, bottom=0.75in, left=1.25in, right=1in, headheight=15pt, headsep=0.25in]{geometry}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{indentfirst} 
+\usepackage[x11names]{xcolor}
+\usepackage{lipsum}
+\usepackage[labelfont=bf, textfont=normalfont]{caption}
+\usepackage{tikz}
+\usepackage{eso-pic}
+\usepackage{etoolbox}
+\usepackage{newtxtext,newtxmath}
+\usepackage[colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black]{hyperref}
+\usepackage[authoryear]{natbib}
+\usepackage{subfig}
+\usepackage{hyperref}%
+\usepackage{cite}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{fontspec}
+% Work around counter redefinition with newer LaTeX kernels + older tocloft.
+\makeatletter
+\@ifundefined{c@lofdepth}{}{\let\c@lofdepth\relax}
+\@ifundefined{c@lotdepth}{}{\let\c@lotdepth\relax}
+\makeatother
+\usepackage{tocloft}
+\renewcommand{\cftdot}{}
+\renewcommand{\figurename}{Fig.}
+% Redefine font styles for various parts of the Table of Contents (TOC), List of Figures (LOF), and List of Tables (LOT)
+\renewcommand{\cftchapfont}{\normalfont\bfseries}  % Chapters in TOC will be in normal font and bold
+\renewcommand{\cftsecfont}{\normalfont}  % Sections in TOC will be in normal font
+\renewcommand{\cftsubsecfont}{\normalfont}  % Subsections in TOC will be in normal font
+\renewcommand{\cftchappagefont}{\normalfont\bfseries}  % Page numbers for chapters will be in bold
+\renewcommand{\cftsecpagefont}{\normalfont}  % Page numbers for sections will be in normal font
+\renewcommand{\cftsubsecpagefont}{\normalfont}  % Page numbers for subsections will be in normal font
+\renewcommand{\thefigure}{\thechapter.\arabic{figure}}  % Figures will be numbered by chapter and figure number
+\renewcommand{\thetable}{\thechapter.\arabic{table}}  % Tables will be numbered by chapter and table number
+
+% Adjust caption formatting for tables and figures
+\captionsetup[table]{font=small, labelsep=space, position=top}  % Tables: small font, label with space separator, caption at the top
+\captionsetup[figure]{font=small, labelsep=space}  % Figures: small font, label with space separator
+
+% Adjust spacing for chapter, section, and subsection titles
+\titlespacing*{\chapter}{0pt}{-50pt}{20pt}  % Space before and after chapters
+\titlespacing*{\section}{0pt}{0pt}{0pt}  % No additional spacing for sections
+\titlespacing*{\subsection}{0pt}{0pt}{0pt}  % No additional spacing for subsections
+
+% Adjust header and footer spacing
+\setlength{\headheight}{0pt}  % No header height
+\setlength{\headsep}{15pt}  % Space between header and main text
+\setlength{\parindent}{50pt}  % Set indentation size for paragraphs
+
+% Adjust spacing before titles in TOC, LOF, and LOT
+\setlength{\cftbeforetoctitleskip}{1em}  % Space before TOC title
+\setlength{\cftbeforeloftitleskip}{1em}  % Space before LOF title
+\setlength{\cftbeforelottitleskip}{1em}  % Space before LOT title
+
+% Adjust spacing before section, subsection, and chapter entries in TOC
+\setlength{\cftbeforesecskip}{-1pt}  % Space before sections
+\setlength{\cftbeforesubsecskip}{-1pt}  % Space before subsections
+\setlength{\cftbeforechapskip}{-1pt}  % Space before chapters
+
+% Set spacing for figures and tables in the TOC
+\setlength{\cftbeforefigskip}{0pt}  % No additional space before figures in TOC
+
+% Set header height and footer spacing
+\setlength{\headheight}{15pt}
+\setlength{\footskip}{0.5in}  % Space between footer and main text
+
+% Adjust space before and after captions
+\setlength{\abovecaptionskip}{10pt}  % Space above captions
+\setlength{\belowcaptionskip}{0pt}  % No space below captions
+
+% Title formatting for chapters, sections, and subsections
+\titleformat{\chapter}[display]
+  {\normalfont\fontsize{16}{20}\bfseries\raggedright}  % Chapter title format: font size 16, bold, left-aligned
+  {\MakeUppercase{\chaptername}\ \thechapter}  % Display chapter number in uppercase
+  {-5pt}  % Vertical space between chapter number and title
+  {\normalfont\fontsize{18}{22}\bfseries\centering\MakeUppercase}  % Title font size 18, bold, centered, uppercase
+
+\titleformat{\section}
+  {\normalfont\fontsize{14}{18}\bfseries}{\thesection}{1em}{}  % Section title format: font size 14, bold
+
+\titleformat{\subsection}
+  {\normalfont\fontsize{12}{16}\bfseries}{\thesubsection}{1em}{}  % Subsection title format: font size 12, bold
+
+% Set main text font size
+\renewcommand{\normalsize}{\fontsize{12}{14}\selectfont}  % Main text font size 12pt with 14pt line spacing
+
+% Font size for Table of Contents, List of Figures, and List of Tables
+\renewcommand{\cfttoctitlefont}{\hfil\normalfont\fontsize{16}{20}\bfseries\MakeUppercase}  % TOC title in bold, uppercase, centered
+\renewcommand{\cftloftitlefont}{\hspace{5.1cm}\normalfont\fontsize{16}{20}\bfseries\MakeUppercase}  % LOF title in bold, uppercase, with specific horizontal spacing
+\renewcommand{\cftlottitlefont}{\hspace{5.4cm}\normalfont\fontsize{16}{20}\bfseries\MakeUppercase}  % LOT title in bold, uppercase, with specific horizontal spacing
+\renewcommand{\cftchapfont}{\normalfont\bfseries}  % Chapter font in TOC: bold
+
+% Define a custom color for page borders
+\definecolor{myhexcolor}{HTML}{5B200C}  % Define a custom color using its hex code
+
+% Command to draw a page border around the document
+\newcommand\PageBorder{%
+\begin{tikzpicture}[remember picture, overlay]
+    \draw[line width=2pt, color=myhexcolor]
+        ([shift={(1in,-0.75in)}]current page.north west) --
+        ([shift={(-0.75in,-0.75in)}]current page.north east) --
+        ([shift={(-0.75in,0.75in)}]current page.south east) --
+        ([shift={(1in,0.75in)}]current page.south west) --
+        cycle;  % Draw an outer border
+    \draw[line width=1pt, color=myhexcolor]
+        ([shift={(1.05in,-0.80in)}]current page.north west) --
+        ([shift={(-0.80in,-0.80in)}]current page.north east) --
+        ([shift={(-0.80in,0.80in)}]current page.south east) --
+        ([shift={(1.05in,0.80in)}]current page.south west) --
+        cycle;  % Draw an inner border
+\end{tikzpicture}
+}
+
+% Adjust vertical space after titles in TOC, LOF, and LOT
+\renewcommand{\cftaftertoctitleskip}{0pt}
+\renewcommand{\cftafterloftitleskip}{0pt}
+\renewcommand{\cftafterlottitleskip}{0pt}
+\renewcommand{\cftbeforetoctitleskip}{0pt}
+\renewcommand{\cftbeforeloftitleskip}{0pt}
+\renewcommand{\cftbeforelottitleskip}{0pt}
+
+% Define custom page styles for various sections (plain, title page, bordered page)
+\fancypagestyle{plain}{
+  \fancyhf{}  % Clear existing header/footer
+  \fancyhead[R]{{Edge-Deployable LSTM-Based Fall Detection on ESP32 with Accelerometer-Gyroscope Fusion for Elderly Safety}}  % Custom header
+  \fancyfoot[L]{Dept. of CSE, AMCEC}  % Footer on the left
+  \fancyfoot[C]{2025-26}  % Footer in the center
+  \fancyfoot[R]{\thepage}  % Footer on the right with page number
+  \renewcommand{\headrulewidth}{2pt}  % Header line width
+  \renewcommand{\footrulewidth}{2pt}  % Footer line width
+  \global\borderpagefalse  % Set flag to false for no border on plain pages
+}
+
+% Page style for title page (no page number, border enabled)
+\fancypagestyle{titlepagelayout}{
+  \fancyhf{}  % Clear existing header/footer
+  \global\borderpagetrue  % Enable border for title page
+  \setlength{\footskip}{0.5in}  % Adjust footer position
+}
+
+% Page style for bordered pages (with page number and border enabled)
+\fancypagestyle{borderedpage}{%
+  \fancyhf{}  % Clear existing header/footer
+  \fancyfoot[C]{\thepage}  % Page number centered in footer
+  \global\borderpagetrue  % Enable border for these pages
+}
+
+% Adjust page layout based on the border flag
+\makeatletter
+\let\ps@plainorig\ps@plain
+\let\ps@plain\ps@titlepagelayout
+\makeatother
+
+% Add background page border if flag is set
+\newif\ifborderpage
+\borderpagefalse  % Default state: no border
+\AddToShipoutPictureBG{%
+  \ifborderpage
+    \PageBorder  % Add page border if flag is true
+  \fi
+}
+
+% For code formatting using listings package
+\lstset{
+   basicstyle=\ttfamily\small\linespread{1.0},  % Set basic style for code (small font, normal line spacing)
+   commentstyle=\color{gray},  % Comments in gray
+   keywordstyle=\color{blue},  % Keywords in blue
+   stringstyle=\color{red},  % Strings in red
+   numbers=left,  % Line numbers on the left
+   numberstyle=\tiny,  % Small line numbers
+   breaklines=true,  % Automatically break long lines
+   xleftmargin=34pt,  % Add left margin to code
+   xrightmargin=25pt,  % Add right margin to code
+   showstringspaces=false,  % Don't highlight spaces in strings
+}
+
+% Adjust spacing and layout of Table of Contents, List of Figures, and List of Tables
+\makeatletter
+\renewcommand{\@dotsep}{2}  % Increase space between dots in TOC, LOF, and LOT
+\renewcommand{\cfttabdotsep}{\@dotsep}  % Same for tables
+\renewcommand{\cftfigdotsep}{\@dotsep}  % Same for figures
+\makeatother
+
+% Adjust figure and table number widths in TOC, LOF, and LOT
+\setlength{\cftfignumwidth}{1.5cm}  % Set width for figure numbers in TOC
+\setlength{\cfttabnumwidth}{1.5cm}  % Set width for table numbers in TOC
+
+% Add space after page numbers in TOC, LOF, and LOT
+% \setlength{\cftfigpagemargin}{2em}  % Adjust figure page margin (uncomment to use)
+% \setlength{\cfttabpagemargin}{3cm}  % Adjust table page margin (uncomment to use)
+
+% For List of Figures (LOF) - Adjust indentation and add custom headers
+\setlength{\cftfigindent}{0.7cm}  % Indentation for figures in LOF
+\addtocontents{lof}{{\protect\vspace{10pt}}}  % Add space before figures in LOF
+\addtocontents{lof}{\noindent\textbf{\hspace{0.25cm}}\textbf{Fig. No.}\hfill\textbf{Figure Name}\hfill\textbf{Page No.}\hspace{-1.2cm}}  % Add custom header in LOF
+\addtocontents{lof}{{\protect\vspace{5pt}}}  % Add space after the header
+
+% For List of Tables (LOT) - Adjust indentation and add custom headers
+\renewcommand{\cfttabaftersnum}{}  % Remove extra space after table number
+\setlength{\cfttabindent}{0.7cm}  % Indentation for tables in LOT
+\addtocontents{lot}{{\protect\vspace{10pt}}}  % Add space before tables in LOT
+\addtocontents{lot}{\noindent\textbf{\hspace{0.25cm}}\textbf{Table No.}\hfill\textbf{Table Name}\hfill\textbf{Page No.}\hspace{-1.2cm}}  % Add custom header in LOT
+\addtocontents{lot}{{\protect\vspace{5pt}}}  % Add space after the header
+
+
+\begin{document}
+
+% Inner title page (no page number)
+% Title page customization
+\begin{titlepage}
+    \thispagestyle{titlepagelayout}
+    \centering
+    \vspace*{0.5cm}
+    \large \textbf{\textcolor[HTML]{6F2C0C}{VISVESVARAYA TECHNOLOGICAL UNIVERSITY\\
+    “Jnana Sangama”, Belgaum-590014, KARNATAKA, INDIA}}
+    \vspace{0.5cm}
+    
+    \includegraphics[height=0.15\textwidth]{Images/vtu-logo copy.png}
+
+    \vspace{0.3cm}
+    \textbf{\textit{A Project Phase-2 Report on}}
+    \vspace{0.5cm}
+    
+    {\Huge \textit{\textcolor[HTML]{4270C0}{Edge-Deployable LSTM-Based Fall Detection on ESP32 with Accelerometer-Gyroscope Fusion for Elderly Safety}}}
+    \vspace{0.5cm}
+    
+    \textit{A project report submitted in partial fulfillment of the requirements for the award of the degree of \textbf{Bachelor of Engineering in Computer Science and Engineering} of Visvesvaraya Technological University, Belguam.}
+    \vspace{0.5cm}
+    
+    Submitted by:\\
+    \textbf{Narisetty Sumanth (1AM22CS121)}\\
+    \textbf{Navya Narayan Panicker(1AM22CS122)}\\
+    \textbf{Prajwal R(1AM22CS143)}\\
+    \textbf{Sanchitha Ravi Bharadwaj (1AM22CS170)}\\
+    \vspace{0.2cm}
+
+    Under the Guidance of: \\
+        \vspace{0.2cm}
+        % \singlespacing
+        \centering
+        \textbf{Ms. Pallavi K V,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}\\
+        \vspace{0.5cm}
+        \includegraphics[height=0.1\textwidth]{Images/AMC-LOGO.png} \\ 
+ 
+    \vspace{0.5cm}
+    {\large \textbf{\textcolor[HTML]{6F2C0C}{Department of Computer Science and Engineering\\AMC Engineering College\\18th K.M, Bannerghatta Main Road, Bangalore-560083\\2024-2025}}}
+    
+\end{titlepage}
+
+\titlespacing*{\chapter}{0pt}{-15pt}{10pt}
+\titlespacing*{\section}{0pt}{-6pt}{-1pt}
+\titlespacing*{\subsection}{0pt}{-4pt}{-1pt}
+
+\pagenumbering{roman}
+\doublespacing
+\sloppy
+
+\titlespacing*{\chapter}{0pt}{-15pt}{-15pt}
+\setlength{\parindent}{0pt}
+
+% Certificate
+\chapter*{AMC Engineering College}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Certificate}
+
+\singlespacing
+
+\begin{center}
+    18th K.M, Bannerghatta Main Road, Bangalore-560083\\2024-2025\\
+    \textbf{Department of Computer Science and Engineering}\\
+    \vspace{0.2cm}
+    \includegraphics[height=0.1\textwidth]{Images/AMC-LOGO.png} \\[0.5cm]
+    \large{\textbf{CERTIFICATE}}
+\end{center}
+
+\doublespacing
+
+Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{“Edge-Deployable LSTM-Based Fall Detection on ESP32 with Accelerometer-Gyroscope Fusion for Elderly Safety”}} carried out by \textbf{Narisetty Sumanth (1AM22CS121)}, \textbf{Navya Narayan Panicker (1AM22CS122)}, \textbf{ Prajwal R (1AM22CS143)}, and \textbf{Sanchitha Ravi Bharadwaj (1AM22CS170)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Technology in Computer Science and Engineering of the Visvesvaraya Technological University, Belgaum during the year 2024-25. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
+
+\vspace{1.5cm}
+\noindent
+\begin{minipage}[t]{0.32\textwidth}
+    \singlespacing
+    \centering
+    \rule{0.8\linewidth}{0.4pt}\\
+    \textbf{Project Guide\\Ms. Pallavi K V,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \singlespacing
+    \centering
+    \rule{0.8\linewidth}{0.4pt}\\
+    \textbf{HoD\\Dr. V Mareeswari,\\Prof and Head,\\Dept. of CSE,\\AMCEC}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \singlespacing
+    \centering
+    \rule{0.8\linewidth}{0.4pt}\\
+    \textbf{Principal\\Dr. Yuvaraju B N,\\Principal,\\AMCEC}
+\end{minipage}
+
+\vspace{1.0cm}
+\doublespacing
+\begin{center}
+    {\textbf{External Viva}}
+\end{center}
+\begin{minipage}[t]{0.32\textwidth}
+    \centering  
+    \textbf{External Name}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \centering
+    \textbf{Signature with Date}
+\end{minipage}\\
+1.\\
+2.
+
+\titlespacing*{\chapter}{0pt}{20pt}{10pt}
+\setlength{\parindent}{0pt}
+\doublespacing
+
+% Decleration
+\chapter*{Declaration}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Declaration}
+We, \textbf{Narisetty Sumanth}, \textbf{Navya Narayan Panicker}, \textbf{Prajwal R}, and \textbf{Sanchitha Ravi Bharadwaj}, students of 7th semester Department of Computer Science and Engineering, AMC Engineering College, declare that our Project work entitled “Edge-Deployable LSTM-Based Fall Detection on ESP32 with Accelerometer-Gyroscope Fusion for Elderly Safety” is a bonafide work of ours. Major project is neither a copy nor by means a modification of any other engineering project. We also declare that this project was not entitled for submission to any other university in the past and shall remain the only submission made and will not be submitted by us to any other university in the future.\\
+\vspace{1cm}\\
+\noindent
+\begin{minipage}[t]{0.32\textwidth}
+    \centering
+    \textbf{NAME\\[0.2cm]Narisetty Sumanth\\[0.2cm]Navya Narayan Panicker\\[0.2cm]Prajwal R\\[0.2cm]Sanchitha Ravi Bharadwaj}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \centering
+    \textbf{USN\\[0.2cm]1AM22CS121\\[0.2cm]1AM22CS122\\[0.2cm]1AM22CS143\\[0.2cm]1AM22CS170}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \centering
+    \textbf{SIGNATURE\\}
+    \vspace{0.4cm}
+    \rule{0.8\linewidth}{0.4pt}\\[0.2cm]
+    % \vspace{0.4cm}
+    \rule{0.8\linewidth}{0.4pt}\\[0.2cm]
+    % \vspace{0.4cm}
+    \rule{0.8\linewidth}{0.4pt}\\[0.2cm]
+    % \vspace{0.4cm}
+    \rule{0.8\linewidth}{0.4pt}\\[0.2cm]
+\end{minipage}\\
+
+\setlength{\parindent}{0pt}
+
+
+% Acknowledgments
+\chapter*{Acknowledgments}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+We have a great pleasure in expressing our deep sense of gratitude to founder \textbf{Chairman Dr. K.R. Paramahamsa} and \textbf{Executive Vice President Mr. Rahul Kalluri} for having provided us with a great infrastructure and well-furnished labs for successful completion of our project.
+
+\vspace{0.2cm}
+
+We express our special thanks and gratitude to our Academic Advisor \textbf{Dr. Nagaraja R} for providing us with all the necessary advice for successful completion of our project.
+
+\vspace{0.2cm}
+
+We express our sincere thanks and gratitude to our Principal \textbf{Dr. Yuvaraju B N} for providing us with all the necessary support successful completion of our project.
+
+\vspace{0.2cm}
+
+We would like to extend our special thanks to \textbf{Dr. V Mareeswari} Professor and HOD, Department of CSE, for her support and encouragement and suggestions given to us in the course of the project.
+
+\vspace{0.2cm}
+
+We would like to extend our special thanks to Project coordinators \textbf{Ms.Mahalakshmi B} , Assistant Professor, Department of CSE, for her support and encouragement and suggestions given to us in the course of our project.
+
+\vspace{0.2cm}
+
+We are grateful to our guide \textbf{Ms. Pallavi K V}, Assistant Professor, Department of CSE, AMC Engineering College, Bengaluru for her constant motivation and timely help, encouragement and suggestions.
+
+\vspace{0.2cm}
+
+Last but not the least, we wish to thank all the teaching and non-teaching staffs of department of Computer Science and Engineering, for their support, patience and endurance shown during the preparation of this proejct report.
+
+\vspace{0.2cm}
+
+\begin{flushright}
+    \textbf{Narisetty Sumanth (1AM22CS121)}\\
+    \textbf{Navya Narayan Panicker(1AM22CS122)}\\
+    \textbf{Prajwal R (1AM22CS143)}\\
+    \textbf{Sanchitha Ravi Bharadwaj (1AM22CS170)}\\
+\end{flushright}
+
+
+% Abstract or Synopsis
+\chapter*{Abstract}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Abstract}
+In this project, we are developing an intelligent system that helps companies automatically detect and manage advertisement content within video files. The core idea is to analyze videos at the frame level to identify whether specific segments contain advertisements, enabling better monitoring and control over ad placements. Companies often face challenges in keeping track of where their ads appear, ensuring they are used appropriately, and identifying any misuse across digital platforms. Our solution addresses these issues by allowing users to upload known advertisement videos, which are then used as reference examples. When new video content is analyzed, the system compares it to the stored references to detect any matching ad segments. This enables organizations to verify if their ads are being used correctly or if unauthorized content is present. Additionally, the system allows users to upload individual frames or screenshots to check if they belong to any known advertisements. This makes the process of ad identification fast, accurate, and scalable, eliminating the need for manual review. The goal of the project is to create a practical, easy-to-use platform that enhances how businesses monitor their digital advertisements, safeguard brand integrity, and improve the overall transparency and effectiveness of their marketing strategies.
+
+\newpage
+
+\pagestyle{borderedpage}
+
+% Table of Contents
+\tableofcontents
+\thispagestyle{titlepagelayout}
+\newpage
+
+{
+\newgeometry{right=3.5cm, top=2.455cm}
+\doublespacing
+% List of Tables and Figures
+\listoffigures
+\thispagestyle{titlepagelayout}
+\newpage
+\doublespacing
+\listoftables
+\thispagestyle{titlepagelayout}
+\newpage
+\restoregeometry
+}
+
+
+
+% Start page numbering from Chapter 1
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\makeatletter
+\let\ps@plain\ps@plainorig
+\makeatother
+
+\pagestyle{plain}
+
+\titlespacing*{\chapter}{0pt}{-30pt}{5pt}
+\setlength{\parindent}{32pt}
+\setlist{topsep=0pt}
+
+% Chapter 1
+\chapter{Introduction}
+
+\section{Overview}
+Falls are among the most common causes of injury and loss of independence in elderly individuals, often leading to severe health complications, prolonged hospital stays, and reduced quality of life. To address this critical issue, this project introduces the development of a wearable, AI-powered sensor system specifically designed for real-time fall detection. The device incorporates compact motion sensors-primarily accelerometers and gyroscopes paired with a lightweight and energy-efficient microcontroller. These components work together to continuously monitor body movements and postural changes throughout the day.
+The core of the system is a machine learning algorithm trained on a comprehensive dataset of human motion, enabling it to differentiate between routine activities (such as walking or sitting) and actual fall events with high precision. Unlike traditional threshold-based systems, which often suffer from high false alarm rates or missed detections, the AI model adapts to complex motion patterns, thereby improving both sensitivity and specificity.
+To ensure user comfort and practicality, the wearable is designed to be non-intrusive, lightweight, and discreet-ideal for continuous daily use. It supports wireless communication to immediately alert caregivers, family members, or emergency services when a fall is detected, facilitating a rapid response that can significantly reduce the risk of complications from delayed medical attention.
+The AI model is optimized for edge computing, enabling on-device processing that reduces latency and ensures consistent performance even in areas with poor network connectivity. Future iterations of the device may include additional health monitoring features such as heart rate and oxygen saturation tracking, transforming it into a holistic solution for elderly health and safety management.
+
+\section{Objectives}
+The major aim of this project is to implement a real-time, intelligent, and reliable fall detection system for elderly individuals using wearable sensors and AI models. Emphasis is placed on accuracy, real-time detection, portability, and seamless integration with mobile platforms.The project incorporates machine learning algorithms, embedded sensor data processing, React Native mobile app, and scalable cloud or edge-based infrastructure. 
+The primary objectives are as follows:
+
+\begin{itemize}[itemsep=-4pt]
+    \item \textbf{Detect Falls in Real-Time Using Wearable Sensors:}\\
+        To develop a system capable of instantly detecting fall events using data collected from embedded sensors like accelerometers and gyroscopes integrated into wearable devices. The system should distinguish falls from regular movements like sitting or walking.
+    \item \textbf{Employ Machine Learning for Accurate Classification:}\\
+        To train machine learning models such as Random Forest, SVM, or LSTM using time-series sensor data, achieving high precision and recall in detecting real fall events. The focus is on minimizing false positives to ensure reliability.
+    \item \textbf{Design a Compact and Comfortable Wearable Device:}\\
+        To create a non-intrusive, lightweight, and comfortable wearable prototype that elderly users can wear daily. The hardware should support low-power consumption, wireless communication, and real-time data transmission.
+    \item \textbf{Integrate GPS and Emergency Alert System:}\\
+        To integrate GPS functionality into the wearable or mobile app for transmitting the location of the fall event and automated emergency alert notifications via SMS or call to registered caregivers.
+    \item \textbf{Support for Future Enhancements and Analytics:}\\
+        To design the system in a modular and extensible manner, enabling future features such as fall prevention suggestions, AI-based movement pattern analysis, health dashboard visualization, and cloud-based deployment.
+
+
+\end{itemize}
+
+
+\section{Purpose, Scope, and Applicability}
+
+\subsection{Purpose}
+The purpose of this project is to develop a wearable, AI-powered fall detection system designed to enhance the safety and well-being of elderly individuals. With the global aging population on the rise, the need for real-time, intelligent monitoring systems is critical to prevent severe injuries and reduce emergency response times in the event of a fall.
+Traditional fall detection systems are often limited to home-based environments with static sensors or require manual triggering by the user, which is impractical during sudden incidents. This project addresses these challenges by utilizing embedded motion sensors and AI algorithms for continuous, automated fall detection in real time.
+The system is capable of analyzing accelerometer and gyroscope data from wearable devices using machine learning models trained to differentiate falls from normal movements. It is supported by a mobile application that enables caregivers to receive immediate alerts along with the location of the incident, ensuring timely assistance and intervention.
+\subsection{Scope}
+This project focuses on building a real-time fall detection ecosystem combining sensor hardware, AI-based analysis, and mobile connectivity. It includes the development and integration of the following components:
+
+\begin{itemize}[itemsep=-4pt]
+    \item Wearable Sensor Device equipped with accelerometer and gyroscope
+
+    \item Machine Learning Models (e.g., SVM, Random Forest, or LSTM) for detecting falls based on motion patterns
+
+    \item  FastAPI backend to manage data collection, alert notifications, and user management
+
+    \item MongoDB for storing sensor logs, user profiles, and historical fall data
+    
+    \item React Native Mobile App for caregiver alerting, user tracking, and emergency contact access
+\end{itemize}
+
+The system supports the following key operations:
+
+\begin{itemize}[itemsep=-4pt]
+    \item Continuous sensor data acquisition from the wearable
+
+    \item Real-time processing and classification of movement data
+
+    \item Immediate alert generation with timestamp and GPS location upon detecting a fall
+
+    \item Mobile notifications to caregivers or emergency services
+    
+    \item Management of user profiles, device associations, and fall history
+\end{itemize}
+The current version focuses on fall detection only, using static thresholds and machine learning models trained on curated datasets. It does not yet support fall prediction, health analytics, or voice-assistive interactions.
+
+\subsection{Applicability}
+This system is highly applicable across various domains where elderly care and safety are of paramount concern:
+\begin{itemize}[itemsep=-4pt]
+    \item \textbf{Home Care Services:}To monitor the elderly remotely and respond quickly in case of a fall.
+
+    \item \textbf{Hospitals and Assisted Living Facilities: } For real-time fall detection and faster medical intervention.
+    
+    \item \textbf{Rehabilitation Centers:} To track patient mobility and identify dangerous fall patterns during recovery.
+
+    \item \textbf{Insurance Providers:}  For providing safety-based wearable plans and validating fall-related claims.
+
+    \item \textbf{Government and Public Health Programs:}To improve the quality of life for senior citizens living alone or in remote areas.
+
+    \item \textbf{Elderly Individuals and Their Families:}  For peace of mind, allowing independent living with an added layer of safety.
+\end{itemize}
+The system is modular and extensible, with potential for future enhancements such as fall prediction, integration with wearable ECG monitors, AI-based movement pattern analysis, and health data visualization dashboards.
+
+\section{Organization of the Report}
+This report is structured in a clear and logical manner to guide the reader through the background, motivation, system design, and evaluation of the Wearable AI-Driven Sensor for Fall Detection in Elderly. Each chapter builds on the previous one to provide a comprehensive understanding of the project and how each module contributes to the overall goal of real-time fall detection.
+
+\begin{enumerate}[itemsep=-4pt, label=\textbf{\roman*.}]
+    \item \textbf{Chapter 1: Introduction- }Provides an overview of the project, highlighting the motivation behind developing an AI-based fall detection system for elderly care. This chapter outlines the purpose, scope, and applicability of the project, and introduces the reader to the structure of the report.
+    
+    \item \textbf{Chapter 2: Problem Statement -} Defines the central challenge of ensuring elderly safety by predicting falls before they occur. It highlights the risks of fall-related injuries, the limitations of existing wearable devices, and the need for an AI-powered predictive solution using real-time sensor data.
+    
+    \item \textbf{Chapter 3: Review of Existing Solutions -} Surveys previous approaches to fall detection and prediction, including threshold-based accelerometer methods, rule-based systems, and classical machine learning techniques. It discusses their shortcomings in accuracy, false alarms, and adaptability to diverse elderly movement patterns.
+    
+    \item \textbf{Chapter 4: Proposed Solution -} Introduces the concept of a wearable AI-driven sensor system leveraging LSTM networks for sequential data analysis. It explains why LSTMs are effective for modeling temporal patterns in motion data and how the system enhances accuracy and reliability compared to traditional methods.
+    
+    \item \textbf{Chapter 5: Methodology -} Details the methodology followed, including sensor data acquisition (accelerometer and gyroscope), preprocessing, LSTM model training, fall prediction pipeline, and system-level workflow. It outlines how different components interact for real-time prediction and alert generation.
+    
+    \item \textbf{Chapter 6: Implementation Details -} Describes the implementation of the predictive system. This includes the wearable sensor setup (ESP32 or equivalent), data handling, model deployment, mobile app integration for caregiver alerts, and backend services for storage and analytics.
+    
+    \item \textbf{Chapter 7: Results and Discussion -} Presents the results obtained during testing and validation. It includes prediction accuracy, false-positive/false-negative rates, real-time performance, and comparisons with baseline methods. The discussion addresses practical usability, strengths, and current limitations.
+    
+    \item \textbf{Chapter 8: Conclusion and Future Scope -} Summarizes the major contributions of the project, its impact on elderly care, and potential for real-world deployment. Future enhancements may include cloud-based analytics, integration with healthcare platforms, and multimodal sensor fusion for higher reliability.
+    
+    \item \textbf{Bibliography -} Lists all research papers, datasets, frameworks, and tools referred to throughout the project, ensuring academic integrity and credibility.
+\end{enumerate}
+
+
+\chapter{Literature Survey}
+
+\section{Introduction}
+With the global rise in the elderly population, ensuring their health, safety, and independence has become a critical societal priority. One of the most pressing issues among senior citizens is the risk of falling, which is a leading cause of injury, hospitalization, and in some cases, mortality. According to the World Health Organization, approximately 37.3 million falls requiring medical attention occur each year, with a significant portion affecting individuals aged 65 and older. Early detection of falls is therefore essential to minimize the physical, emotional, and financial consequences that follow such incidents.
+
+Traditional fall detection systems typically rely on stationary devices like pressure sensors, bed alarms, or CCTV-based motion tracking. However, these solutions have limitations they often function only within a confined space, lack portability, and depend on manual monitoring or post-incident alerts. Furthermore, these systems are impractical for elders living alone or those requiring continuous monitoring while on the move. As a result, the need for wearable, real-time, intelligent fall detection systems has grown significantly.
+
+The advent of Artificial Intelligence (AI) and wearable technologies has opened new avenues in healthcare monitoring. In particular, accelerometer and gyroscope sensors embedded in compact wearable devices can capture human movement in real-time. When combined with AI-driven models such as Support Vector Machines (SVM), Decision Trees, or Recurrent Neural Networks (RNNs), these data streams can be leveraged to differentiate between normal daily activities and abnormal events such as falls with high precision.
+
+Several studies in recent years have explored such integrations. For instance, Khan et al. (2022) developed an LSTM-based system trained on tri-axial sensor data, achieving impressive accuracy in controlled environments. This proves the viability of sequence models in detecting complex motion events like sudden impacts or loss of balance [1]. However, the real-time deployment of such models still faces challenges like latency, power consumption, and alert communication.
+
+Similarly, Patel and Sinha (2021) proposed a wearable system using SVM classification on low-power microcontrollers, allowing for low-latency processing and mobile alerts via Bluetooth and Wi-Fi [2]. Their system demonstrated feasibility in real-time applications, though the model's performance diminished under unusual activity patterns or in the presence of sensor drift.
+
+To enhance the scalability and responsiveness of such systems, many researchers have looked toward backend integration using frameworks like FastAPI, cloud-connected databases like MongoDB, and efficient communication through mobile apps. These enable real-time notifications, data visualization, and remote monitoring capabilities for caregivers and medical professionals.
+
+In addition, Yadav et al. (2023) highlighted the benefits of modular architecture for wearable fall detection systems by integrating sensor APIs with mobile-based dashboards. Their approach also included GPS tagging of fall events, which adds significant value in emergency response situations [3].
+Despite these advancements, key challenges remain unresolved. Most systems either sacrifice accuracy for efficiency or are too complex to be deployed on resource-constrained wearable devices. Moreover, real-world scenarios often involve unpredictable movements, obstructions, or varied terrains, which require robust models trained on diverse datasets. Issues of battery life, false positives, and user comfort further complicate practical adoption.
+
+This chapter sets the context for developing a comprehensive Wearable AI-Driven Fall Detection System, focusing on how machine learning models, sensor data analysis, and real-time communication can work together. By reviewing existing methodologies and identifying current limitations, this report lays the foundation for proposing an optimized, scalable, and elderly-friendly solution for real-time fall detection.
+
+\section{Objective of Literature Survey}
+The primary objectives of conducting the literature survey for the Wearable AI-Driven Sensor for Fall Detection in Elderly are as follows:
+\begin{enumerate}[itemsep=-4pt, label=\roman*.]
+    \item To study current techniques and technologies used in wearable health monitoring systems, particularly those aimed at detecting human activity and fall incidents using sensor data such as accelerometers and gyroscopes.
+    \item  To analyze the effectiveness of various machine learning models including Decision Trees, Support Vector Machines (SVM), Long Short-Term Memory (LSTM) networks, and Convolutional Neural Networks (CNNs) in accurately classifying fall events.
+    \item To identify limitations in existing systems, such as high false positive rates, limited portability, high computational requirements, and lack of real-time alerting or user-friendly mobile interfaces.
+    \item To examine the role of edge computing and lightweight AI models in improving the efficiency, response time, and energy consumption of wearable fall detection devices suitable for real-world deployment.
+    \item To gather insights into integrating real-time communication technologies, such as Bluetooth, Wi-Fi, or cloud APIs (e.g., FastAPI and Firebase), with mobile apps for seamless notification and tracking of fall events.
+\end{enumerate}
+
+\section{Summary of Literature Survey}
+
+The literature survey on wearable AI-driven sensors for fall detection in elderly individuals reveals significant advancements in sensor-based health monitoring systems and AI-driven activity recognition. The key focus areas of the reviewed research include sensor selection, machine learning models, real-time processing, system scalability, and integration with mobile and IoT platforms. Each study contributes uniquely to addressing the challenges of accurate, timely fall detection while minimizing false alarms and computational overhead.\\
+\noindent \textbf{[1] IoT-Enabled Fall Detection Using LSTM and Edge Computing}\\
+\textbf{AUTHORS:}Pravin Kulurkar et al., 2023\\
+Feature Focus: LSTM-Based Edge Intelligence for Real-Time Detection
+This study introduces an IoT-based elderly fall detection system using wearable accelerometer sensors combined with edge computing and Long Short-Term Memory (LSTM) models for efficient, real-time analysis. The authors propose a low-power wearable node using the LSM6DS0 MEMS sensor that captures 3D motion data, processed through a gateway running Apache Flink and CoAP protocols. The LSTM model was trained on the MobiAct dataset, achieving up to 95.87\% accuracy.
+
+A major innovation is the offloading of computational tasks from wearable sensors to smart gateways, enabling high QoS (quality of service) and reduced energy usage at the sensor level. The paper also explores optimal sensor placement, energy-efficient SPI communication over BLE, and CoAP-based RESTful services to ensure reliable, scalable deployment. This architecture supports real-time push alerts to caregivers while maintaining sensor longevity and usability.\\
+
+\noindent\textbf{[2] Comprehensive Survey of IoT-Based Fall Detection Systems}\\
+\textbf{AUTHORS:}Mohamed Esmail Karar, Hazem I. Shehata, Omar Reyad, 2022\\
+Feature Focus: Taxonomy of Sensors and Algorithms in IoT-Enabled Fall Detection
+This extensive literature survey provides a classification of fall detection systems based on sensor types, ML techniques, and IoT integration. The authors categorize systems into wearable, ambient, and hybrid types and evaluate popular sensors like accelerometers, gyroscopes, magnetometers, and physiological sensors. They highlight machine learning models including ANN, SVM, Decision Trees, and Deep Learning for both fall prediction and detection.
+
+A key contribution is the identification of public dataset limitations and the lack of standardization in evaluating fall detection systems. The authors propose using lightweight deep models with edge computing to overcome latency and energy issues in wearable devices. Future trends include privacy-aware systems, 5G-based passive sensing, and multi-modal AI approaches.\\
+\noindent\textbf{[3] Augmented Reality and Visual AI for Fall Detection}\\
+\textbf{AUTHORS:}Hui Jin, Weijun Zhou, Yuh-Chung Lin, 2024\\
+This paper presents a cutting-edge fall detection system designed to improve safety and emergency response for elderly individuals, particularly those living alone. The proposed solution uniquely combines Apple's ARKit a framework that enables 3D spatial awareness with YOLOv5, a powerful real-time object detection model based on convolutional neural networks (CNNs). Together, these technologies form a hybrid system that excels in identifying fall events through both spatial depth analysis and visual recognition.
+
+The system is implemented as an iOS application using Swift, Objective-C++, and Python. ARKit serves as the core technology for generating a real-time spatial map of the environment, enabling the device to understand the physical layout, object positioning, and depth information. Simultaneously, YOLOv5 is employed to perform frame-by-frame image detection of human postures and movements, with a specific focus on detecting abnormal motion patterns associated with falls.
+
+A key component of the research involves the training of YOLOv5 on a large-scale dataset containing 8,713 manually labeled fall images. The trained model achieved impressive metrics, reaching 0.9 precision and recall, highlighting its robustness in distinguishing fall events from normal daily activities. This level of accuracy is critical, particularly in applications for elderly care where false positives can lead to unnecessary panic and false negatives could result in dangerous delays in medical response.
+
+One of the major strengths of the system is its ability to perform on-device inference in real-time. This eliminates the dependency on constant cloud connectivity, thereby enhancing privacy, reducing latency, and making the system suitable for emergency scenarios where internet access might be unreliable. The fusion of visual data (YOLOv5) and depth sensing (ARKit) allows for enhanced fall localization and reduced misclassification, particularly in cluttered or complex indoor environments where depth perception adds important context.
+
+However, the authors acknowledge certain limitations in the current framework. The diversity of the training dataset is limited, potentially affecting the model's performance across different lighting conditions, backgrounds, and body types. Furthermore, generalizing the model for various camera angles and home settings remains a challenge. To address these shortcomings, the paper outlines future directions such as incorporating more diverse training datasets, integrating newer object detection models like YOLOv8, and exploring refined network architectures for better efficiency and accuracy.
+
+In summary, this research highlights a promising direction in elderly care using Augmented Reality and Visual AI. The integration of ARKit’s spatial mapping and YOLOv5’s detection capabilities provides a context-aware, real-time, and highly accurate fall detection solution, showcasing the potential of cross-disciplinary technologies to solve critical healthcare problems.\\
+\noindent\textbf{[4] Accelerometer-Based Elderly Fall Detection System Using Edge Artificial Intelligence Architecture}\\
+\textbf{CHAPTERS:}Osama Zaid Salah, Sathish Kumar Selvaperumal, Raed Abdulla (2022)\\
+This paper investigates an innovative wearable fall detection system that leverages Edge Artificial Intelligence (AI) and low-power wide-area networks (LPWANs) to deliver efficient, low-latency, and privacy-conscious health monitoring for the elderly. Recognizing the limitations of traditional IoT-based architectures-particularly latency, power inefficiency, and dependence on stable internet connections the authors propose a system where AI-based fall detection occurs locally on the wearable device itself, eliminating the need for cloud-based inference in real time.
+
+The system is architected in three layers: the Edge Layer, Fog Layer, and Cloud Layer. At the Edge Layer, a wearable device is designed using the Arduino Nano 33 BLE Sense microcontroller, which is integrated with a 9-axis Inertial Measurement Unit (IMU). This compact, power-efficient board is capable of running TinyML models using TensorFlow Lite, allowing for on-device deep learning inference. The Fog Layer comprises a Raspberry Pi 4-based LoRa gateway, which receives fall alerts from the edge device via LoRa (Long Range) communication, and the Cloud Layer handles data storage, user dashboards, and alert dissemination through connected applications.
+
+A significant innovation in this work is the deployment of a lightweight Convolutional Neural Network (CNN) model directly onto the resource-constrained microcontroller. The model, tailored specifically for fall detection, was trained using the SisFall dataset, a well-known public dataset containing a rich variety of fall scenarios and daily activities from both young and elderly subjects. Preprocessing of the raw data involved conversion of acceleration signals to gravity units and segmenting them into fixed-size windows labeled for supervised training. The resulting model had an impressive accuracy of 95.55\%, a minimal memory footprint of 61.08 KB, and ultra-fast inference times under 37.84 milliseconds, ensuring real-time detection even on limited hardware.
+
+The system's communication efficiency is another key advantage. By conducting AI inference on the device itself, only critical alerts (such as a confirmed fall) are sent over LoRa to the fog and cloud layers, significantly reducing data transmission costs, bandwidth usage, and energy consumption. This design also enhances data privacy, as raw motion data never leaves the device, making it particularly well-suited for sensitive healthcare applications.
+
+The authors emphasize that this architectural approach not only minimizes latency and dependency on high-bandwidth networks, but also extends the operational lifespan of the wearable by conserving battery life an essential consideration for continuous health monitoring. It supports TinyML (Tiny Machine Learning) principles, enabling sophisticated AI capabilities on devices with very limited processing and storage capacities, making it an ideal fit for large-scale deployment in remote or rural areas where connectivity is unreliable or unavailable.
+
+Another noteworthy aspect is the use of LoRa technology, which provides long-range communication (up to several kilometers in open environments) while maintaining ultra-low power consumption. This makes it ideal for applications such as elderly fall detection, where the wearable must be active and responsive for extended periods without frequent recharging. The inclusion of a NodeMCU ESP32 board helps bridge communication between the Arduino board and the LoRa transceiver, while the fog gateway uses Node-RED for real-time dashboard updates.
+
+In conclusion, this paper presents a scalable, robust, and energy-efficient architecture that combines Edge AI, lightweight CNNs, and LoRa connectivity to overcome key shortcomings in existing fall detection systems. The proposed system not only ensures real-time fall detection with minimal infrastructure but also maintains user privacy and reliability, making it highly applicable for elderly healthcare in both urban smart homes and rural environments. The study provides a strong foundation for future enhancements, including integration with cloud analytics platforms and adaptive learning algorithms for personalized monitoring.\\
+\noindent\textbf{[5] Elderly Fall Detection Systems}\\
+\textbf{AUTHORS:}Xueyi Wang, Joshua Ellul, George Azzopardi (2020)\\
+This comprehensive survey paper reviews the state-of-the-art in elderly fall detection systems, focusing on solutions leveraging sensor networks and Internet of Things (IoT) technologies. The paper categorizes fall detection methods into three primary types: wearable sensor-based, vision-based, and ambient-based systems, and evaluates the strengths and weaknesses of each approach.
+
+The survey identifies key challenges in fall detection, such as high false alarm rates, limited generalizability of datasets (which are often simulated by young volunteers), privacy concerns in visual systems, and the difficulty of balancing accuracy with real-time responsiveness in wearable technologies. To address these, the paper emphasizes the role of sensor fusion, where signals from multiple sensors (e.g., accelerometers, gyroscopes, cameras) are combined to improve accuracy and robustness.
+Among the pioneering works discussed are systems using accelerometers placed on the trunk, which achieved up to 100 specificity, and early applications of gyroscopes for fall motion pattern analysis. With the advent of RGB-D sensors like Microsoft Kinect, vision-based systems gained momentum due to their capability to extract depth information without invading user privacy.
+
+The authors also review publicly available datasets such as SisFall, highlighting the importance of real-world data in improving model reliability. Furthermore, the paper introduces a four-layer fall detection architecture Physiological Sensing Layer, Local Communication Layer, Information Processing Layer, and User Application Layer to conceptually structure how fall detection systems collect, transmit, analyze, and respond to fall events.
+
+The survey concludes that while significant progress has been made, future research must focus on real-world usability, multi-modal sensor integration, edge-based processing, and the development of more realistic, elderly-specific datasets. It calls for a balanced approach combining accuracy, privacy, energy efficiency, and user acceptance to develop scalable and trustworthy fall detection solutions.\\
+\noindent\textbf{[6] An Enhanced Ensemble Deep Neural Network Approach for Elderly Fall Detection System Based on Wearable Sensors}\\
+\textbf{AUTHORS:}Zabir Mohammad, Arif Reza Anwary, Muhammad Firoz Mridha, Md Sakib Hossain Shovon, Michael Vassallo (2023)\\
+This paper proposes an advanced wearable fall detection system using a class-based ensemble deep neural network (DNN) that combines Convolutional Neural Networks (CNNs) and Recurrent Neural Networks (RNNs). The system is designed not only to detect fall events but also to anticipate pre-fall conditions-allowing preventive actions like deploying wearable airbags and triggering emergency alerts. This is achieved through a specialized ensemble architecture, where each sub-model is trained to recognize a specific class (Non-Fall, Pre-Fall, or Fall).
+
+The researchers utilized the SisFall dataset, which includes data from 38 subjects, both elderly and young, performing 34 different activities. To enhance model generalization, the team applied real-time data augmentation techniques such as jittering, rotation, and scaling. Each sensor sample was transformed into 3-axis accelerometer and gyroscope data, normalized, and segmented into overlapping time windows for classification.
+
+The system architecture includes a head model (CNN) for feature extraction and three RNN-based ensemble sub-models, each specializing in detecting one of the three states. This class-specific training boosts accuracy by allowing each model to "memorize" unique characteristics of its target class. The ensemble design reduces overfitting and computational complexity, critical for wearable deployment.
+The proposed model was evaluated on a subject-independent dataset split (no subject appears in both train and test sets), ensuring real-world robustness. It achieved sensitivity scores of 91\% for Non-Fall, 89\% for Pre-Fall, and 97\% for Fall detection. Comparisons with other state-of-the-art models like ConvLSTM and traditional RNNs showed that this ensemble system consistently outperformed them in both sensitivity and accuracy.
+
+Although the concept was not yet implemented in hardware, the study proposes an end-to-end wearable framework with waist-mounted sensors and a Bluetooth-linked airbag helmet to prevent head injuries. Upon detecting a fall, alerts would be sent to caregivers through a cloud-based dashboard.
+
+This study demonstrates how ensemble learning, combined with real-time sensory data and wearable technology, can significantly enhance elderly safety, setting a new benchmark for intelligent fall prevention systems.\\
+\noindent\textbf{[7] Fall Detection Algorithm using Body Angle for Accurate Classification of Falls and ADLs}\\
+ \textbf{AUTHORS:}Ali Ibrahim, Kabalan Chaccour, Georges Badr, Amir Hajjam El Hassani (2021)\\
+ This paper presents a threshold-based fall detection algorithm designed to distinguish between actual falls and Activities of Daily Living (ADLs) with high precision by integrating a novel feature: the body angle. Implemented on a wearable waist-mounted device, the system employs a combination of an accelerometer and gyroscope (MPU6050) to collect motion data and transmits it via Bluetooth to a computer for processing.
+ 
+The innovation in this study lies in adding body angle (θRes) as a key detection metric, supplementing traditional measurements of acceleration and angular velocity. While prior systems rely heavily on detecting acceleration spikes (which can occur during non-fall activities like sitting or jumping), this system improves fall classification by analyzing the orientation change of the body during motion. Specifically, it calculates pitch and roll angles through integration over time, offering an accurate representation of the fall trajectory.
+
+The algorithm operates in several stages. First, it monitors for a drop in acceleration below a predefined lower fall threshold (LFTAcc = 0.7g). If detected, it opens a 0.5-second fall window, during which it checks whether acceleration and angular velocity exceed upper thresholds (UFTAcc = 4.1g, UFTW = 60 deg/s²). If both thresholds are surpassed, the body angle is computed. A fall is confirmed only if θRes exceeds 50 degrees, effectively filtering out false positives.
+
+To validate the system, the authors conducted experiments on 20 subjects 10 elderly performing ADLs and 10 younger individuals simulating five types of falls (forward, backward, sideways, vertical). The detection algorithm achieved 93.3\% sensitivity and 100\% specificity, successfully detecting most falls while avoiding misclassification of ADLs as falls. Notably, all tested ADLs (e.g., sitting, lying, running) resulted in zero false positives.
+
+This approach demonstrates the value of multi-modal sensing and feature engineering in fall detection. By integrating angular motion with orientation metrics, the algorithm effectively mimics how human balance perception functions, offering a lightweight and highly accurate solution for real-time use in wearable eldercare systems. The authors note the potential for integrating this logic into microcontroller-based platforms for on-device inference in future work.\\
+\noindent\textbf{[8] Fall Detection for the Elderly using YOLOv4 and LSTM}\\
+\textbf{AUTHORS:}Pongsatorn Chutimawattanakul, Pranchalee Samanpiboon (2022)\\
+This paper proposes a vision-based fall detection system that combines YOLOv4, a high-speed object detection algorithm, with Long Short-Term Memory (LSTM) networks to monitor and classify falls in video footage. The system is particularly relevant in the context of home-based elderly care, where unobtrusive and passive monitoring via surveillance cameras is preferred.
+
+The framework operates in two stages. First, YOLOv4 processes video frames to identify and classify postures such as stand, sit, lie, bend, crawl, and kneel. These frame-wise posture labels are then organized into sequential windows, which are input into the LSTM model. The LSTM processes these temporal sequences to distinguish between falls and normal movements based on learned temporal patterns.
+
+The authors trained and tested their model on two publicly available datasets: the Multiple Cameras Fall Dataset and the LE2I Dataset. The YOLOv4 model achieved an average posture detection accuracy of 87.88 across 26 test videos, while the YOLOv4-LSTM pipeline achieved 100 accuracy in fall detection, correctly classifying all fall and non-fall events.
+
+A key strength of this system is its ability to handle complex movement patterns and occlusions, as the LSTM compensates for errors or noise in single-frame posture predictions. For example, a short sequence like [stand → bend → lie] may indicate a fall, whereas [stand → sit → lie] may correspond to normal behavior like lying down. This temporal understanding is critical to reducing false positives-one of the main challenges in vision-based detection.
+
+The study highlights challenges such as insufficient training data for specific postures and misclassification of visually similar poses (e.g., stand vs. stand-lean). Still, the system performed reliably across various indoor environments, including offices, lecture rooms, and bedrooms.
+
+This work stands out as one of the first to directly link YOLOv4 and LSTM in a unified model for fall detection. It provides a real-time, non-contact, and highly accurate solution that could be deployed in residential or assisted-living settings. The authors suggest that future work could integrate audio or depth data and expand the system into multi-room or multi-person scenarios.\\
+\noindent\textbf{[9] Fall Detection for Elderly People Using Machine Learning}\\
+\textbf{AUTHORS:}Sejal Badgujar, Anju S. Pillai (2020)\\
+This paper introduces a machine learning-based fall detection system specifically designed to monitor and assist elderly individuals who live alone or have limited mobility. As falls are a leading cause of injury and mortality in the elderly population especially those over the age of 65 the research aims to develop a robust, real-time solution that can accurately distinguish between fall events and daily living activities (ADLs). The proposed system leverages wearable sensors and machine learning algorithms to achieve high accuracy with minimal false alarms.
+
+The system is built on the SisFall dataset, which contains a wide range of sensor data collected from subjects performing both fall scenarios and normal activities. A tri-axial accelerometer (ADXL345), mounted on a waist-worn belt, was used to collect motion data in three dimensions (X, Y, Z). The paper utilizes data from six young participants and two elderly participants, capturing 19 types of ADLs and 15 types of fall scenarios. A subset of 100,000 samples was used for training, while 40,000 samples were set aside for testing and validation.
+
+To ensure data integrity, a 4th order Butterworth filter with a 5Hz cutoff was applied to the raw sensor data to reduce noise. Feature extraction plays a central role in the effectiveness of the detection system. The researchers calculated nine key features, including sum vector magnitude, standard deviation, and statistical measures across the horizontal plane and overall vector space. These features, derived from accelerometer data, were used as input for classification algorithms.
+
+The authors chose to compare two well-known machine learning classifiers: Support Vector Machines (SVM) and Decision Trees. While SVM is known for its ability to create a hyperplane that separates data into different classes with maximum margin, decision trees classify data by following a tree-like structure of rules derived from training samples. The training and evaluation were implemented using Python 3.7 and scikit-learn.
+
+The study found that the decision tree algorithm significantly outperformed SVM in both accuracy and computational efficiency. Specifically, decision trees achieved an accuracy of 95.87, with a training time of only 2.741 seconds and prediction time of 0.02 seconds. In contrast, SVM attained an accuracy of 84.17\%, but required 294.95 seconds for training and 84.71 seconds for prediction. The confusion matrix, sensitivity, and specificity metrics confirmed that decision trees yielded fewer false positives and provided more interpretable decision boundaries compared to SVM.
+
+One of the most impactful outcomes of this study is the identification of the most influential features. The authors discovered that features like sum vector magnitude (C1), sum vector magnitude on the horizontal plane (C2), and their respective standard deviations (C8 and C9) significantly enhanced the classifier's ability to discriminate between falls and non-falls. These findings support the hypothesis that carefully chosen features can reduce false alarms and improve the accuracy of fall detection systems.Beyond technical implementation, the system is also equipped with an alerting mechanism. Upon detecting a fall in real-time, the system is designed to send an alert (via message or call) to a caregiver or family member, ensuring timely intervention. This component reflects the practical utility of the proposed system in real-world elderly care applications.
+
+In terms of methodology, the authors position their work as an advancement over traditional threshold-based detection systems. While threshold methods rely on manually set limits (e.g., acceleration above a certain value), they often generate false positives during vigorous but normal activities. Machine learning models, especially those trained on well-curated datasets, offer a more flexible and scalable approach. They can learn complex patterns and subtle differences in motion that threshold methods cannot capture.
+
+The paper also emphasizes the cost-effectiveness and portability of using wearable sensors for fall detection. Unlike vision-based systems (e.g., surveillance cameras), which are limited to indoor environments and pose privacy concerns, wearable devices are mobile and can operate in any location. Furthermore, ambient sensors like PIR or infrared detectors are restricted by spatial constraints, whereas wearable sensors provide continuous, location-independent monitoring.
+
+In conclusion, this research contributes a highly accurate, real-time fall detection system using machine learning techniques and low-cost wearable technology. By comparing SVM and decision tree classifiers, the authors demonstrate the effectiveness of decision trees in fall classification tasks, thanks to their simplicity, speed, and interpretability. The study highlights that feature selection is crucial in optimizing performance, and integrating sensor-based monitoring with real-time alert systems can vastly improve the quality of life and safety for elderly individuals.
+
+Future work, as suggested by the authors, includes expanding the training dataset to include more real-world fall scenarios, especially involving elderly subjects, and further refining feature selection methods. The goal is to make the system even more generalizable, robust, and ready for clinical or consumer deployment in eldercare environments.\\
+\noindent\textbf{[10] Real-Time Elderly Fall Detection as Ambient Intelligence in Old Age Homes}\\
+\textbf{AUTHORS:}Laxmi Shabadi, Pavan S. G., Chaitra M., R. K. Deekshith, Monik L., Laxmi Narayan (2025)\\
+This research focuses on developing a real-time fall detection framework embedded in the infrastructure of old age homes, leveraging the power of ambient intelligence, IoT, and edge AI. The goal is to increase the autonomy and safety of elderly residents by integrating computer vision and smart edge devices for continuous monitoring and prompt emergency response.
+
+The paper introduces a fall posture detection system utilizing a Single Shot Detector (SSD) with MobileNet V2 as the backbone for efficient feature extraction and classification. This lightweight model is optimized for real-time applications on embedded platforms, such as the NVIDIA Jetson Nano, enabling localized processing without reliance on cloud infrastructure. The concept of Ambient Assisted Living (AAL) is central to the study, where smart sensors, AI algorithms, and real-time video analytics are employed to provide context-aware monitoring.
+
+A novel dataset termed MNDP was developed, consisting of 1,000 labeled images depicting two categories: complete falls and semi-falls. These images were collected in controlled environments like college labs and classrooms. Annotation was carried out using the LabelImg tool, and preprocessing included data augmentation techniques to improve model generalization. Feature extraction and model training were conducted offline using high-performance workstations, followed by model conversion into ONNX format for real-time deployment.
+
+The trained model was interfaced with a USB webcam mounted approximately 10 feet above ground level. During inference, the model could detect fall postures with low latency and high reliability. The detection mechanism involves simultaneous localization and classification using SSD layers and MobileNet’s depth-wise separable convolutions, which minimize computational overhead.
+
+The methodology follows a structured flow: data acquisition, annotation, preprocessing, feature extraction, model training, ONNX conversion, and real-time fall detection via edge devices. Testing involved training two models with differing epochs (70 and 20) to evaluate trade-offs between accuracy and training duration. Parameters like learning rate, batch size, and augmentation probability were fine-tuned to optimize performance.
+
+The results indicate that the system effectively differentiates between fall and non-fall postures with high accuracy. Key strengths include minimal computational requirements, rapid response time, and the ability to operate autonomously without constant human supervision. Moreover, the approach maintains privacy by avoiding cloud transmission of video streams.
+
+In summary, this study successfully demonstrates the feasibility of using mobile and embedded vision applications for fall detection in old age homes. It presents a viable edge AI-based solution that can be deployed in real-world environments to enhance safety, provide psychological reassurance, and reduce the burden on caregivers and emergency services. Future directions include expanding the dataset, refining posture classification accuracy, and integrating voice or haptic feedback systems to further augment usability.\\
+\noindent\textbf{[11] Hybrid Real-Time Fall Detection System Based on Deep Learning and Multi-Sensor Fusion}\\
+\textbf{AUTHORS:}Xiaojie Lv, Zongliang Gao, Changshun Yuan, Meng Li, Chao Chen (2020)\\
+This paper introduces a cost-effective and intelligent fall detection system that combines deep learning-based video analysis with multi-sensor data fusion to improve fall detection accuracy and reliability. With China's rapidly aging population, fall-related injuries have emerged as a serious public health issue, prompting the development of robust and non-intrusive monitoring technologies.
+
+The proposed system integrates the YCL algorithm comprising YOLOv3 for object detection and LiteFlowNet for optical flow estimation with data from smartphone-embedded sensors such as accelerometers and barometers. This hybrid approach overcomes the limitations of relying solely on video-based systems, which are constrained by camera field of view, and wearable sensors, which can produce false alarms or miss contextual information.
+
+In the visual detection component, YOLOv3 (You Only Look Once) performs fast object recognition using a deep convolutional architecture. The authors enhance its efficiency by replacing Darknet-53 with MobileNetV3, a lightweight yet powerful feature extractor suitable for embedded platforms. LiteFlowNet complements YOLOv3 by estimating optical flow motion patterns between image frames which allows the system to recognize sudden, uncharacteristic movements indicative of a fall.
+
+On the sensor side, the system employs acceleration and air pressure readings from smartphones. The acceleration vector is analyzed in three phases: the initial loss of balance, the impact phase (with peak acceleration), and the post-fall immobility. Air pressure variations further validate whether a change in altitude has occurred, confirming a potential fall. The fusion of these data streams is achieved using a weighted decision function that improves accuracy by cross-validating outputs.
+
+Extensive experimentation demonstrated that the combined system significantly reduces false positives while improving sensitivity. The fusion model provides effective monitoring even in environments with limited camera coverage or privacy constraints, such as bathrooms. The algorithm determines a fall based on threshold conditions including sudden acceleration (S), sustained downward acceleration on the Z-axis (Az), and pressure-based height change (ΔH). Parameters like peak acceleration and altitude variation thresholds are empirically set for optimal performance.
+
+In conclusion, this hybrid system effectively merges video analytics and sensor-based monitoring, addressing key challenges such as blind spots, false alarms, and real-time detection. It serves as a practical solution for smart homes, elder care centers, and personal health devices. Future improvements may include machine learning enhancements for threshold adaptation, broader dataset training, and deployment on wearable or home assistant platforms.\\
+\noindent\textbf{[12] Fall Detection System for Elderly People Using Piezoresistive Textile Pressure Sensor}\\
+\textbf{AUTHORS:}Rishabh Vyas, J. Abanah Shirley, R. Jansi (2025)\\
+This paper presents a novel fall detection solution based on piezoresistive textile pressure sensors, with a focus on comfort, accuracy, and continuous real-time monitoring. Targeted at the elderly, the system emphasizes wearability by integrating the sensor into socks, making it unobtrusive and user-friendly.
+
+The core innovation lies in the development of a pressure sensor using Velostat a carbon-impregnated polyolefin material known for its piezoresistive properties. When sandwiched between two conductive fabric layers, the sensor changes resistance in response to applied force, accurately capturing pressure variations associated with fall events. Its design is compact and flexible, making it suitable for embedding in textile-based wearables.
+
+The system incorporates a 3-axis accelerometer (ADXL335), a Lilypad Arduino microcontroller (optimized for wearable electronics), and an HC-05 Bluetooth module for wireless communication. Together, these components track foot inclination and pressure in real time. The data is processed using a threshold-based algorithm, which triggers an alert if the sensed parameters exceed predefined limits. The alert is sent via Bluetooth to a mobile application that notifies caregivers or medical personnel.
+
+Sensor performance is evaluated by placing it under varying pressure conditions and recording changes in resistance. The developed sensor demonstrates high sensitivity, repeatability, and rapid response. In real-time tests, three pressure sensors were sewn into maximum pressure points on the foot inside the sock, ensuring accurate detection of various fall types. The output vector R from the accelerometer and the resistance change from the pressure sensor jointly determine fall events.
+The use of wearable pressure sensors presents several advantages over traditional rigid sensor devices. These include greater comfort, low power consumption, simple circuitry, and improved noise resistance. Furthermore, the design’s low cost makes it scalable for mass production and deployment in elderly care environments.
+
+In summary, the proposed system provides a highly adaptable and comfortable solution for continuous fall monitoring. Its blend of textile engineering and embedded electronics makes it ideal for home care and clinical settings. Future enhancements could include integrating GPS for location tracking, adding gyroscopes for motion analysis, and deploying AI-based models to improve classification accuracy.\\
+\noindent\textbf{[13] IoT-Based Fall Detection Monitoring and Alarm System for Elderly}\\
+\textbf{AUTHORS:}Not specified
+This paper proposes an IoT-driven fall detection and alarm system tailored to the elderly population. Designed to be both practical and scalable, the system integrates real-time monitoring, alerting capabilities, and environmental adaptability using embedded sensors and communication modules.
+
+While the document itself was heavily truncated and lacking author detail in the extract, the system is described as combining accelerometers for motion detection with real-time wireless data transfer. The architecture likely includes a microcontroller (e.g., Arduino or similar), Wi-Fi or Bluetooth for communication, and a cloud or local interface to issue alerts. The alerts may include audio-visual indicators or push notifications to caregivers' smartphones or smart home assistants.
+The primary aim is to ensure immediate assistance in the event of a fall, which is vital for minimizing injury severity and mortality. Data from wearable or embedded sensors are continuously monitored, with thresholds set for sudden deceleration or abnormal posture changes.
+
+In terms of implementation, the paper probably includes a prototype setup for testing in indoor environments such as homes or assisted living centers. Detection logic might use a combination of rules-based algorithms (thresholds) or lightweight machine learning models.
+
+Although limited in specific technical depth due to document truncation, the concept highlights key benefits of IoT-based solutions namely, scalability, affordability, and interoperability with other health monitoring systems. The authors likely suggest future directions involving deeper integration with cloud analytics, edge AI processing, and expansion to other critical health conditions.\\
+
+\noindent\textbf{[14] Automatic Fall Detection by Using Doppler-Radar and LSTM-Based Recurrent Neural Network}\\
+\textbf{AUTHORS:}Takayuki Imamura, Vasily G. Moshnyaga, Koji Hashimoto(2022)
+Falls are a primary health hazard among elderly individuals, often leading to serious injuries or even fatalities, especially for those living alone. This research introduces a novel, non-intrusive fall detection system using a single continuous-wave micro-Doppler radar combined with a Long Short-Term Memory (LSTM) based Recurrent Neural Network (RNN). The system aims to improve upon the accuracy limitations of previous approaches like convolutional neural networks (CNNs) by better capturing the temporal dynamics of fall-related motion patterns.
+
+Unlike wearable devices, which depend on the user's compliance and physical ability to wear them, or vision-based systems that may invade privacy, this solution provides a contactless and privacy-preserving alternative. The Doppler radar sensor captures time-frequency spectrograms of human motion, which are then input into the LSTM model. This approach enables the recognition of both abrupt and gradual fall events an area where CNNs typically underperform, particularly for slow or fading falls.
+
+The system comprises a Doppler sensor, data preprocessing modules, a spectrogram generation block using Short-Time Fourier Transform (STFT), and the LSTM-based classifier. The LSTM model is structured with 784 input neurons, 128 hidden units, and 6 output classes, distinguishing between different fall types and daily activities like squatting or lying.
+
+Experiments were conducted using Raspberry Pi and a PC setup, collecting over 1000 labeled activity samples for training and 200 for testing. The system achieved an impressive 98\% accuracy for abrupt falls and 93\% for slow falls. Compared to earlier studies, the proposed method demonstrated higher precision even with a smaller dataset. A real-time evaluation showed a recall score averaging 96.6\% and precision over 95\%, outperforming similar systems using larger datasets or multiple radar sensors.
+
+An alert is generated only if a fall is detected followed by a no-motion state, reducing false alarms. Messages are transmitted wirelessly to caregivers, enhancing responsiveness in emergency situations. Future improvements aim at deploying the system in residential environments like bathrooms and staircases, ensuring real-world applicability beyond controlled lab settings.
+
+Overall, the study demonstrates a reliable, efficient, and scalable solution for fall detection that addresses privacy, accuracy, and user-friendliness, marking a significant advancement in assistive health technologies.\\
+
+\noindent\textbf{[15] Development of a Fall Detection System Based on a Tri-Axial Accelerometer}\\
+\textbf{AUTHORS:}Samer Lahouar, Mounir Mansour, Mohamed Hadj Said\\
+This study introduces a threshold-based fall detection system utilizing a tri-axial accelerometer to differentiate between actual falls and common daily activities (ADL). Falls represent a serious risk for elderly individuals, often leading to injuries, loss of independence, or death. While various fall detection solutions exist, many face challenges in accurately distinguishing falls from similar high-motion activities such as jumping or sitting abruptly.
+
+The proposed system aims to improve the accuracy of such detections by employing two main features: the Sum Vector (SV) of the acceleration and the variation in body orientation (attitude). Unlike systems that solely rely on acceleration magnitude, this study integrates the change in inclination angle to provide better distinction between falls and ADLs. The system uses a Freescale FRDM KL25Z board with an integrated tri-axial accelerometer, securely placed at the waist. Data from the sensor is processed using MATLAB to analyze real-time patterns.
+
+Experiments were conducted using 21 simulated fall events (in various directions and motion states) and 21 ADLs. For fall detection, the system considers a free-fall phase (SV < 0.7g), an impact phase (SV > 2g), a transitional angle change (10°–60°), and a final horizontal posture (angle > 60°). This sequence reduces false positives in cases like jumping, where impact alone may resemble a fall.
+
+Evaluation results show a sensitivity of 95.23\% (i.e., most real falls were correctly detected) and specificity of 100\% (no false positives for ADL). These metrics were computed using real experimental data collected from various simulated scenarios. The inclusion of inclination angle as a second detection metric significantly enhances the robustness of the system.
+
+In comparison with related research, the system's performance is highly competitive, achieving similar or better accuracy despite using a smaller dataset. Moreover, the use of simple, energy-efficient, threshold-based algorithms makes it suitable for real-time, wearable applications, especially in elderly care settings.
+
+The paper concludes that the system is a promising step toward reliable, low-cost fall detection solutions for the aging population. Future improvements include testing with a larger and more diverse group of individuals to further validate the system's reliability and generalizability.
+
+\subsection{Scalability and Real-Time Detection Challenges}
+Scalability and real-time detection pose significant challenges for wearable AI-driven sensors used in fall detection for the elderly. As the number of users increases, ensuring consistent performance across diverse body types, movement patterns, and environments becomes complex, requiring robust and adaptable algorithms. Real-time detection demands low-latency processing, which can be difficult to achieve on resource-constrained wearable devices without sacrificing battery life or accuracy. Additionally, integrating these systems with reliable communication networks for immediate alerts, while maintaining data privacy and security, further complicates large-scale deployment and real-time responsiveness.
+
+Scalability and real-time detection present notable challenges in implementing wearable AI-driven sensors for elderly fall detection, as discussed by Pravin Kulurkar et al. (2023) in their study on an IoT-based smart home-care system. While their proposed framework achieves high accuracy using edge computing, LSTM models, and wearable devices like MbientLab's MetaMotionR, the authors highlight the burden of energy consumption and data transmission delays in real-time environments. As the system scales to more users, maintaining consistent performance becomes difficult due to variations in sensor placement, sampling rates, and activity profiles.
+
+Additionally, transferring computationally intensive tasks from wearable nodes to IoT gateways improves battery efficiency but introduces dependency on robust network connectivity. The authors emphasize that ensuring reliable service under fluctuating conditions, like device disconnections or atypical user postures, is critical before large-scale deployment. These factors collectively illustrate the complexity of balancing scalability with low-latency, accurate fall detection in real-world elderly care scenarios.
+
+\section{Drawbacks of Existing Systems}
+Existing wearable AI-driven sensor systems for fall detection in the elderly face several critical drawbacks. Many rely on general-purpose hardware like Arduino boards, which are bulky, energy-inefficient, and not optimized for continuous real-time monitoring. These systems often suffer from limited battery life, making long-term usage impractical without frequent recharging. Moreover, they may use traditional Bluetooth communication (e.g., BLE), which introduces challenges such as peer-to-peer limitations, latency, and reduced scalability. Sensor placement is another major limitation; inaccurate or inconsistent positioning can significantly affect detection accuracy. Additionally, most systems lack robust mechanisms to handle atypical fall scenarios or differentiate between fall-like movements and actual falls, leading to false alarms or missed detections. Lastly, the computational burden on wearable nodes and lack of adaptive models hinder their ability to scale efficiently across diverse user environments and physiological conditions.
+
+
+\section{Problem Statement}
+
+Falls are a leading cause of injury, hospitalization, and loss of independence among the elderly population. Despite the advancement of wearable AI-driven sensors for fall detection, existing systems face limitations such as high energy consumption, bulky hardware, inconsistent sensor accuracy due to placement variability, and limited scalability in real-time deployment. Additionally, many current solutions struggle to differentiate between actual falls and normal daily activities, resulting in false alarms and reduced reliability. There is a pressing need for an intelligent, energy-efficient, lightweight, and real-time fall detection system that can operate continuously and accurately across diverse environments, while ensuring timely alerts and minimal disruption to the user’s daily life.
+
+To address this issue, modern fall detection systems must integrate advanced AI algorithms capable of analyzing complex motion patterns while operating efficiently on low-power wearable devices. These systems should leverage technologies like edge computing and optimized communication protocols to reduce latency and offload heavy processing from the wearable sensor to nearby gateways. Such an architecture not only enhances real-time detection capabilities but also preserves the device’s battery life, making it more practical for continuous use among the elderly.
+
+Furthermore, scalability remains a critical challenge, as existing solutions often fail to adapt to different body types, movement styles, and living conditions. A robust system must ensure consistent accuracy across a wide user base, regardless of sensor positioning or external factors. By designing adaptable models trained on diverse datasets and ensuring seamless integration with cloud services for monitoring and alerts, the proposed solution can offer a more reliable, user-friendly, and scalable approach to elderly fall detection in both home and clinical care settings.
+
+\section{Proposed Solution}
+
+
+To address the challenges in elderly care and enable real-time monitoring of falls, we propose a wearable AI-driven fall detection system. This solution integrates sensor fusion techniques with deep learning models on embedded devices, supported by an efficient backend infrastructure using FastAPI and Firebase for mobile integration. The system includes a lightweight mobile application built using React Native for caregivers and users.
+\subsection{Wearable Sensor and Embedded AI Model}
+The core of the system is a compact wearable device equipped with:
+\begin{itemize}[itemsep=-4pt]
+    \item Accelerometer and gyroscope sensors (e.g., MPU6050) for motion tracking.
+    \item An embedded microcontroller (e.g., ESP32) with onboard AI processing capability.
+    \item A pre-trained lightweight neural network (TinyML model) that runs locally to detect abnormal motion patterns associated with falls.
+\end{itemize}
+
+\subsection{Sensor Data Collection and Processing}
+Once feature vectors are extracted from training videos, they are:
+\begin{itemize}[itemsep=-4pt]
+    \item Noise filtering (e.g., Kalman or low-pass filters)
+    \item Feature extraction from temporal windows (e.g., mean acceleration, jerk, angular velocity)
+    \item On-device inference for anomaly detection.
+\end{itemize}
+
+
+
+\subsection{ Real-Time Alerting and Logging}
+Upon fall detection:
+\begin{itemize}[itemsep=-4pt]
+    \item  An alert is sent to the mobile app and optionally via SMS or email,
+    \item  The data is logged in Firebase Firestore with GPS (if available) and sensor context.
+\end{itemize}
+
+
+\chapter{Requirement Engineering}
+
+Requirement engineering is a critical phase in software development where system requirements are gathered, analyzed, documented, and validated. This chapter outlines the essential hardware and software environments necessary for the development of the Wearable AI-Driven Sensor for Fall Detection in Elderly, along with the functional and non-functional requirements.
+
+\section{Software and Hardware Tools Used}
+\subsection{Hardware Tools Used}
+\begin{longtable}{|p{0.25\textwidth}|p{0.65\textwidth}|}
+    \caption{Hardware Tools Used}\label{tab:hardware_tools} \\
+    
+    \hline
+    \textbf{Component} & \textbf{Description} \\
+    \hline
+    \endfirsthead
+    
+    \hline
+    \textbf{Component} & \textbf{Description} \\
+    \hline
+    \endhead
+    
+    \hline
+    \endfoot
+    
+    \hline
+    \endlastfoot
+    
+    Accelerometer + Gyroscope Sensor (e.g., MPU6050) & Captures real-time motion data required for detecting falls. \\
+    \hline
+    Microcontroller (ESP32 / Arduino Nano BLE) & Collects sensor readings and transmits data wirelessly. \\
+    \hline
+    Smartphone (Android) & Receives alerts, displays fall events, and notifies caregivers. \\
+    \hline
+    Internet Connectivity & Enables real-time alerts and cloud-based monitoring. \\
+\end{longtable}
+Table \ref{tab:hardware_tools} summarizes the essential hardware components of the proposed fall detection system.
+
+\subsection{Software Tools}
+\begin{longtable}{|p{0.25\textwidth}|p{0.65\textwidth}|}
+    \caption{Software Tools}\label{tab:software_Tools} \\
+    
+    \hline
+    \textbf{Category} & \textbf{Description} \\
+    \hline
+    \endfirsthead
+
+    \hline
+    \textbf{Category} & \textbf{Description} \\
+    \hline
+    \endhead
+
+    \hline
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    Programming Language & Python for model training; Java/Kotlin for Android app development. \\
+    \hline
+    Deep Learning Framework & TensorFlow/Keras for LSTM-based fall detection. \\
+    \hline
+    Data Processing & NumPy/Pandas for sensor data handling. \\
+\end{longtable}
+Table \ref{tab:software_Tools} summarizes the software used in the fall detection project.
+
+\section{Software Requirement Specification}
+Software Requirement Specification defines the exact expectations of the fall detection system. It is categorized into functional and non-functional requirements.
+
+\subsection{Functional Requirements}
+\begin{longtable}{|p{0.3\textwidth}|p{0.65\textwidth}|}
+    \caption{Functional Requirements}\label{tab:functional_requirements} \\
+    
+    \hline
+    \textbf{Functionality} & \textbf{Description} \\
+    \hline
+    \endfirsthead
+
+    \hline
+    \textbf{Functionality} & \textbf{Description} \\
+    \hline
+    \endhead
+
+    \hline
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    Real-time Data Collection & Wearable device continuously collects motion data. \\
+    \hline
+    Fall Detection & LSTM model processes sensor signals to identify fall events. \\
+    \hline
+    Emergency Alerts & Mobile app sends notifications to caregivers when a fall is detected. \\
+    \hline
+    Data Logging & Records fall incidents for future analysis and healthcare use. \\
+\end{longtable}
+
+\subsection{Non-Functional Requirements}
+\begin{longtable}{|p{0.3\textwidth}|p{0.65\textwidth}|}
+    \caption{Non-Functional Requirements}\label{tab:non_functional_requirements} \\
+    
+    \hline
+    \textbf{Requirement} & \textbf{Description} \\
+    \hline
+    \endfirsthead
+
+    \hline
+    \textbf{Requirement} & \textbf{Description} \\
+    \hline
+    \endhead
+
+    \hline
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    Cost Efficiency & The system must use affordable, widely available hardware. \\
+    \hline
+    Usability & The wearable should be comfortable and the app simple to use for elderly users. \\
+    \hline
+    Reliability & The system should accurately detect falls with minimal false alarms. \\
+    \hline
+    Portability & The device must be lightweight and easily wearable. \\
+    \hline
+    Security & User data and alerts should be transmitted securely. \\
+\end{longtable}
+
+
+\chapter{PROJECT PLANNING}
+
+\section{Project Planning}
+
+Project planning is a critical phase in the development lifecycle, ensuring that the project progresses systematically and meets all defined objectives. In our project, \textbf{Edge-Deployable LSTM-Based Fall Detection on ESP32 with Accelerometer-Gyroscope Fusion for Elderly Safety"}, careful planning was necessary to design a cost-efficient and user-friendly system that integrates hardware sensors, deep learning models, and a mobile application.
+
+\begin{enumerate}[itemsep=-4pt, label=\textbf{\roman*.}]
+    \item \textbf{Requirement Gathering and Analysis: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item The primary objective is to detect falls in elderly individuals using wearable motion sensors and an LSTM-based prediction model.
+        \item Requirements were divided into functional (real-time fall detection, alerts) and non-functional (low cost, energy efficiency, user-friendliness).
+    \end{itemize}
+
+    \item \textbf{Technology Stack Finalization: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item \textbf{Model Architecture:} LSTM was selected for its effectiveness in time-series analysis of motion data.
+        \item \textbf{Sensors:} Accelerometer and gyroscope embedded in a wearable device for motion tracking.
+        \item \textbf{Microcontroller:} Low-cost and energy-efficient unit (e.g., ESP32/Arduino).
+        \item \textbf{Mobile Application:} Android-based app for displaying alerts and notifying caregivers.
+    \end{itemize}
+
+    \item \textbf{Team Roles and Task Allocation: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Hardware setup and sensor integration
+        \item Machine learning model development (LSTM training and testing)
+        \item Mobile app design and alert notification system
+        \item Testing, validation, and documentation
+    \end{itemize}
+
+    \item \textbf{Resource Allocation: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Affordable wearable sensors and microcontroller units
+        \item Open-source libraries for model development and testing
+        \item Mobile platform for caregiver alerts
+    \end{itemize}
+
+    \item \textbf{Data Management Strategy: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Motion data from sensors will be preprocessed and used for training the LSTM model.
+        \item Proper labeling of fall and non-fall activities ensures accurate supervised learning.
+    \end{itemize}
+
+    \item \textbf{Training and Testing Protocols: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Train the LSTM model on motion datasets to recognize fall patterns.
+        \item Test performance in real-world scenarios using wearable prototypes.
+    \end{itemize}
+
+    \item \textbf{Risk Assessment and Mitigation: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Risks include false positives/negatives, hardware malfunction, or battery issues.
+        \item Mitigation involves model fine-tuning, backup alert systems, and energy-efficient design.
+    \end{itemize}
+
+    \item \textbf{Version Control and Collaboration: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Git repository maintained for code and mobile app version control.
+        \item Shared documentation for hardware and software integration.
+    \end{itemize}
+
+    \item \textbf{Milestone Planning: }
+    \vspace{-4pt}
+    \begin{itemize}[itemsep=-4pt]
+        \item Sensor integration and prototype development
+        \item LSTM model training and validation
+        \item Mobile app development and alert system integration
+        \item Final testing, performance evaluation, and documentation
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Scheduling}
+Scheduling ensures timely project completion by dividing tasks into structured timeframes. Our project was planned for a duration of \textbf{3 months}, with milestones distributed across weekly intervals to track progress effectively.
+
+The schedule in Table \ref{tab:project_schedule} outlines the development plan.
+
+\vspace{-4pt}
+\begin{longtable}{|p{0.1\textwidth}|p{0.1\textwidth}|p{0.7\textwidth}|}
+    \caption{Project Schedule (3-Month Plan)}\label{tab:project_schedule} \\
+    
+    \hline
+    \textbf{Month} & \textbf{Week} & \textbf{Task} \\
+    \hline
+    \endfirsthead
+
+    \multicolumn{3}{c}%
+    {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
+    \hline
+    \textbf{Month} & \textbf{Week} & \textbf{Task} \\
+    \hline
+    \endhead
+
+    \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    Month 1 & Week 1 & Literature survey and problem identification \\
+    \hline
+    Month 1 & Week 2 & Requirement analysis and tool selection \\
+    \hline
+    Month 1 & Week 3 & Sensor integration and prototype setup \\
+    \hline
+    Month 1 & Week 4 & Data collection (fall and non-fall activities) \\
+    \hline
+    Month 2 & Week 1 & Data preprocessing and feature engineering \\
+    \hline
+    Month 2 & Week 2 & LSTM model training and validation \\
+    \hline
+    Month 2 & Week 3 & Model optimization and accuracy testing \\
+    \hline
+    Month 2 & Week 4 & Integration of model with wearable device \\
+    \hline
+    Month 3 & Week 1 & Mobile app development for alerts \\
+    \hline
+    Month 3 & Week 2 & App testing with sensor-device communication \\
+    \hline
+    Month 3 & Week 3 & System-level testing and debugging \\
+    \hline
+    Month 3 & Week 4 & Final documentation and project submission \\
+\end{longtable}
+
+
+\chapter{Implementation}
+
+This chapter discusses the step-by-step implementation of the project titled \textbf{"Edge-Deployable LSTM-Based Fall Detection on ESP32 with Accelerometer-Gyroscope Fusion for Elderly Safety"} It includes the wearable sensor setup, fall detection algorithm, and the alert mechanism integrated with a caregiver notification system.
+
+\section{Overview of the System}
+The proposed system aims to build a cost-effective and user-friendly wearable device that detects falls in elderly individuals. The device relies on motion sensors to calculate \textbf{G-force values}, and when these values exceed a predefined threshold, the system classifies the event as a fall. In addition, an LSTM-based algorithm is trained on motion data to enhance detection accuracy and reduce false alarms. Once a fall is detected, an alert is immediately sent to the caregiver via the connected mobile application.
+
+This system integrates the following components:
+\begin{enumerate}[itemsep=-4pt]
+    \item Motion Sensors (Accelerometer and Gyroscope) for activity monitoring
+    \item Microcontroller (ESP32) for signal processing and wireless communication
+    \item LSTM Algorithm for fall detection using time-series data
+    \item Mobile Application for caregiver alerts
+\end{enumerate}
+
+\section{Hardware and Sensor Integration}
+The wearable prototype consists of:
+\begin{itemize}[itemsep=-4pt]
+    \item An accelerometer and gyroscope module to measure body motion
+    \item A microcontroller (ESP32) for processing sensor values and sending data wirelessly
+    \item A rechargeable battery for portable usage
+\end{itemize}
+The ESP32 continuously calculates the resultant G-force from accelerometer readings. If the G-force exceeds a threshold, the event is flagged as a potential fall and transmitted to the mobile app.
+
+\section{Fall Detection Algorithm}
+Two approaches are combined for accurate detection:
+\begin{enumerate}[itemsep=-4pt, label=\roman*.]
+    \item \textbf{Threshold-Based Detection:}  
+    Falls are identified when the resultant acceleration (G-force) crosses a predefined threshold (e.g., 2.5g), distinguishing them from normal daily activities.
+    
+    \item \textbf{LSTM-Based Detection:}  
+    A Long Short-Term Memory (LSTM) model is trained on motion sensor datasets containing fall and non-fall activities. The model learns temporal patterns in movement and provides a classification decision to complement the threshold method.
+\end{enumerate}
+This hybrid approach ensures that the system is both \textbf{lightweight (threshold-based)} and \textbf{intelligent (LSTM-based)}.
+
+\section{Alert Mechanism}
+When a fall is detected, the system immediately sends an alert to the caregiver through the mobile application. The alert includes:
+\begin{itemize}[itemsep=-4pt]
+    \item A notification indicating that a fall has occurred
+    \item Basic activity status to differentiate between false alarms and true falls
+\end{itemize}
+This ensures timely assistance and enhances the safety of elderly individuals.
+
+\section{User Interface}
+The Android mobile application is designed to be simple and intuitive, with the following features:
+\begin{itemize}[itemsep=-4pt]
+    \item Real-time fall detection alerts
+    \item Activity monitoring interface
+    \item Caregiver notifications for immediate response
+\end{itemize}
+Screenshots of the app demonstrate how alerts are displayed to caregivers for quick intervention.
+
+
+
+\chapter{Results and Discussion}
+
+This chapter presents the outcomes of the project, focusing on the performance and functionality of the developed fall detection system. It evaluates the effectiveness of the fall detection algorithm, the responsiveness of the alert mechanism, and the overall user experience based on the Blynk caregiver interface.
+
+\section{Overview}
+The main goal of this system was to build a \textbf{cost-efficient and edge-deployable wearable device} for elderly safety. Using accelerometer–gyroscope fusion, the system continuously monitors body motion and detects sudden abnormal changes. A dual-approach was implemented:
+\begin{itemize}[itemsep=-4pt]
+    \item \textbf{Threshold-Based Detection:} Uses a predefined G-force value (e.g., 2.5g) to immediately classify strong impacts as falls.  
+    \item \textbf{LSTM-Based Detection:} A trained Long Short-Term Memory (LSTM) model analyzes motion time-series data to differentiate falls from normal activities such as sitting or bending.  
+\end{itemize}
+Once a fall is detected by either method, the ESP32 communicates with the \textbf{Blynk cloud platform}, which instantly notifies caregivers through the Blynk mobile application.  
+
+This integration ensures \textbf{real-time response, low power consumption, and user-friendliness}, making the system practical for continuous daily use.
+
+\section{Evaluation Metrics}
+The system was tested under different conditions to measure its reliability and user experience:
+\begin{enumerate}
+    \item \textbf{Detection Accuracy:}  
+    The LSTM model, trained on motion datasets, was able to achieve high accuracy in distinguishing falls from daily activities. Combining the threshold method with the LSTM reduced false positives.  
+
+    \item \textbf{Alert Responsiveness:}  
+    Once a fall was detected, the ESP32 transmitted data to the Blynk server within milliseconds. Caregivers received real-time notifications on the Blynk app, ensuring timely intervention.  
+
+    \item \textbf{System Reliability:}  
+    The ESP32 handled continuous sensor data streaming efficiently, and the device remained stable during prolonged testing.  
+
+    \item \textbf{Ease of Use:}  
+    Since the Blynk app is readily available and requires minimal configuration, caregivers found the system intuitive. No additional custom mobile application was required.  
+\end{enumerate}
+
+\section{Challenges and Limitations}
+Although the system performed well, some challenges were noted:
+\begin{itemize}[itemsep=-4pt]
+    \item Activities with sudden movements (e.g., dropping the device, vigorous exercise) sometimes triggered false alarms.  
+    \item The LSTM model requires periodic retraining with larger and more diverse datasets to further improve accuracy.  
+    \item The system depends on internet connectivity for transmitting alerts through Blynk. In offline conditions, immediate alerts cannot be delivered.  
+\end{itemize}
+
+\section{Summary}
+The results validate that the proposed \textbf{Edge-Deployable LSTM-Based Fall Detection System} is both \textbf{feasible and effective}. The combination of G-force thresholding and LSTM ensures accurate fall detection, while the Blynk platform provides a simple yet powerful medium for caregiver alerts. The system is cost-efficient, reliable, and practical for real-world elderly safety applications.
+
+
+\begin{center}
+    \chapter*{Bibliography}
+    \addcontentsline{toc}{chapter}{Bibliography}
+\end{center}
+
+\begin{enumerate}
+    \item P. Kulurkar et al., \textit{IoT-Enabled Fall Detection Using LSTM and Edge Computing}, 2023.
+
+    \item M. E. Karar, H. I. Shehata, and O. Reyad, \textit{Comprehensive Survey of IoT-Based Fall Detection Systems}, 2022.
+
+    \item H. Jin, W. Zhou, and Y.-C. Lin, \textit{Augmented Reality and Visual AI for Fall Detection}, 2024.
+
+    \item O. Z. Salah, S. K. Selvaperumal, and R. Abdulla, \textit{Accelerometer-Based Elderly Fall Detection System Using Edge Artificial Intelligence Architecture}, 2022.
+
+    \item X. Wang, J. Ellul, and G. Azzopardi, \textit{Elderly Fall Detection Systems}, 2020.
+
+    \item Z. Mohammad, A. R. Anwary, M. F. Mridha, M. S. H. Shovon, and M. Vassallo, \textit{An Enhanced Ensemble Deep Neural Network Approach for Elderly Fall Detection System Based on Wearable Sensors}, 2023.
+
+    \item A. Ibrahim, K. Chaccour, G. Badr, and A. H. El Hassani, \textit{Fall Detection Algorithm using Body Angle for Accurate Classification of Falls and ADLs}, 2021.
+
+    \item P. Chutimawattanakul and P. Samanpiboon, \textit{Fall Detection for the Elderly using YOLOv4 and LSTM}, 2022.
+
+    \item S. Badgujar and A. S. Pillai, \textit{Fall Detection for Elderly People Using Machine Learning}, 2020.
+
+    \item L. Shabadi et al., \textit{Real-Time Elderly Fall Detection as Ambient Intelligence in Old Age Homes}, 2025.
+
+    \item X. Lv, Z. Gao, C. Yuan, M. Li, and C. Chen, \textit{Hybrid Real-Time Fall Detection System Based on Deep Learning and Multi-Sensor Fusion}, 2020.
+
+    \item R. Vyas, J. A. Shirley, and R. Jansi, \textit{Fall Detection System for Elderly People Using Piezoresistive Textile Pressure Sensor}, 2025.
+
+    \item  \textit{IoT-Based Fall Detection Monitoring and Alarm System for Elderly} 
+
+    \item T. Imamura, V. G. Moshnyaga, and K. Hashimoto, \textit{Automatic Fall Detection by Using Doppler-Radar and LSTM-Based Recurrent Neural Network}, , 2022.
+
+    \item S. Lahouar, M. Mansour, and M. H. Said, \textit{Development of a Fall Detection System Based on a Tri-Axial Accelerometer}
+\end{enumerate}
+\end{document}
