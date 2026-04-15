@@ -13,6 +13,8 @@
 \usepackage{url}
 \usepackage[numbers]{natbib}
 
+
+
 \setstretch{1.15}
 \setlength{\tabcolsep}{4pt}
 \newcolumntype{L}[1]{>{\RaggedRight\arraybackslash\hspace{0pt}}p{#1}}
@@ -188,7 +190,7 @@ This chapter therefore treats literature review as an architecture-design activi
     \item \textbf{Lifecycle adaptability:} whether models and policies can be recalibrated under changing data regimes.
 \end{itemize}
 
-Therefore, this chapter presents a focused literature survey on up to fifteen highly relevant papers and frameworks, then synthesizes their implications for ACIS-X architecture, risk-policy design, and operations. The goal is to identify what has been solved, what remains unresolved, and how a modern event-driven collections platform should be structured to close these gaps.
+Therefore, this chapter presents a focused literature survey on up to sixteen highly relevant papers and frameworks, then synthesizes their implications for ACIS-X architecture, risk-policy design, and operations. The goal is to identify what has been solved, what remains unresolved, and how a modern event-driven collections platform should be structured to close these gaps.
 
 In addition to reviewing model accuracy, this survey emphasizes production success criteria that are commonly under-specified in standalone research: (i) operational robustness under delayed or incomplete events, (ii) explainability of risk signals at decision time, (iii) measurable linkage between model output and collection outcome, (iv) controllability of policy thresholds, and (v) observability of action quality after deployment. This framing is essential because ACIS-X is intended for continuous decision operations, not only offline experimentation.
 
@@ -223,91 +225,97 @@ The literature survey on event-driven collections intelligence reveals three cor
 
 To maintain methodological consistency, each paper summary below captures contribution, practical value, and limitations. This allows a clearer mapping from research evidence to architecture decisions.
 
-\noindent \textbf{[1] Statistical Classification Methods in Consumer Credit Scoring: A Review}~\cite{hand1997credit}\\
+\noindent \textbf{[1] Event-Driven Design for Agents and Multi-Agent Systems}~\cite{falconer2025eventdriven}\\
+\textbf{AUTHOR:} Sean Falconer\\
+This Confluent whitepaper presents practical guidance for designing agent-based systems using an event-driven backbone. It explains how asynchronous event streams improve decoupling between agents, support independent scaling, and enable reliable coordination across distributed components. For ACIS-X, this directly supports the use of Kafka topics as the communication and orchestration layer for specialized agents.
+
+A further contribution is the emphasis on production-readiness concerns such as observability, replayability, and fault isolation in multi-agent workflows. These ideas align with ACIS-X design choices around durable event contracts, retry-safe processing, and runtime resilience under variable load.
+
+\noindent \textbf{[2] Statistical Classification Methods in Consumer Credit Scoring: A Review}~\cite{hand1997credit}\\
 \textbf{AUTHORS:} D. J. Hand and W. E. Henley\\
 This foundational review explains the statistical basis of consumer credit scoring and highlights practical deployment concerns that are often overlooked in pure algorithmic studies. It discusses model discrimination, calibration context, class imbalance, and the consequences of reject populations. The paper remains highly relevant because it frames scoring as an operational decision process rather than a purely mathematical exercise. For ACIS-X, this supports the need to combine model outputs with policy governance and action traceability.
 
 An additional insight is that statistical validity can degrade when deployment conditions differ from training assumptions. ACIS-X addresses this by treating model output as one stage in a monitored pipeline rather than as a final isolated truth.
 
-\noindent \textbf{[2] A Survey of Credit and Behavioural Scoring}~\cite{thomas2000survey}\\
+\noindent \textbf{[3] A Survey of Credit and Behavioural Scoring}~\cite{thomas2000survey}\\
 \textbf{AUTHORS:} Lyn C. Thomas\\
 This survey distinguishes application scoring from behavioral scoring and demonstrates how risk prediction evolves across the customer lifecycle. It emphasizes that dynamic performance monitoring and repeated re-estimation are essential in lending environments. The work is directly aligned with ACIS-X, where risk signals are continuously updated based on new invoices, payments, and account events. It motivates lifecycle-aware state tracking rather than one-time score generation.
 
 The paper also implies that temporal context should be first-class in model design. In ACIS-X, this translates to stateful event aggregation and time-sensitive features, especially for accounts that oscillate between normal and overdue behavior.
 
-\noindent \textbf{[3] Benchmarking State-of-the-Art Classification Algorithms for Credit Scoring}~\cite{baesens2003benchmarking}\\
+\noindent \textbf{[4] Benchmarking State-of-the-Art Classification Algorithms for Credit Scoring}~\cite{baesens2003benchmarking}\\
 \textbf{AUTHORS:} B. Baesens, T. Van Gestel, S. Viaene, M. Stepanova, J. Suykens, and J. Vanthienen\\
 This benchmark paper compares major classification approaches under controlled credit-scoring settings and demonstrates that model superiority depends on data conditions and evaluation design. The central contribution is methodological rigor in comparing algorithms beyond isolated case studies. It provides evidence that model selection should be context-dependent and repeatedly validated. ACIS-X benefits from this insight by supporting modular scoring components that can be replaced or rebenchmarked over time.
 
 Its practical limitation is that benchmark conclusions are still tied to sampled datasets and historical periods. ACIS-X mitigates this risk through periodic re-evaluation loops and model abstraction at the service boundary.
 
-\noindent \textbf{[4] Recent Developments in Consumer Credit Risk Assessment}~\cite{crook2007recent}\\
+\noindent \textbf{[5] Recent Developments in Consumer Credit Risk Assessment}~\cite{crook2007recent}\\
 \textbf{AUTHORS:} Jonathan N. Crook, David B. Edelman, and Lyn C. Thomas\\
 This work synthesizes developments in consumer credit-risk assessment and reviews important operational themes such as validation quality, borrower heterogeneity, and decision strategy adaptation. It highlights that real-world collections outcomes are sensitive to both model quality and treatment policy. This directly informs ACIS-X design where predictive and action stages are separated but tightly linked through structured events.
 
 The key implication for ACIS-X is that policy effectiveness must be measured jointly with model outputs. This motivates event-level traceability between prediction publication and collections action outcomes.
 
-\noindent \textbf{[5] Support Vector Machines for Credit Scoring and Discovery of Significant Features}~\cite{bellotti2009svm}\\
+\noindent \textbf{[6] Support Vector Machines for Credit Scoring and Discovery of Significant Features}~\cite{bellotti2009svm}\\
 \textbf{AUTHORS:} Tony Bellotti and Jonathan Crook\\
 The paper evaluates SVM-based credit scoring and investigates feature significance to improve interpretability alongside discrimination power. It shows how non-linear methods can improve classification in structured financial datasets while still enabling feature-level understanding. For ACIS-X, this supports integrating explainable predictors where risk reasons can be propagated to downstream collection actions.
 
 However, model explainability remains sensitive to feature engineering quality. ACIS-X therefore benefits from standardized feature lineage and reason-code publishing in risk events.
 
-\noindent \textbf{[6] Consumer Credit-Risk Models via Machine-Learning Algorithms}~\cite{khandani2010ml}\\
+\noindent \textbf{[7] Consumer Credit-Risk Models via Machine-Learning Algorithms}~\cite{khandani2010ml}\\
 \textbf{AUTHORS:} Amir E. Khandani, Adlar J. Kim, and Andrew W. Lo\\
 This study demonstrates practical gains from machine-learning approaches in consumer credit-risk prediction at large scale. The key implication is that rich feature interactions can materially improve predictive discrimination compared to simpler baselines. ACIS-X can leverage this principle through richer event-derived features at invoice and customer levels, provided model governance remains strong.
 
 The paper also reinforces the value of data breadth. For ACIS-X, this suggests sustained enrichment and data quality controls are as important as algorithm choice.
 
-\noindent \textbf{[7] Multiple Classifier Architectures and Their Application to Credit Risk Assessment}~\cite{finlay2011multiple}\\
+\noindent \textbf{[8] Multiple Classifier Architectures and Their Application to Credit Risk Assessment}~\cite{finlay2011multiple}\\
 \textbf{AUTHORS:} Steven Finlay\\
 This paper focuses on architecture-level combinations of classifiers and shows that multi-model designs can improve performance stability across scenarios. It argues that how models are composed can matter as much as which single algorithm is chosen. The finding is aligned with ACIS-X, where independent agent stages can support ensemble-style risk workflows and staged decision refinement.
 
 Its relevance increases in volatile environments where single-model brittleness is common. ACIS-X can operationalize this through configurable model orchestration and fallback decision paths.
 
-\noindent \textbf{[8] A Comparative Assessment of Ensemble Learning for Credit Scoring}~\cite{wang2011ensemble}\\
+\noindent \textbf{[9] A Comparative Assessment of Ensemble Learning for Credit Scoring}~\cite{wang2011ensemble}\\
 \textbf{AUTHORS:} Gang Wang, Jinxing Hao, Jian Ma, and Hongbing Jiang\\
 This comparative study evaluates ensemble methods in credit-scoring contexts and reports robust improvements under many data settings. The paper highlights variance reduction and better generalization as practical advantages of ensemble learning. For ACIS-X, this supports designing model-serving interfaces that are ensemble-compatible instead of tightly coupled to one learner.
 
 The tradeoff is additional computational and governance complexity. ACIS-X should therefore pair ensemble usage with clear monitoring thresholds and explainability constraints.
 
-\noindent \textbf{[9] An Experimental Comparison of Classification Algorithms for Imbalanced Credit Scoring Data Sets}~\cite{brown2012imbalanced}\\
+\noindent \textbf{[10] An Experimental Comparison of Classification Algorithms for Imbalanced Credit Scoring Data Sets}~\cite{brown2012imbalanced}\\
 \textbf{AUTHORS:} Iain Brown and Christophe Mues\\
 The study focuses on the imbalanced nature of credit datasets where adverse outcomes are rare but high-impact. It compares algorithm behavior under skewed classes and demonstrates that imbalance treatment strongly affects operational usefulness. This is directly relevant to ACIS-X, where high-risk delinquency classes are sparse and must still be prioritized correctly for collections action.
 
 This work supports threshold strategies that optimize intervention efficiency rather than overall accuracy alone. ACIS-X can embed this logic in risk-to-action policy mappings.
 
-\noindent \textbf{[10] Consumer Credit Risk: Individual Probability Estimates Using Machine Learning}~\cite{kruppa2013individual}\\
+\noindent \textbf{[11] Consumer Credit Risk: Individual Probability Estimates Using Machine Learning}~\cite{kruppa2013individual}\\
 \textbf{AUTHORS:} Jochen Kruppa, Alexandra Schwarz, Gerhard Arminger, and Andreas Ziegler\\
 This paper addresses individualized probability estimation and emphasizes the quality of account-level risk outputs. The contribution is important for collections prioritization because interventions are issued per customer or invoice, not only by portfolio segment. ACIS-X adopts the same orientation by emitting structured account-level risk events to downstream agents.
 
 The paper also indicates that calibration quality matters for operational confidence. In ACIS-X, calibrated probabilities can improve prioritization fairness and escalation consistency.
 
-\noindent \textbf{[11] Development and Application of Consumer Credit Scoring Models Using Profit-Based Classification Measures}~\cite{verbraken2014profit}\\
+\noindent \textbf{[12] Development and Application of Consumer Credit Scoring Models Using Profit-Based Classification Measures}~\cite{verbraken2014profit}\\
 \textbf{AUTHORS:} Thomas Verbraken, Cristian Bravo, Richard Weber, and Bart Baesens\\
 This study introduces profit-aware classification measures and demonstrates why AUC-only evaluation can be misaligned with business decision value. It provides a practical framework for linking predictive decisions to economic outcomes. ACIS-X directly benefits from this perspective by aligning risk thresholds and action priorities with recoverability and intervention value.
 
 Its practical strength is decision realism: interventions incur costs, and delayed action changes expected recovery. ACIS-X can operationalize this through policy objectives tied to outcome economics.
 
-\noindent \textbf{[12] Benchmarking State-of-the-Art Classification Algorithms for Credit Scoring: An Update of Research}~\cite{lessmann2015update}\\
+\noindent \textbf{[13] Benchmarking State-of-the-Art Classification Algorithms for Credit Scoring: An Update of Research}~\cite{lessmann2015update}\\
 \textbf{AUTHORS:} Stefan Lessmann, Bart Baesens, Hsin-Vonn Seow, and Lyn C. Thomas\\
 This update strengthens benchmarking practice by using broader datasets and more rigorous statistical comparisons. It reinforces that performance claims must be interpreted cautiously across changing data regimes. For ACIS-X, the implication is clear: model performance should be continuously monitored and periodically revalidated under production drift.
 
 It also underscores reproducibility discipline, which ACIS-X can support via versioned model metadata and consistent event schema contracts.
 
-\noindent \textbf{[13] Discretized Streams: Fault-Tolerant Streaming Computation at Scale}~\cite{zaharia2013discretized}\\
+\noindent \textbf{[14] Discretized Streams: Fault-Tolerant Streaming Computation at Scale}~\cite{zaharia2013discretized}\\
 \textbf{AUTHORS:} Matei Zaharia, Tathagata Das, Haoyuan Li, Timothy Hunter, Scott Shenker, and Ion Stoica\\
 This work proposes a practical stream model for deterministic, fault-tolerant low-latency computation. Its main relevance is architectural: scalable stream intelligence must be designed with recovery semantics from the outset. ACIS-X follows this direction by separating event producers and consumers across robust messaging layers and replay-aware processing logic.
 
 The core lesson is that latency without deterministic recovery is insufficient for mission-critical workflows. ACIS-X should preserve this balance through robust retry and replay patterns.
 
-\noindent \textbf{[14] The Dataflow Model: Balancing Correctness, Latency, and Cost}~\cite{akidau2015dataflow}\\
+\noindent \textbf{[15] The Dataflow Model: Balancing Correctness, Latency, and Cost}~\cite{akidau2015dataflow}\\
 \textbf{AUTHORS:} Tyler Akidau, Robert Bradshaw, Craig Chambers, Slava Chernyak, Rafael J. Fernandez-Moctezuma, Reuven Lax, Sam McVeety, Daniel Mills, Frances Perry, Eric Schmidt, and Sam Whittle\\
 The Dataflow model formalizes event-time semantics, handling of late data, and tradeoffs among correctness, latency, and cost. It is especially relevant for financial operations where delayed records and revisions are common. ACIS-X depends on these concepts to keep risk and action outputs consistent even when upstream events arrive out of order.
 
 This is particularly important for receivables where settlement events may lag operational windows. ACIS-X can apply event-time aware logic to reduce inconsistent actioning and duplicate interventions.
 
-\noindent \textbf{[15] XGBoost: A Scalable Tree Boosting System}~\cite{chen2016xgboost}\\
+\noindent \textbf{[16] XGBoost: A Scalable Tree Boosting System}~\cite{chen2016xgboost}\\
 \textbf{AUTHORS:} Tianqi Chen and Carlos Guestrin\\
 XGBoost introduced an efficient and scalable gradient-boosting framework that became a standard baseline for structured-data risk modeling. Its importance in collections intelligence is twofold: high predictive quality and practical train/inference efficiency. ACIS-X can incorporate this family of models in prediction stages while preserving explainability through feature-importance and reason-code interfaces.
 

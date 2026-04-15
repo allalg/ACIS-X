@@ -1,4 +1,10 @@
-\begin{thebibliography}{15}
+\begin{thebibliography}{16}
+
+\bibitem{falconer2025eventdriven}
+S.~Falconer,
+``Event-driven design for agents and multi-agent systems,''
+Confluent Whitepaper, 2025. [Online]. Available:
+\url{https://www.confluent.io/resources/white-papers/event-driven-design-for-agents-and-multi-agent-systems/}
 
 \bibitem{hand1997credit}
 D.~J. Hand and W.~E. Henley,
