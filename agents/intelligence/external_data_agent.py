@@ -5,6 +5,7 @@ import time
 import requests
 from typing import List, Any, Optional, Dict
 from datetime import datetime, timedelta
+from urllib.parse import quote_plus
 
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
@@ -77,7 +78,11 @@ class ExternalDataAgent(BaseAgent):
         # FIX 8: In-memory throttle tracking (per company_id)
         self._last_fetch_time: Dict[str, float] = {}
         # FIX 9: Track published external_risk values to prevent duplicate events
-        self._last_published_risk: Dict[str, float] = {}
+        # Use bounded OrderedDict (max 5000 entries) to prevent memory growth
+        from collections import OrderedDict
+        self._last_published_risk: OrderedDict = OrderedDict()  # customer_id -> last risk
+        self._last_published_signature: OrderedDict = OrderedDict()  # customer_id -> signature
+        self._MAX_RISK_TRACK = 5000  # evict oldest when exceeded
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -312,6 +317,7 @@ class ExternalDataAgent(BaseAgent):
             "operating_margin": None,
             "interest_coverage": None,
             "risk": 0.3,  # default risk
+            "source": "screener.in",
             "updated_at": datetime.utcnow().isoformat(),
         }
 
@@ -384,6 +390,139 @@ class ExternalDataAgent(BaseAgent):
                 logger.error(f"[ExternalDataAgent] Screener parse error for {slug}: {e}")
                 break
 
+        return data
+
+    def _safe_float(self, value: Any) -> Optional[float]:
+        """Best-effort conversion to float."""
+        if value is None:
+            return None
+        try:
+            return float(str(value).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+    def _safe_div(self, numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
+        """Safe division helper."""
+        if numerator is None or denominator in (None, 0):
+            return None
+        return numerator / denominator
+
+    def _fetch_nse_data(self, company_name: str, slug: str) -> Dict[str, Any]:
+        """
+        Fetch quote-level fallbacks from NSE public endpoints.
+        This is best-effort and used only to fill missing Screener fields.
+        """
+        fallback = {}
+        try:
+            # Warm up session for NSE cookies.
+            self._session.get("https://www.nseindia.com", timeout=15)
+        except Exception:
+            pass
+
+        symbol = slug
+        try:
+            search_url = f"https://www.nseindia.com/api/search/autocomplete?q={quote_plus(company_name)}"
+            resp = self._session.get(search_url, timeout=15, headers={"Referer": "https://www.nseindia.com"})
+            if resp.status_code == 200:
+                results = resp.json().get("symbols", [])
+                if results:
+                    symbol = results[0].get("symbol") or symbol
+        except Exception:
+            pass
+
+        try:
+            quote_url = f"https://www.nseindia.com/api/quote-equity?symbol={quote_plus(symbol)}"
+            resp = self._session.get(quote_url, timeout=15, headers={"Referer": "https://www.nseindia.com"})
+            if resp.status_code != 200:
+                return fallback
+            payload = resp.json()
+
+            price = self._safe_float(payload.get("priceInfo", {}).get("lastPrice"))
+            eps = self._safe_float(payload.get("metadata", {}).get("eps"))
+            issued_cap = self._safe_float(payload.get("securityInfo", {}).get("issuedCap"))
+            market_cap = None
+            if issued_cap and price:
+                market_cap = issued_cap * price
+
+            # Prefer EPS-derived company PE (accurate) over sector PE (benchmark)
+            pe = None
+            if eps and price:
+                pe = self._safe_div(price, eps)
+            if pe is None:
+                # pdSectorPe is sector-level P/E, not company-specific — use only as fallback
+                sector_pe = self._safe_float(payload.get("metadata", {}).get("pdSectorPe"))
+                if sector_pe is not None:
+                    pe = sector_pe
+                    logger.debug(
+                        f"[ExternalDataAgent] Using sector PE ({sector_pe}) as fallback for {slug} "
+                        f"(no EPS/price available for company-specific PE)"
+                    )
+
+            fallback = {
+                "market_cap": market_cap,
+                "pe": pe,
+            }
+        except Exception as e:
+            logger.debug(f"[ExternalDataAgent] NSE fallback failed for {slug}: {e}")
+        return fallback
+
+    def _fetch_bse_data(self, company_name: str) -> Dict[str, Any]:
+        """
+        Fetch additional quote ratios from BSE public endpoints.
+        Best-effort fallback only.
+        """
+        fallback: Dict[str, Any] = {}
+        try:
+            search_url = f"https://api.bseindia.com/BseIndiaAPI/api/SmartSearch/w?text={quote_plus(company_name)}"
+            search_resp = self._session.get(search_url, timeout=15, headers={"Referer": "https://www.bseindia.com"})
+            if search_resp.status_code != 200:
+                return fallback
+            results = search_resp.json()
+            if not results:
+                return fallback
+            scrip_code = results[0].get("ScripCode")
+            if not scrip_code:
+                return fallback
+
+            quote_url = f"https://api.bseindia.com/BseIndiaAPI/api/GetStkCurrMain/w?quotetype=EQ&scripcode={scrip_code}&flag=0"
+            quote_resp = self._session.get(quote_url, timeout=15, headers={"Referer": "https://www.bseindia.com"})
+            if quote_resp.status_code != 200:
+                return fallback
+            q = quote_resp.json()
+
+            price = self._safe_float(q.get("LTP"))
+            eps = self._safe_float(q.get("EPS"))
+            book_value = self._safe_float(q.get("BookValue"))
+            pe = self._safe_float(q.get("PE"))
+            if pe is None and price and eps:
+                pe = self._safe_div(price, eps)
+
+            roe = None
+            if eps is not None and book_value not in (None, 0):
+                roe = (eps / book_value) * 100.0
+
+            fallback = {
+                "pe": pe,
+                "roe": roe,
+            }
+        except Exception as e:
+            logger.debug(f"[ExternalDataAgent] BSE fallback failed for {company_name}: {e}")
+
+        return fallback
+
+    def _enrich_with_exchange_fallbacks(self, data: Dict[str, Any], company_name: str, slug: str) -> Dict[str, Any]:
+        """Fill missing Screener values using NSE/BSE quote data and derived ratios."""
+        nse = self._fetch_nse_data(company_name, slug)
+        bse = self._fetch_bse_data(company_name)
+
+        for key in ("market_cap", "pe", "roe"):
+            if data.get(key) is None:
+                data[key] = nse.get(key) if nse.get(key) is not None else bse.get(key)
+
+        if data.get("source") == "screener.in" and any(v is not None for v in (nse.get("pe"), nse.get("market_cap"), bse.get("pe"), bse.get("roe"))):
+            data["source"] = "screener.in+nse/bse"
+
+        data["risk"] = self._compute_risk(data)
         return data
 
     def _compute_risk(self, data: Dict) -> float:
@@ -520,13 +659,22 @@ class ExternalDataAgent(BaseAgent):
         cached = self._get_cached_financials(slug)
 
         if cached:
-            # Use cached data
+            # Use cached data and restore throttle time from DB so restarts
+            # don't bypass the 24h throttle (Issue 11 fix)
             logger.info(
                 f"[ExternalDataAgent] Using cached data for {slug} "
                 f"(fetched {time_since_fetch:.1f} hours ago)"
             )
             external_risk = cached["risk"]
             financial_data = cached
+            # Restore in-memory throttle from DB cache timestamp
+            try:
+                updated_at = cached.get("updated_at")
+                if updated_at:
+                    db_ts = datetime.fromisoformat(updated_at).timestamp()
+                    self._last_fetch_time[slug] = max(self._last_fetch_time.get(slug, 0), db_ts)
+            except Exception:
+                self._last_fetch_time[slug] = current_time
         else:
             # FIX 8: Check throttle before fetching fresh data
             if last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
@@ -554,6 +702,7 @@ class ExternalDataAgent(BaseAgent):
                 # FIX 8: Fetch fresh data and update throttle time
                 logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug}")
                 financial_data = self._fetch_screener_data(company_name, slug)
+                financial_data = self._enrich_with_exchange_fallbacks(financial_data, company_name, slug)
                 self._store_financials(financial_data)
                 external_risk = financial_data["risk"]
                 self._last_fetch_time[slug] = current_time  # Update throttle time
@@ -572,13 +721,21 @@ class ExternalDataAgent(BaseAgent):
             "operating_margin": financial_data.get("operating_margin"),
             "interest_coverage": financial_data.get("interest_coverage"),
             "external_risk": round(external_risk, 4),
-            "source": "screener.in",
+            "source": financial_data.get("source", "screener.in"),
             "generated_at": datetime.utcnow().isoformat()
         }
 
         # FIX 9: DEDUPLICATION - Skip publishing if external_risk unchanged
         last_risk = self._last_published_risk.get(customer_id)
-        if last_risk is not None and last_risk == round(external_risk, 4):
+        current_signature = (
+            f"{round(external_risk, 4)}|{financial_data.get('pe')}|{financial_data.get('roe')}|"
+            f"{financial_data.get('roce')}|{financial_data.get('debt')}|{financial_data.get('market_cap')}"
+        )
+        if (
+            last_risk is not None
+            and last_risk == round(external_risk, 4)
+            and self._last_published_signature.get(customer_id) == current_signature
+        ):
             logger.debug(
                 f"[ExternalDataAgent] Skipping publish for {customer_id}: "
                 f"external_risk={external_risk:.4f} (unchanged)"
@@ -594,8 +751,13 @@ class ExternalDataAgent(BaseAgent):
             correlation_id=event.correlation_id,
         )
 
-        # FIX 9: Track published risk to prevent duplicate events
+        # FIX 9: Track published risk with bounded eviction
+        if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
+            self._last_published_risk.popitem(last=False)  # evict oldest
+        if len(self._last_published_signature) >= self._MAX_RISK_TRACK:
+            self._last_published_signature.popitem(last=False)
         self._last_published_risk[customer_id] = round(external_risk, 4)
+        self._last_published_signature[customer_id] = current_signature
 
         logger.info(
             f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk:.4f}"

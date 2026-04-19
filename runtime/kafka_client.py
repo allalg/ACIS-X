@@ -260,6 +260,8 @@ class KafkaClient:
             self._init_confluent_consumer(group_id)
         elif self.backend == "kafka-python":
             self._init_kafka_python_consumer(group_id)
+        else:
+            raise ValueError(f"Unknown backend: {self.backend}")
 
     def _init_confluent_consumer(self, group_id: str) -> None:
         """Initialize confluent-kafka consumer."""
@@ -593,16 +595,18 @@ class KafkaClient:
             # Parse headers
             headers = {}
             if msg.headers():
-                headers = {k: v.decode("utf-8") for k, v in msg.headers()}
+                headers = {
+                    k: v.decode("utf-8") if isinstance(v, (bytes, bytearray)) else v
+                    for k, v in msg.headers()
+                }
 
             # Get high watermark
             watermark = None
             try:
-                low, high = self._consumer.get_watermark_offsets(
-                    msg.topic(),
-                    msg.partition(),
-                    timeout=1.0
-                )
+                from confluent_kafka import TopicPartition
+
+                topic_partition = TopicPartition(msg.topic(), msg.partition())
+                low, high = self._consumer.get_watermark_offsets(topic_partition, timeout=1.0)
                 watermark = high
             except Exception:
                 pass
@@ -668,16 +672,23 @@ class KafkaClient:
 
         try:
             if self.backend == "confluent":
-                try:
+                if message is None:
                     self._consumer.commit(asynchronous=False)
-                except Exception:
-                    pass
+                else:
+                    from confluent_kafka import TopicPartition
+
+                    topic_partition = TopicPartition(
+                        message.topic,
+                        message.partition,
+                        message.offset + 1,
+                    )
+                    self._consumer.commit(offsets=[topic_partition], asynchronous=False)
 
             elif self.backend == "kafka-python":
-                try:
-                    self._consumer.commit()
-                except Exception:
-                    pass
+                # kafka-python has incompatible OffsetAndMetadata signatures across versions.
+                # Commit current processed offsets tracked by the consumer to avoid runtime
+                # failures under mixed client versions.
+                self._consumer.commit()
 
             logger.debug("Offsets committed")
 

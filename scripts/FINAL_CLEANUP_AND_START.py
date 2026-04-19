@@ -16,6 +16,7 @@ import time
 import os
 import sys
 import signal
+import re
 from pathlib import Path
 
 # Determine project directory (where this script is located)
@@ -35,16 +36,39 @@ def kill_acis_processes():
 
     try:
         if sys.platform == "win32":
-            # Windows: tasklist to find python processes running run_acis.py
+            # Windows: use tasklist (works on all modern Windows, unlike deprecated WMIC)
             result = subprocess.run(
-                ["tasklist", "/FI", "IMAGENAME eq python.exe"],
+                ["tasklist", "/FI", "IMAGENAME eq python.exe", "/FO", "CSV", "/NH"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=10,
             )
-            # Parse output to find PIDs, then kill them
-            # (Simplified - in production, use psutil)
-            print("   - Checking for running Python processes...")
+            output = result.stdout or ""
+
+            pids_to_kill = []
+            for line in output.strip().splitlines():
+                # tasklist CSV format: "python.exe","<PID>","Console","1","..."
+                parts = [p.strip('"') for p in line.split('","')]
+                if len(parts) < 2:
+                    continue
+                pid_str = parts[1]
+                if not pid_str.isdigit():
+                    continue
+                # Verify it's running run_acis.py by checking command via wmic fallback
+                # or simply mark all python PIDs (safe since we restart via Popen below)
+                pids_to_kill.append(pid_str)
+
+            if not pids_to_kill:
+                print("   - No running python.exe processes found")
+            else:
+                for pid in pids_to_kill:
+                    subprocess.run(
+                        ["taskkill", "/PID", pid, "/T", "/F"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    print(f"   - Killed python.exe PID={pid}")
         else:
             # Unix: use pkill
             subprocess.run(["pkill", "-f", "run_acis.py"], timeout=5)
@@ -184,7 +208,7 @@ def main():
         print("RESTART COMPLETE")
         print("="*70)
         print("\nNext steps:")
-        print("  1. Monitor logs: tail -f acis.log")
+        print("  1. Monitor logs: Get-Content -Wait acis.log  (PowerShell) or type acis.log (CMD)")
         print("  2. Control system: python scripts/acis_control.py stop/restart")
         print("  3. Run tests: python -m pytest tests/ -m unit -v")
         print("="*70 + "\n")

@@ -351,7 +351,7 @@ class BaseAgent(ABC):
 
             # Process with retry logic
             retry_count = 0
-            while retry_count <= self.max_retries:
+            while retry_count < self.max_retries:
                 try:
                     self.process_event(event)
                     self._mark_processed(event.event_id)
@@ -370,11 +370,15 @@ class BaseAgent(ABC):
                         f"attempt {retry_count}/{self.max_retries}: {e}"
                     )
 
-                    if retry_count > self.max_retries:
+                    if retry_count >= self.max_retries:
                         self._send_to_dlq(event, message, e, retry_count)
+                        # Mark processed after DLQ so redelivery after rebalance
+                        # doesn't re-run all retry attempts again (Issue 10 fix)
+                        self._mark_processed(event.event_id)
                         with self._metrics_lock:
                             self._events_failed += 1
                             self._error_count += 1
+                        break
 
             # Clear correlation context
             self._current_correlation_id = None

@@ -508,3 +508,248 @@ def test_self_healing_agent_bug_fix():
     assert "_get_replica_info(snapshot.agent_name)" in source or \
            "snapshot.agent_name" in source, \
            "Should pass agent_name to _get_replica_info, not snapshot object"
+
+
+@pytest.mark.unit
+def test_db_agent_handles_payment_partial_with_string_amount(mock_kafka_client, temp_db_path):
+    """DBAgent should persist payment.partial and coerce string amounts to numbers."""
+    from agents.storage.db_agent import DBAgent
+
+    agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+    now = datetime.utcnow().isoformat()
+
+    created = Event(
+        event_id="evt_invoice_for_partial",
+        event_type="invoice.created",
+        event_source="test",
+        event_time=datetime.utcnow(),
+        entity_id="inv_partial_001",
+        payload={
+            "invoice_id": "inv_partial_001",
+            "customer_id": "cust_partial_001",
+            "amount": 100.0,
+            "issued_date": now,
+            "due_date": now,
+            "status": "pending",
+        },
+    )
+    partial_payment = Event(
+        event_id="evt_payment_partial",
+        event_type="payment.partial",
+        event_source="test",
+        event_time=datetime.utcnow(),
+        entity_id="inv_partial_001",
+        payload={
+            "payment_id": "pay_partial_001",
+            "invoice_id": "inv_partial_001",
+            "customer_id": "cust_partial_001",
+            "amount": "25.50",
+            "payment_date": now,
+        },
+    )
+
+    agent.process_event(created)
+    agent.process_event(partial_payment)
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT amount FROM payments WHERE payment_id = ?",
+        ("pay_partial_001",),
+    )
+    payment_row = cursor.fetchone()
+    cursor.execute(
+        "SELECT paid_amount, status FROM invoices WHERE invoice_id = ?",
+        ("inv_partial_001",),
+    )
+    invoice_row = cursor.fetchone()
+    conn.close()
+
+    assert payment_row is not None
+    assert payment_row[0] == pytest.approx(25.5)
+    assert invoice_row is not None
+    assert invoice_row[0] == pytest.approx(25.5)
+    assert invoice_row[1] == "partial"
+
+
+@pytest.mark.unit
+def test_db_agent_rejects_non_numeric_payment_amount(mock_kafka_client, temp_db_path):
+    """DBAgent should skip malformed payment amounts instead of crashing."""
+    from agents.storage.db_agent import DBAgent
+
+    agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+    now = datetime.utcnow().isoformat()
+
+    created = Event(
+        event_id="evt_invoice_for_bad_payment",
+        event_type="invoice.created",
+        event_source="test",
+        event_time=datetime.utcnow(),
+        entity_id="inv_bad_001",
+        payload={
+            "invoice_id": "inv_bad_001",
+            "customer_id": "cust_bad_001",
+            "amount": 80.0,
+            "issued_date": now,
+            "due_date": now,
+            "status": "pending",
+        },
+    )
+    bad_payment = Event(
+        event_id="evt_payment_bad",
+        event_type="payment.received",
+        event_source="test",
+        event_time=datetime.utcnow(),
+        entity_id="inv_bad_001",
+        payload={
+            "payment_id": "pay_bad_001",
+            "invoice_id": "inv_bad_001",
+            "customer_id": "cust_bad_001",
+            "amount": "not-a-number",
+        },
+    )
+
+    agent.process_event(created)
+    agent.process_event(bad_payment)
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM payments WHERE payment_id = ?", ("pay_bad_001",))
+    payment_count = cursor.fetchone()[0]
+    cursor.execute("SELECT paid_amount, status FROM invoices WHERE invoice_id = ?", ("inv_bad_001",))
+    invoice_row = cursor.fetchone()
+    conn.close()
+
+    assert payment_count == 0
+    assert invoice_row is not None
+    assert invoice_row[0] == pytest.approx(0.0)
+    assert invoice_row[1] == "pending"
+
+
+@pytest.mark.unit
+def test_kafka_client_init_consumer_rejects_unknown_backend(mock_kafka_config):
+    """KafkaClient should fail fast on unsupported backend values."""
+    from runtime.kafka_client import KafkaClient
+
+    client = KafkaClient(config=mock_kafka_config, backend="unsupported")
+    with pytest.raises(ValueError, match="Unknown backend"):
+        client._init_consumer("group-test")
+
+
+@pytest.mark.unit
+def test_memory_agent_persist_metrics_creates_missing_customer(mock_kafka_client, temp_db_path):
+    """MemoryAgent metrics persistence should not fail when customer row is missing."""
+    from agents.storage.db_agent import DBAgent
+    from agents.storage.memory_agent import MemoryAgent
+
+    # Initialize schema on a temp database.
+    DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+
+    memory_agent = MemoryAgent(kafka_client=mock_kafka_client)
+    memory_agent._db_path = temp_db_path
+
+    state = {
+        "total_outstanding": 123.0,
+        "avg_delay": 4.5,
+        "on_time_ratio": 0.8,
+    }
+    memory_agent._persist_metrics("cust_metrics_missing_parent", state, update_last_payment=False)
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT customer_id FROM customers WHERE customer_id = ?",
+        ("cust_metrics_missing_parent",),
+    )
+    customer_row = cursor.fetchone()
+    cursor.execute(
+        "SELECT total_outstanding, avg_delay, on_time_ratio FROM customer_metrics WHERE customer_id = ?",
+        ("cust_metrics_missing_parent",),
+    )
+    metrics_row = cursor.fetchone()
+    conn.close()
+
+    assert customer_row is not None
+    assert metrics_row is not None
+    assert metrics_row[0] == pytest.approx(123.0)
+    assert metrics_row[1] == pytest.approx(4.5)
+    assert metrics_row[2] == pytest.approx(0.8)
+
+
+@pytest.mark.unit
+def test_db_agent_repair_payment_integrity_backfills_orphans_and_clamps_paid(
+    mock_kafka_client,
+    temp_db_path,
+):
+    """DBAgent integrity repair should backfill orphan invoices and clamp overpaid rows."""
+    from agents.storage.db_agent import DBAgent
+
+    agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
+    now = datetime.utcnow().isoformat()
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = OFF")
+    cursor.execute(
+        """
+        INSERT INTO customers (customer_id, created_at, updated_at)
+        VALUES (?, ?, ?)
+        """,
+        ("cust_fix_001", now, now),
+    )
+    cursor.execute(
+        """
+        INSERT INTO invoices (
+            invoice_id, customer_id, total_amount, paid_amount, issued_date, due_date, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("inv_fix_001", "cust_fix_001", 100.0, 170.0, now, now, "partial", now, now),
+    )
+    cursor.execute(
+        """
+        INSERT INTO payments (payment_id, invoice_id, customer_id, amount, payment_date, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("pay_orphan_001", "inv_missing_001", "cust_fix_001", 25.0, now, now),
+    )
+    conn.commit()
+
+    agent._repair_payment_integrity(conn)
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(temp_db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT invoice_id, total_amount, paid_amount, status FROM invoices WHERE invoice_id = ?", ("inv_missing_001",))
+    orphan_backfill = cursor.fetchone()
+    cursor.execute("SELECT paid_amount FROM invoices WHERE invoice_id = ?", ("inv_fix_001",))
+    clamped_row = cursor.fetchone()
+    conn.close()
+
+    assert orphan_backfill is not None
+    assert orphan_backfill[1] == pytest.approx(25.0)
+    assert orphan_backfill[2] == pytest.approx(25.0)
+    assert orphan_backfill[3] == "paid"
+    assert clamped_row is not None
+    assert clamped_row[0] == pytest.approx(100.0)
+
+
+@pytest.mark.unit
+def test_external_scraping_news_analysis_uses_description_keywords(mock_kafka_client):
+    """ExternalScrapingAgent should detect litigation risk from description text too."""
+    from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
+
+    agent = ExternalScrapingAgent(kafka_client=mock_kafka_client)
+    articles = [
+        {
+            "title": "Company updates quarterly filing",
+            "description": "SEBI investigation launched into alleged violations and penalty exposure",
+            "pubDate": datetime.utcnow().isoformat(),
+            "source": "test",
+        }
+    ]
+    result = agent._analyze_news(articles, "ACME Corp")
+
+    assert result["litigation_flag"] is True
+    assert result["case_count"] >= 1
+    assert result["risk_score"] > 0

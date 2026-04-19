@@ -142,7 +142,7 @@ class CustomerProfileAgent(BaseAgent):
 
         # FIX 2: Update credit_limit from metrics (dynamic, not static)
         if "credit_limit" in data:
-            state["credit_limit"] = float(data.get("credit_limit", 100000.0))
+            state["credit_limit"] = float(data.get("credit_limit") or 100000.0)
 
         # FIX 7: Capture company_name from metrics to forward to profile
         if "company_name" in data:
@@ -167,7 +167,7 @@ class CustomerProfileAgent(BaseAgent):
 
         state = self._get_state(customer_id)
 
-        risk_score = float(data.get("risk_score", 0.0))
+        risk_score = float(data.get("risk_score") or 0.0)
 
         # Store multiple risks (DO NOT overwrite)
         state["risks"].append(risk_score)
@@ -181,9 +181,9 @@ class CustomerProfileAgent(BaseAgent):
         if "amount" in data or "days_overdue" in data:
             invoice_detail = {
                 "score": risk_score,
-                "amount": float(data.get("amount", 0.0)),
-                "days_overdue": float(data.get("days_overdue", 0.0)),
-                "timestamp": float(data.get("timestamp", time.time())),
+                "amount": float(data.get("amount") or 0.0),
+                "days_overdue": float(data.get("days_overdue") or 0.0),
+                "timestamp": float(data.get("timestamp") or time.time()),
             }
             state["invoice_details"].append(invoice_detail)
 
@@ -207,7 +207,7 @@ class CustomerProfileAgent(BaseAgent):
 
         state = self._get_state(customer_id)
 
-        external_risk = float(data.get("external_risk", 0.0))
+        external_risk = float(data.get("external_risk") or 0.0)
         if external_risk > 0:
             state["external_risk"] = external_risk
 
@@ -222,7 +222,7 @@ class CustomerProfileAgent(BaseAgent):
 
         state = self._get_state(customer_id)
 
-        state["external_scraped_risk"] = float(data.get("litigation_risk", 0.0))
+        state["external_scraped_risk"] = float(data.get("litigation_risk") or 0.0)
         state["litigation_flag"] = bool(data.get("litigation_flag", False))
 
         self._emit_profile(customer_id, event)
@@ -238,9 +238,9 @@ class CustomerProfileAgent(BaseAgent):
         state = self._get_state(customer_id)
 
         # Store aggregated risk as primary signal
-        state["aggregated_risk"] = float(data.get("combined_risk", 0.0))
-        state["financial_risk"] = float(data.get("financial_risk", 0.0))
-        state["litigation_risk"] = float(data.get("litigation_risk", 0.0))
+        state["aggregated_risk"] = float(data.get("combined_risk") or 0.0)
+        state["financial_risk"] = float(data.get("financial_risk") or 0.0)
+        state["litigation_risk"] = float(data.get("litigation_risk") or 0.0)
         state["severity"] = data.get("severity")
 
         # Also update legacy fields for backward compatibility

@@ -142,7 +142,7 @@ class MemoryAgent(BaseAgent):
                         "total_outstanding": recomputed.get("total_outstanding", 0.0),
                         "overdue_count": recomputed.get("overdue_count", 0),
                         "avg_delay": 0.0,  # Will be updated by metrics event
-                        "on_time_ratio": 0.5,  # Will be updated by metrics event
+                        "on_time_ratio": 0.0,  # Safe default; updated on first customer.metrics.updated
                         "risk_score": cust.get("risk_score", 0.0),
                         "last_updated": datetime.utcnow().isoformat(),
                         # CRITICAL FIX: Initialize invoice details storage
@@ -259,7 +259,7 @@ class MemoryAgent(BaseAgent):
                 "total_outstanding": 0.0,
                 "overdue_count": 0,
                 "avg_delay": 0.0,
-                "on_time_ratio": 0.5,
+                "on_time_ratio": 0.0,  # Safe default, consistent with CustomerStateAgent
                 "risk_score": 0.0,
                 "last_updated": datetime.utcnow().isoformat(),
                 # CRITICAL FIX: Add structured invoice details storage
@@ -510,6 +510,16 @@ class MemoryAgent(BaseAgent):
             cursor = conn.cursor()
 
             now = datetime.utcnow().isoformat()
+
+            # Ensure parent customer row exists before touching customer_metrics.
+            # This prevents FK violations when metrics arrive before profile creation.
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                VALUES (?, ?, ?)
+                """,
+                (customer_id, now, now),
+            )
 
             # IMPROVEMENT: Only update last_payment_date on actual payment events
             # For other events, the existing last_payment_date is preserved

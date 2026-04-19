@@ -61,11 +61,13 @@ class QueryAgent(BaseAgent):
 
     def start(self) -> None:
         """
-        Override BaseAgent start.
-        QueryAgent is read-only and does NOT consume Kafka events.
-        It only provides synchronous query services.
+        Start QueryAgent with full BaseAgent lifecycle.
+
+        QueryAgent remains producer-only because subscribe() returns an empty list,
+        but it should still register, emit heartbeats, and clean up consistently.
         """
-        logger.info("QueryAgent started (read-only mode, no Kafka subscription)")
+        super().start()
+        logger.info("QueryAgent started (read-only mode, producer-only lifecycle)")
 
     def get_customer(self, customer_id: str) -> Optional[Dict[str, Any]]:
         """

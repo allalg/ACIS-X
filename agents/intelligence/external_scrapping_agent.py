@@ -84,15 +84,17 @@ class ExternalScrapingAgent(BaseAgent):
     """
 
     TOPIC_INPUT = "acis.metrics"
+    TOPIC_CUSTOMERS = "acis.customers"
     TOPIC_OUTPUT = "acis.metrics"
     GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
+    BING_NEWS_RSS_URL = "https://www.bing.com/news/search"
 
     def __init__(self, kafka_client: Any, query_agent: Optional[Any] = None):
         super().__init__(
             agent_name="ExternalScrapingAgent",
             agent_version="3.0.0",
             group_id="litigation-agent-group",
-            subscribed_topics=[self.TOPIC_INPUT],
+            subscribed_topics=[self.TOPIC_INPUT, self.TOPIC_CUSTOMERS],
             capabilities=[
                 "litigation_risk_detection",
                 "legal_signal_extraction",
@@ -124,13 +126,16 @@ class ExternalScrapingAgent(BaseAgent):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0"
         })
         # FIX 9: Track published litigation_risk values to prevent duplicate events
-        self._last_published_risk: Dict[str, float] = {}
+        # Use bounded OrderedDict (max 5000 entries) to prevent memory growth
+        from collections import OrderedDict
+        self._last_published_risk: OrderedDict = OrderedDict()  # customer_id -> last risk
+        self._MAX_RISK_TRACK = 5000  # evict oldest when exceeded
 
         logger.info("[ExternalScrapingAgent] Initialized with Google News RSS integration (retries enabled)")
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
-        return [self.TOPIC_INPUT]
+        return [self.TOPIC_INPUT, self.TOPIC_CUSTOMERS]
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
@@ -141,7 +146,7 @@ class ExternalScrapingAgent(BaseAgent):
     # GOOGLE NEWS RSS FUNCTIONS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _fetch_news(self, company_name: str) -> List[Dict[str, str]]:
+    def _fetch_google_news(self, company_name: str) -> List[Dict[str, str]]:
         """
         Fetch news articles from Google News RSS.
 
@@ -152,7 +157,10 @@ class ExternalScrapingAgent(BaseAgent):
             List of article dicts with title and pubDate (max 15, last 3 days only)
         """
         try:
-            search_query = f'"{company_name}" lawsuit OR sued OR fraud OR investigation OR penalty OR default'
+            search_query = (
+                f'"{company_name}" (lawsuit OR sued OR fraud OR investigation OR penalty OR default '
+                "OR nclt OR sebi OR court OR legal notice)"
+            )
             encoded_query = quote_plus(search_query)
             url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
 
@@ -170,12 +178,16 @@ class ExternalScrapingAgent(BaseAgent):
             articles = []
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
 
-            for item in root.findall(".//item")[:15]:
+            for item in root.findall(".//item")[:20]:
                 title_elem = item.find("title")
                 pub_date_elem = item.find("pubDate")
+                desc_elem = item.find("description")
+                link_elem = item.find("link")
 
                 title = title_elem.text if title_elem is not None else ""
                 pub_date_str = pub_date_elem.text if pub_date_elem is not None else ""
+                description = desc_elem.text if desc_elem is not None else ""
+                link = link_elem.text if link_elem is not None else ""
 
                 if not title:
                     continue
@@ -192,6 +204,9 @@ class ExternalScrapingAgent(BaseAgent):
                 articles.append({
                     "title": title.strip(),
                     "pubDate": pub_date_str.strip() if pub_date_str else "",
+                    "description": (description or "").strip(),
+                    "link": (link or "").strip(),
+                    "source": "google_news",
                 })
 
             if not articles:
@@ -210,6 +225,62 @@ class ExternalScrapingAgent(BaseAgent):
         except Exception as e:
             logger.error(f"[ExternalScrapingAgent] Unexpected error fetching news: {e}")
             return []
+
+    def _fetch_bing_news(self, company_name: str) -> List[Dict[str, str]]:
+        """Fetch litigation-related headlines from Bing News RSS."""
+        try:
+            search_query = (
+                f'"{company_name}" (lawsuit OR sued OR fraud OR investigation OR penalty '
+                "OR default OR nclt OR sebi OR court)"
+            )
+            encoded_query = quote_plus(search_query)
+            url = f"{self.BING_NEWS_RSS_URL}?q={encoded_query}&format=rss"
+
+            response = self._session.get(url, timeout=20)
+            if response.status_code != 200:
+                return []
+
+            root = ET.fromstring(response.content)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
+            articles: List[Dict[str, str]] = []
+            for item in root.findall(".//item")[:20]:
+                title = (item.findtext("title") or "").strip()
+                pub_date_str = (item.findtext("pubDate") or "").strip()
+                description = (item.findtext("description") or "").strip()
+                link = (item.findtext("link") or "").strip()
+                if not title:
+                    continue
+                if pub_date_str:
+                    try:
+                        pub_date = parsedate_to_datetime(pub_date_str)
+                        if pub_date < cutoff_date:
+                            continue
+                    except Exception:
+                        pass
+                articles.append(
+                    {
+                        "title": title,
+                        "pubDate": pub_date_str,
+                        "description": description,
+                        "link": link,
+                        "source": "bing_news",
+                    }
+                )
+            return articles
+        except Exception as e:
+            logger.debug(f"[ExternalScrapingAgent] Bing RSS fetch failed for {company_name}: {e}")
+            return []
+
+    def _fetch_news(self, company_name: str) -> List[Dict[str, str]]:
+        """Fetch and merge litigation headlines from multiple RSS sources."""
+        google_items = self._fetch_google_news(company_name)
+        bing_items = self._fetch_bing_news(company_name)
+        merged: Dict[str, Dict[str, str]] = {}
+        for article in google_items + bing_items:
+            key = (article.get("title") or "").strip().lower()
+            if key and key not in merged:
+                merged[key] = article
+        return list(merged.values())[:25]
 
     def _classify_case(self, text: str) -> str:
         """
@@ -336,7 +407,9 @@ class ExternalScrapingAgent(BaseAgent):
 
         for article in articles:
             title = article.get("title", "")
-            title_lower = title.lower()
+            description = article.get("description", "")
+            combined_text = f"{title} {description}".strip()
+            title_lower = combined_text.lower()
 
             article_weight = 0.0
             matched_keywords = []
@@ -358,6 +431,8 @@ class ExternalScrapingAgent(BaseAgent):
                     "headline": title[:200],
                     "type": case_type,
                     "direction": direction,
+                    "source": article.get("source", "unknown"),
+                    "link": article.get("link", ""),
                 })
 
         # Compute risk score based on total articles
@@ -408,8 +483,14 @@ class ExternalScrapingAgent(BaseAgent):
             except Exception as e:
                 logger.debug(f"[ExternalScrapingAgent] Failed to lookup customer from QueryAgent: {e}")
 
-        # Final fallback: use customer_id
-        company_name = company_name or customer_id
+        # Final fallback: use customer_id only if no company name found
+        # Searching for "cust_00001" on Google News is worthless — skip scrape
+        if not company_name:
+            logger.debug(
+                f"[ExternalScrapingAgent] Skipping scrape for {customer_id}: "
+                f"no company name resolved (searching by customer_id yields no results)"
+            )
+            return
         company_name = company_name.strip()[:100]
 
         # Check cache (TTL = 24h)
@@ -459,6 +540,9 @@ class ExternalScrapingAgent(BaseAgent):
         # FIX 9: DEDUPLICATION - Skip publishing if litigation_risk unchanged
         last_risk = self._last_published_risk.get(customer_id)
         litigation_risk = round(news_data["risk_score"], 4)
+        case_count = int(news_data.get("case_count", 0))
+        # FIX: Deduplicate on risk score alone — case_count==0 gate was causing
+        # redundant publishes for companies with persistent news coverage
         if last_risk is not None and last_risk == litigation_risk:
             logger.debug(
                 f"[ExternalScrapingAgent] Skipping publish for {customer_id}: "
@@ -475,7 +559,9 @@ class ExternalScrapingAgent(BaseAgent):
             correlation_id=event.correlation_id,
         )
 
-        # FIX 9: Track published risk to prevent duplicate events
+        # FIX 9: Track published risk with bounded eviction
+        if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
+            self._last_published_risk.popitem(last=False)  # evict oldest
         self._last_published_risk[customer_id] = litigation_risk
 
         logger.info(

@@ -103,10 +103,10 @@ class RiskScoringAgent(BaseAgent):
         # Extract and store all available customer-level risk signals
         context_data = {
             # Core aggregated/external risk
-            "aggregated_risk": float(data.get("aggregated_risk", data.get("risk_score", 0.0))),
-            "financial_risk": float(data.get("financial_risk", 0.0)),
-            "litigation_risk": float(data.get("litigation_risk", 0.0)),
-            "external_risk": float(data.get("external_risk", 0.0)),
+            "aggregated_risk": float(data.get("aggregated_risk") or data.get("risk_score") or 0.0),
+            "financial_risk": float(data.get("financial_risk") or 0.0),
+            "litigation_risk": float(data.get("litigation_risk") or 0.0),
+            "external_risk": float(data.get("external_risk") or 0.0),
 
             # Risk characterization
             "severity": data.get("severity"),
@@ -196,9 +196,9 @@ class RiskScoringAgent(BaseAgent):
 
         # Extract payment behavior metrics
         metrics_data = {
-            "avg_delay": float(data.get("avg_delay", 0.0)),
-            "on_time_ratio": float(data.get("on_time_ratio", 0.0)),
-            "total_outstanding": float(data.get("total_outstanding", 0.0)),
+            "avg_delay": float(data.get("avg_delay") or 0.0),
+            "on_time_ratio": float(data.get("on_time_ratio") or 0.0),
+            "total_outstanding": float(data.get("total_outstanding") or 0.0),
             "last_payment_date": data.get("last_payment_date"),
         }
 

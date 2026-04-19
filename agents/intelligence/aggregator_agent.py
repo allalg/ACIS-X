@@ -289,10 +289,13 @@ class AggregatorAgent(BaseAgent):
             except Exception as e:
                 logger.debug(f"[AggregatorAgent] Failed to fetch company_name from DB: {e}")
 
-        # Final validation: never store customer_id as company_name
+        # Final validation: use customer_id as fallback if no real company name found
+        # Risk profile aggregation should not be blocked by missing company name
         if not company_name or company_name == customer_id:
-            logger.warning(f"[AggregatorAgent] No valid company_name found for {customer_id}, cannot aggregate without real name")
-            return
+            logger.debug(
+                f"[AggregatorAgent] No company_name for {customer_id}, using customer_id as fallback"
+            )
+            company_name = customer_id
 
         company_name = company_name.strip()
 

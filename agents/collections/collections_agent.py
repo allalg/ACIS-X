@@ -140,7 +140,7 @@ class CollectionsAgent(BaseAgent):
         data = event.payload or {}
         customer_id = data.get("customer_id")
         invoice_id = data.get("invoice_id")
-        invoice_risk_score = float(data.get("risk_score", 0.0))
+        invoice_risk_score = float(data.get("risk_score") or 0.0)
 
         if not customer_id or not invoice_id:
             logger.warning(
@@ -165,15 +165,15 @@ class CollectionsAgent(BaseAgent):
                 )
                 customer_metrics = self._default_metrics()
 
-            total_outstanding = float(customer_metrics.get("total_outstanding", 0.0))
-            avg_delay = float(customer_metrics.get("avg_delay", 0.0))
-            on_time_ratio = float(customer_metrics.get("on_time_ratio", 0.0))
-            overdue_count = int(customer_metrics.get("overdue_count", 0))
-            credit_limit = float(customer_metrics.get("credit_limit", 100000.0))
+            total_outstanding = float(customer_metrics.get("total_outstanding") or 0.0)
+            avg_delay = float(customer_metrics.get("avg_delay") or 0.0)
+            on_time_ratio = float(customer_metrics.get("on_time_ratio") or 0.0)
+            overdue_count = int(customer_metrics.get("overdue_count") or 0)
+            credit_limit = float(customer_metrics.get("credit_limit") or 100000.0)
 
             # Extract invoice-level data
-            invoice_amount = float(data.get("amount", 0.0))
-            invoice_days_overdue = float(data.get("days_overdue", 0.0))
+            invoice_amount = float(data.get("amount") or 0.0)
+            invoice_days_overdue = float(data.get("days_overdue") or 0.0)
 
             logger.debug(
                 f"[CollectionsAgent] [{action_id}] Customer context: "
@@ -402,7 +402,7 @@ class CollectionsAgent(BaseAgent):
         """
         data = event.payload or {}
         customer_id = data.get("customer_id")
-        customer_risk_score = float(data.get("risk_score", 0.0))
+        customer_risk_score = float(data.get("risk_score") or 0.0)
 
         if not customer_id:
             logger.warning(
@@ -436,10 +436,10 @@ class CollectionsAgent(BaseAgent):
                 )
                 return
 
-            total_outstanding = float(customer_metrics.get("total_outstanding", 0.0))
-            avg_delay = float(customer_metrics.get("avg_delay", 0.0))
-            on_time_ratio = float(customer_metrics.get("on_time_ratio", 0.0))
-            credit_limit = float(customer_metrics.get("credit_limit", 100000.0))
+            total_outstanding = float(customer_metrics.get("total_outstanding") or 0.0)
+            avg_delay = float(customer_metrics.get("avg_delay") or 0.0)
+            on_time_ratio = float(customer_metrics.get("on_time_ratio") or 0.0)
+            credit_limit = float(customer_metrics.get("credit_limit") or 100000.0)
 
             logger.debug(
                 f"[CollectionsAgent] [{action_id}] Customer-level metrics: "

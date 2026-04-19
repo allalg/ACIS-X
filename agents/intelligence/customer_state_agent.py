@@ -788,7 +788,17 @@ class CustomerStateAgent(BaseAgent):
         with self._db_lock:
             try:
                 conn = sqlite3.connect(self._db_path)
+                conn.execute("PRAGMA foreign_keys = ON")
                 cursor = conn.cursor()
+
+                now = datetime.utcnow().isoformat()
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (customer_id, now, now),
+                )
 
                 cursor.execute(
                     """
@@ -802,7 +812,7 @@ class CustomerStateAgent(BaseAgent):
                         metrics["avg_delay"],
                         metrics["on_time_ratio"],
                         metrics.get("last_payment_date"),  # CRITICAL FIX #4
-                        datetime.utcnow().isoformat(),
+                        now,
                     ),
                 )
 

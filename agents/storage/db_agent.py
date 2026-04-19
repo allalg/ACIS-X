@@ -73,6 +73,12 @@ class DBAgent(BaseAgent):
         self._query_agent = query_agent
         logger.info("QueryAgent reference set for cache invalidation")
 
+    def _get_connection(self) -> sqlite3.Connection:
+        """Create a DB connection with FK enforcement enabled."""
+        conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
     def _init_database(self) -> None:
         """Initialize SQLite database and create tables if not exists."""
         import time
@@ -124,7 +130,7 @@ class DBAgent(BaseAgent):
 
             # Now open with fresh database (or cleaned-up file)
             # Use timeout and WAL mode for better concurrent access
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
@@ -276,10 +282,109 @@ class DBAgent(BaseAgent):
 
                 conn.commit()
                 self._cleanup_legacy_company_names(conn)
+                self._repair_payment_integrity(conn)
                 logger.info(f"Database initialized at {self._db_path}")
                 logger.info("Upgraded database schema to v5 (customer risk profile ready)")
             finally:
                 conn.close()
+
+    def _repair_payment_integrity(self, conn: sqlite3.Connection) -> None:
+        """
+        Repair legacy payment/invoice integrity issues.
+
+        - Backfill placeholder invoices for orphan payments.
+        - Recompute invoice paid_amount/status from payment records.
+        - Clamp paid_amount to total_amount to avoid negative remaining balance drift.
+        """
+        cursor = conn.cursor()
+        now = datetime.utcnow().isoformat()
+
+        # Ensure all customers referenced by payments exist before any invoice backfill.
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+            SELECT DISTINCT COALESCE(customer_id, 'unknown_customer'), ?, ?
+            FROM payments
+            """
+            ,
+            (now, now),
+        )
+
+        # 1) Create placeholder invoices for orphan payments to preserve historical payments.
+        cursor.execute(
+            """
+            INSERT INTO invoices (
+                invoice_id, customer_id, total_amount, paid_amount, issued_date, due_date, status, created_at, updated_at
+            )
+            SELECT
+                p.invoice_id,
+                COALESCE(MIN(p.customer_id), 'unknown_customer'),
+                COALESCE(SUM(p.amount), 0.0),
+                COALESCE(SUM(p.amount), 0.0),
+                ?,
+                ?,
+                'paid',
+                ?,
+                ?
+            FROM payments p
+            LEFT JOIN invoices i ON i.invoice_id = p.invoice_id
+            WHERE p.invoice_id IS NOT NULL
+              AND i.invoice_id IS NULL
+            GROUP BY p.invoice_id
+            """,
+            (now, now, now, now),
+        )
+
+        # Ensure customers exist for placeholder invoices.
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+            SELECT DISTINCT customer_id, ?, ?
+            FROM invoices
+            WHERE customer_id IS NOT NULL
+            """,
+            (now, now),
+        )
+
+        # 2) Recompute paid_amount from payments and update status deterministically.
+        cursor.execute(
+            """
+            UPDATE invoices
+            SET
+                paid_amount = CASE
+                    WHEN (
+                        SELECT SUM(COALESCE(amount, 0.0))
+                        FROM payments p
+                        WHERE p.invoice_id = invoices.invoice_id
+                    ) IS NULL THEN MIN(COALESCE(total_amount, 0.0), COALESCE(paid_amount, 0.0))
+                    ELSE MIN(
+                        COALESCE(total_amount, 0.0),
+                        COALESCE((
+                            SELECT SUM(COALESCE(amount, 0.0))
+                            FROM payments p
+                            WHERE p.invoice_id = invoices.invoice_id
+                        ), 0.0)
+                    )
+                END,
+                status = CASE
+                    WHEN COALESCE(total_amount, 0.0) <= 0 THEN status
+                    WHEN COALESCE((
+                        SELECT SUM(COALESCE(amount, 0.0))
+                        FROM payments p
+                        WHERE p.invoice_id = invoices.invoice_id
+                    ), COALESCE(paid_amount, 0.0)) >= COALESCE(total_amount, 0.0) THEN 'paid'
+                    WHEN COALESCE((
+                        SELECT SUM(COALESCE(amount, 0.0))
+                        FROM payments p
+                        WHERE p.invoice_id = invoices.invoice_id
+                    ), 0.0) > 0 THEN 'partial'
+                    ELSE status
+                END,
+                updated_at = ?
+            WHERE invoice_id IS NOT NULL
+            """,
+            (now,),
+        )
 
     def _sanitize_company_name(self, name: Optional[str]) -> Optional[str]:
         """Normalize company names by stripping synthetic '- Unit <n>' suffixes."""
@@ -356,7 +461,7 @@ class DBAgent(BaseAgent):
 
         if event_type.startswith("invoice."):
             self._handle_invoice_upsert(event)
-        elif event_type == "payment.received":
+        elif event_type in {"payment.received", "payment.partial"}:
             self._handle_payment_received(event)
         elif event_type.startswith("collection."):
             self._handle_collection_action(event)
@@ -406,9 +511,18 @@ class DBAgent(BaseAgent):
             issued_date = now
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+
+                if customer_id:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (customer_id, now, now),
+                    )
 
                 cursor.execute("""
                     INSERT INTO invoices (
@@ -496,7 +610,7 @@ class DBAgent(BaseAgent):
         data = event.payload or {}
         payment_id = data.get("payment_id")
         invoice_id = data.get("invoice_id")
-        amount = data.get("amount")
+        raw_amount = data.get("amount")
         payment_date = data.get("payment_date") or datetime.utcnow().isoformat()
         now = datetime.utcnow().isoformat()
 
@@ -504,8 +618,26 @@ class DBAgent(BaseAgent):
             logger.warning("payment.received event missing payment_id, skipping")
             return
 
+        try:
+            amount = float(raw_amount or 0.0)
+        except (TypeError, ValueError):
+            logger.warning(
+                "[DBAgent] Invalid payment amount for payment_id=%s invoice_id=%s: %r",
+                payment_id,
+                invoice_id,
+                raw_amount,
+            )
+            return
+
+        if amount <= 0:
+            logger.warning(
+                "[DBAgent] Payment amount must be positive, got %r for payment_id=%s invoice_id=%s — rejected",
+                raw_amount, payment_id, invoice_id,
+            )
+            return
+
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
@@ -530,6 +662,30 @@ class DBAgent(BaseAgent):
                     if not customer_id:
                         logger.error(f"[DBAgent] Could not find invoice {invoice_id} after 3 retries, cannot process payment")
                         return
+
+                # Ensure parent rows exist before inserting payment
+                # (payments can arrive before invoice.created due to Kafka ordering)
+
+                # 1) Ensure customer exists
+                if customer_id:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                        VALUES (?, ?, ?)
+                    """, (customer_id, now, now))
+
+                # 2) Ensure invoice exists — create placeholder if not yet
+                if invoice_id:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO invoices (
+                            invoice_id, customer_id, total_amount, paid_amount,
+                            issued_date, due_date, status, created_at, updated_at
+                        ) VALUES (?, ?, 0.0, 0.0, ?, ?, 'pending', ?, ?)
+                    """, (invoice_id, customer_id, now, now, now, now))
+                    if cursor.rowcount > 0:
+                        logger.info(
+                            f"[DBAgent] Created placeholder invoice {invoice_id} for payment "
+                            f"(will be amended when invoice.created arrives)"
+                        )
 
                 # Insert payment (idempotent)
                 cursor.execute("""
@@ -558,7 +714,9 @@ class DBAgent(BaseAgent):
                         if invoice_row:
                             total_amount = invoice_row[0]
                             current_paid = invoice_row[1] or 0
-                            new_paid = current_paid + (amount or 0)
+                            new_paid = current_paid + amount
+                            if total_amount is not None:
+                                new_paid = min(float(total_amount), new_paid)
 
                             # Determine status based on remaining amount
                             remaining = total_amount - new_paid if total_amount else 0
@@ -619,9 +777,17 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                if customer_id:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (customer_id, timestamp, timestamp),
+                    )
                 cursor.execute("""
                     INSERT OR IGNORE INTO collections_log (
                         id,
@@ -673,7 +839,7 @@ class DBAgent(BaseAgent):
         now = datetime.utcnow().isoformat()
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
@@ -740,7 +906,7 @@ class DBAgent(BaseAgent):
             return
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
@@ -818,7 +984,7 @@ class DBAgent(BaseAgent):
         created_at = datetime.utcnow().isoformat()
 
         with self._db_lock:
-            conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+            conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 

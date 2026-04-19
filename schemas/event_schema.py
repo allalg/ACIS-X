@@ -114,12 +114,6 @@ class Event(BaseModel):
     payload: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
-
 # =============================================================================
 # Agent Metrics Payload
 # =============================================================================
@@ -579,12 +573,6 @@ class DLQEvent(BaseModel):
     schema_version: str = SCHEMA_VERSION
     payload: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
 
 class DLQEventPayload(BaseModel):
     """Structured payload for DLQ events."""
