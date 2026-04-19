@@ -237,38 +237,46 @@ class ExternalDataAgent(BaseAgent):
 
     def _parse_numeric(self, text: str) -> Optional[float]:
         """
-        Parse numeric value from text, handling Cr, Lakh, %, commas.
+        Parse numeric value from text, handling Cr, Lakh, %, commas, and currency symbols.
         - Cr → multiply by 1e7 (1 crore = 10 million)
         - Lakh → multiply by 1e5 (1 lakh = 100 thousand)
         """
         if not text:
             return None
-        text = text.strip().replace(",", "")
+        text = str(text).strip().replace(",", "")
 
         multiplier = 1.0
         if "Cr" in text:
             multiplier = 1e7
-            text = text.replace("Cr", "")
         elif "Lakh" in text or "Lac" in text:
             multiplier = 1e5
-            text = re.sub(r"Lakh|Lac", "", text, flags=re.IGNORECASE)
 
-        text = text.replace("%", "").strip()
+        import re
+        match = re.search(r"[-+]?\d*\.?\d+", text)
+        if not match:
+            return None
 
         try:
-            return float(text) * multiplier
+            return float(match.group()) * multiplier
         except ValueError:
             return None
 
     def _get_value_by_label(self, soup: BeautifulSoup, label: str) -> Optional[str]:
         """
         Find value by label text using robust traversal.
-        Searches for label text (case-insensitive), then extracts adjacent value.
         """
         label_lower = label.lower()
 
-        # Strategy 1: Find span/div containing label, get sibling value
-        for el in soup.find_all(["span", "div", "td", "li"]):
+        # Strategy 1: Look for name/value pattern in list items FIRST
+        for li in soup.select("li"):
+            name_el = li.select_one(".name")
+            value_el = li.select_one(".value, .number")
+            if name_el and value_el:
+                if label_lower in name_el.get_text(strip=True).lower():
+                    return value_el.get_text(strip=True)
+
+        # Strategy 2: Find span/div containing label, get sibling value
+        for el in soup.find_all(["span", "div", "td"]):
             text = el.get_text(strip=True).lower()
             if label_lower in text and len(text) < 50:  # Avoid matching long paragraphs
                 # Check next sibling
@@ -286,14 +294,6 @@ class ExternalDataAgent(BaseAgent):
                             val = children[i + 1].get_text(strip=True)
                             if val and re.search(r"[\d.]", val):
                                 return val
-
-        # Strategy 2: Look for name/value pattern in list items
-        for li in soup.select("li"):
-            name_el = li.select_one(".name")
-            value_el = li.select_one(".value, .number")
-            if name_el and value_el:
-                if label_lower in name_el.get_text(strip=True).lower():
-                    return value_el.get_text(strip=True)
 
         return None
 
@@ -510,18 +510,47 @@ class ExternalDataAgent(BaseAgent):
 
         return fallback
 
-    def _enrich_with_exchange_fallbacks(self, data: Dict[str, Any], company_name: str, slug: str) -> Dict[str, Any]:
-        """Fill missing Screener values using NSE/BSE quote data and derived ratios."""
+    def _fetch_primary_exchange_data(self, company_name: str, slug: str) -> Dict[str, Any]:
+        """Fetch basic ratios primarily from NSE and BSE."""
+        data = {
+            "company_name": company_name,
+            "source": "nse/bse",
+            "pe": None,
+            "roe": None,
+            "roce": None,
+            "debt": None,
+            "market_cap": None,
+            "sales_growth": None,
+            "profit_growth": None,
+            "operating_margin": None,
+            "interest_coverage": None,
+        }
+        
         nse = self._fetch_nse_data(company_name, slug)
         bse = self._fetch_bse_data(company_name)
+        
+        for key in data.keys():
+            if key in ("company_name", "source"):
+                continue
+            val_nse = nse.get(key)
+            val_bse = bse.get(key)
+            data[key] = val_nse if val_nse is not None else val_bse
+            
+        return data
 
-        for key in ("market_cap", "pe", "roe"):
-            if data.get(key) is None:
-                data[key] = nse.get(key) if nse.get(key) is not None else bse.get(key)
-
-        if data.get("source") == "screener.in" and any(v is not None for v in (nse.get("pe"), nse.get("market_cap"), bse.get("pe"), bse.get("roe"))):
-            data["source"] = "screener.in+nse/bse"
-
+    def _enrich_with_screener_fallback(self, data: Dict[str, Any], company_name: str, slug: str) -> Dict[str, Any]:
+        """Fill missing NSE/BSE values using screener.in (historical/advanced ratios)."""
+        essential_keys = ["pe", "roe", "roce", "debt", "market_cap", "sales_growth", "profit_growth"]
+        needs_fallback = any(data.get(k) is None for k in essential_keys)
+        
+        if needs_fallback:
+            screener_data = self._fetch_screener_data(company_name, slug)
+            for k in essential_keys + ["operating_margin", "interest_coverage"]:
+                if data.get(k) is None:
+                    data[k] = screener_data.get(k)
+            # If we pulled anything from screener, reflect it in the source.
+            data["source"] = "nse/bse+screener.in"
+            
         data["risk"] = self._compute_risk(data)
         return data
 
@@ -700,9 +729,9 @@ class ExternalDataAgent(BaseAgent):
                 }
             else:
                 # FIX 8: Fetch fresh data and update throttle time
-                logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug}")
-                financial_data = self._fetch_screener_data(company_name, slug)
-                financial_data = self._enrich_with_exchange_fallbacks(financial_data, company_name, slug)
+                logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug} (Primary: NSE/BSE)")
+                financial_data = self._fetch_primary_exchange_data(company_name, slug)
+                financial_data = self._enrich_with_screener_fallback(financial_data, company_name, slug)
                 self._store_financials(financial_data)
                 external_risk = financial_data["risk"]
                 self._last_fetch_time[slug] = current_time  # Update throttle time
