@@ -149,6 +149,12 @@ class ScenarioGeneratorAgent(BaseAgent):
         # FIX #1: Reference to QueryAgent for DB-backed customer count check
         self._query_agent = query_agent
 
+        # Cap customer pool to the total number of distinct companies available
+        # to prevent the same company appearing under multiple customer IDs.
+        self.MAX_CUSTOMERS = len(self.LISTED_INDIAN_COMPANIES) + len(self.UNLISTED_INDIAN_COMPANIES)  # 40
+        # Track which company names are already in use
+        self._company_names_used: set = set()
+
         # Generator thread
         self._generator_thread: Optional[threading.Thread] = None
 
@@ -175,6 +181,9 @@ class ScenarioGeneratorAgent(BaseAgent):
         # Call BaseAgent.start() to properly initialize system integration
         # This ensures: registration, heartbeat, signal handlers, full lifecycle
         super().start()
+
+        # Seed in-memory customers from DB so restarts don't recreate existing ones
+        self._seed_customers_from_db()
 
         # Add generator-specific thread AFTER base initialization
         self._generator_thread = threading.Thread(
@@ -217,6 +226,48 @@ class ScenarioGeneratorAgent(BaseAgent):
             self._shutdown_event.wait(timeout=self.generation_interval)
 
         logger.info("Generation loop stopped")
+
+    def _seed_customers_from_db(self) -> None:
+        """Load existing customers from DB into memory to avoid recreating them on restart."""
+        if not self._query_agent:
+            return
+        try:
+            db_customers = self._query_agent.get_all_customers()
+            if not db_customers:
+                return
+            for c in db_customers:
+                cid = c.get("customer_id")
+                name = c.get("name")
+                if not cid:
+                    continue
+                # Reconstruct a minimal in-memory record
+                self._customers[cid] = {
+                    "customer_id": cid,
+                    "customer_name": name,
+                    "credit_limit": c.get("credit_limit", 100000.0),
+                    "currency": "INR",
+                    "risk_level": "low",
+                    "industry": "unknown",
+                    "country": "IN",
+                    "rating": "BBB",
+                    "status": c.get("status", "active"),
+                    "company_type": "unknown",
+                    "updated_at": c.get("updated_at"),
+                }
+                if name:
+                    self._company_names_used.add(name)
+                # Advance counter so new IDs don't collide with existing ones
+                try:
+                    num = int(cid.split("_")[1])
+                    self._customer_counter = max(self._customer_counter, num)
+                except (IndexError, ValueError):
+                    pass
+            logger.info(
+                f"[ScenarioGenerator] Seeded {len(db_customers)} existing customers from DB "
+                f"(counter at {self._customer_counter}, company pool used: {len(self._company_names_used)})"
+            )
+        except Exception as e:
+            logger.warning(f"[ScenarioGenerator] Failed to seed customers from DB: {e}")
 
     def _get_db_customer_count(self) -> int:
         """Get actual customer count from database via QueryAgent."""
@@ -298,6 +349,10 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     def _generate_customer(self, correlation_id: str) -> str:
         """Generate a new customer or update existing one."""
+        # If the customer pool is at capacity, only do updates — never create duplicates
+        if len(self._customers) >= self.MAX_CUSTOMERS:
+            return self._update_customer(correlation_id)
+
         # Decide: new customer or update existing
         if self._customers and random.random() < 0.3:  # 30% updates
             return self._update_customer(correlation_id)
@@ -306,11 +361,24 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     def _create_customer(self, correlation_id: str) -> str:
         """Create a new customer with real Indian company."""
+        # Pick a company that hasn't been used yet
+        all_companies = [
+            (c, "listed") for c in self.LISTED_INDIAN_COMPANIES
+        ] + [
+            (c, "unlisted") for c in self.UNLISTED_INDIAN_COMPANIES
+        ]
+        available = [(c, t) for c, t in all_companies if c["name"] not in self._company_names_used]
+        if not available:
+            # All companies already created — fall back to updating
+            logger.info("[ScenarioGenerator] All companies in use, forcing update instead of create")
+            return self._update_customer(correlation_id)
+
+        company, company_type = random.choice(available)
+        self._company_names_used.add(company["name"])
+
         self._customer_counter += 1
         customer_id = f"cust_{self._customer_counter:05d}"
 
-        # Select real Indian company
-        company, company_type = self._select_indian_company()
         company_base_name = company["name"]
         industry_raw = company["industry"]
 

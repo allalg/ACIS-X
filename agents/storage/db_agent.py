@@ -155,6 +155,13 @@ class DBAgent(BaseAgent):
                         updated_at TEXT
                     )
                 """)
+                # Unique index on company name — prevents same company appearing
+                # under multiple customer IDs even if ScenarioGenerator retries.
+                cursor.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_name_unique
+                    ON customers (name)
+                    WHERE name IS NOT NULL
+                """)
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS invoices (
@@ -818,71 +825,96 @@ class DBAgent(BaseAgent):
                 conn.close()
 
     def _handle_customer_profile(self, event: Event) -> None:
-        """Handle customer.profile.updated event - upsert customer profile data."""
+        """Handle customer.profile.updated event - upsert customer profile data.
+
+        Strategy:
+          Step 1 — INSERT OR IGNORE: create the row if it does not yet exist,
+                   seeding it with whatever fields this event carries.
+          Step 2 — Targeted UPDATE: build the SET clause dynamically from only
+                   the keys that were actually present in the payload.
+                   Fields absent from the payload are left untouched, so agents
+                   that own different columns (ScenarioGeneratorAgent → credit_limit,
+                   CustomerProfileAgent → risk_score) never overwrite each other.
+        """
         data = event.payload or {}
         customer_id = data.get("customer_id")
-
-        logger.info(f"[DBAgent] _handle_customer_profile called for {customer_id}, data keys: {list(data.keys())}")
-
         if not customer_id:
             logger.warning("customer.profile.updated event missing customer_id, skipping")
             return
 
-        # CRITICAL FIX #7: Only update name if provided (don't overwrite with NULL)
-        # CustomerProfileAgent publishes events without customer_name - we should preserve existing names
-        name = data.get("customer_name") or data.get("name")
-        name = self._sanitize_company_name(name)
-        logger.debug(f"[DBAgent] Extracted name for {customer_id}: {repr(name)}")
-        risk_score = data.get("risk_score", 0.0)
-        credit_limit = data.get("credit_limit", 0.0)
-        status = data.get("status", "active")
         now = datetime.utcnow().isoformat()
+
+        # Only extract fields that are genuinely present in this event's payload
+        name         = self._sanitize_company_name(data.get("customer_name") or data.get("name"))
+        has_risk     = "risk_score"   in data
+        has_limit    = "credit_limit" in data
+        has_status   = "status"       in data
+
+        risk_score   = float(data["risk_score"])   if has_risk  else None
+        credit_limit = float(data["credit_limit"]) if has_limit else None
+        status       = data["status"]              if has_status else "active"
 
         with self._db_lock:
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
-                # FIX #7: Use conditional UPDATE for name field
-                # If name is provided, update it; if not, preserve existing value
-                if name:
-                    # Name is provided - update it
-                    cursor.execute("""
-                        INSERT INTO customers (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(customer_id) DO UPDATE SET
-                            name=excluded.name,
-                            risk_score=excluded.risk_score,
-                            credit_limit=excluded.credit_limit,
-                            status=excluded.status,
-                            updated_at=excluded.updated_at
-                    """, (customer_id, name, risk_score, credit_limit, status, now, now))
-                else:
-                    # Name not provided - preserve existing value with COALESCE
-                    cursor.execute("""
-                        INSERT INTO customers (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
-                        VALUES (?, NULL, ?, ?, ?, ?, ?)
-                        ON CONFLICT(customer_id) DO UPDATE SET
-                            name=COALESCE(excluded.name, customers.name),
-                            risk_score=excluded.risk_score,
-                            credit_limit=excluded.credit_limit,
-                            status=excluded.status,
-                            updated_at=excluded.updated_at
-                    """, (customer_id, risk_score, credit_limit, status, now, now))
+                # Step 1: Ensure the customer row exists (no-op if already there)
+                cursor.execute("""
+                    INSERT OR IGNORE INTO customers
+                        (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    customer_id,
+                    name,
+                    risk_score   if risk_score   is not None else 0.0,
+                    credit_limit if credit_limit is not None else 0.0,
+                    status,
+                    now, now,
+                ))
+
+                # Step 2: Update only the fields that arrived in this event
+                update_fields = []
+                update_params = []
+
+                if name is not None:
+                    update_fields.append("name = ?")
+                    update_params.append(name)
+
+                if has_risk:
+                    update_fields.append("risk_score = ?")
+                    update_params.append(risk_score)
+
+                if has_limit:
+                    update_fields.append("credit_limit = ?")
+                    update_params.append(credit_limit)
+
+                if has_status:
+                    update_fields.append("status = ?")
+                    update_params.append(status)
+
+                if update_fields:
+                    update_fields.append("updated_at = ?")
+                    update_params.append(now)
+                    update_params.append(customer_id)
+                    cursor.execute(
+                        f"UPDATE customers SET {', '.join(update_fields)} WHERE customer_id = ?",
+                        update_params,
+                    )
 
                 conn.commit()
-                log_name = name if name else "(preserved existing)"
-                logger.info(f"[DBAgent] Updated customer profile: {customer_id} name={log_name} risk={risk_score} status={status} limit={credit_limit}")
+                logger.info(
+                    f"[DBAgent] Upserted customer: {customer_id} "
+                    f"name={name!r} risk={risk_score} limit={credit_limit} status={status}"
+                )
 
-                # FIX #2: Pre-populate customer cache after successful DB write
+                # Update query-agent cache with only the fields we know about
                 if self._query_agent:
-                    customer_cache_data = {
-                        "customer_id": customer_id,
-                        "credit_limit": credit_limit,
-                        "risk_score": risk_score,
-                        "updated_at": now,
-                    }
-                    self._query_agent.update_customer_cache(customer_id, customer_cache_data)
+                    cache_patch = {"customer_id": customer_id, "updated_at": now}
+                    if name         is not None: cache_patch["name"]         = name
+                    if has_risk:                 cache_patch["risk_score"]   = risk_score
+                    if has_limit:                cache_patch["credit_limit"] = credit_limit
+                    self._query_agent.update_customer_cache(customer_id, cache_patch)
             finally:
                 conn.close()
 
@@ -962,6 +994,7 @@ class DBAgent(BaseAgent):
 
     def _handle_customer_risk_profile(self, event: Event) -> None:
         """Handle CustomerRiskProfileUpdated event - insert aggregated risk data."""
+        import re as _re
         data = event.payload or {}
 
         customer_id = data.get("customer_id")
@@ -971,6 +1004,24 @@ class DBAgent(BaseAgent):
         if not customer_id:
             logger.warning("CustomerRiskProfileUpdated missing customer_id, skipping")
             return
+
+        # Guard: if company_name looks like a customer_id fallback (e.g. "cust_00003"),
+        # try to resolve it from the customers table before persisting.
+        if not company_name or _re.match(r'^cust_\d+$', company_name):
+            conn_check = self._get_connection()
+            try:
+                row = conn_check.execute(
+                    "SELECT name FROM customers WHERE customer_id = ?", (customer_id,)
+                ).fetchone()
+                if row and row[0]:
+                    company_name = self._sanitize_company_name(row[0])
+                    logger.debug(f"[DBAgent] Resolved company_name from customers table: {company_name}")
+                else:
+                    company_name = None  # persist NULL rather than a useless placeholder
+            except Exception:
+                company_name = None
+            finally:
+                conn_check.close()
 
         financial_risk = data.get("financial_risk", 0.0)
         litigation_risk = data.get("litigation_risk", 0.0)

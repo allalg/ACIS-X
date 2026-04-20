@@ -216,8 +216,11 @@ class AggregatorAgent(BaseAgent):
 
     def _try_aggregate(self, customer_id: str, correlation_id: Optional[str] = None) -> None:
         """
-        Attempt to aggregate risk if both financial and litigation data are available.
-        Only publishes when BOTH signals exist.
+        Attempt to aggregate risk from available signals.
+
+        Publishes risk.profile.updated as soon as EITHER financial OR litigation
+        data is available, using 0.0 for the missing signal.
+        Only skips entirely when NEITHER signal exists.
         """
         # FIX 7: Periodic cleanup (every 1000 aggregations or every 60 seconds)
         if len(self._cache) % 1000 == 0 and time.time() - self._last_cleanup > 60:
@@ -230,23 +233,23 @@ class AggregatorAgent(BaseAgent):
         financial_data = cache_entry.get("financial")
         litigation_data = cache_entry.get("litigation")
 
-        # Only aggregate when BOTH are available
-        if not financial_data or not litigation_data:
-            missing = []
-            if not financial_data:
-                missing.append("financial")
-            if not litigation_data:
-                missing.append("litigation")
+        # Skip only if NEITHER signal exists yet
+        if not financial_data and not litigation_data:
             logger.debug(
-                f"[AggregatorAgent] Cannot aggregate for {customer_id} - missing: {', '.join(missing)}"
+                f"[AggregatorAgent] No signals yet for {customer_id}, skipping"
             )
             return
 
+        if not financial_data:
+            logger.debug(f"[AggregatorAgent] No financial data for {customer_id}, using 0.0")
+        if not litigation_data:
+            logger.debug(f"[AggregatorAgent] No litigation data for {customer_id}, using 0.0")
+
         logger.info(f"[AggregatorAgent] Aggregating risk for customer={customer_id}")
 
-        # Extract risk values
-        financial_risk = financial_data.get("risk", 0.0)
-        litigation_risk = litigation_data.get("risk", 0.0)
+        # Extract risk values — default to 0.0 if that signal is absent
+        financial_risk = financial_data.get("risk", 0.0) if financial_data else 0.0
+        litigation_risk = litigation_data.get("risk", 0.0) if litigation_data else 0.0
 
         # FIX 9: DEDUPLICATION - Only publish if risk values actually changed
         # Compare against last published values to prevent duplicate events
@@ -274,14 +277,18 @@ class AggregatorAgent(BaseAgent):
         else:
             severity = "low"
 
-        # Get company name (prefer financial source)
-        company_name = financial_data.get("company_name") or litigation_data.get("company_name")
+        # Get company name — safely handle if either signal is absent
+        company_name = (
+            (financial_data.get("company_name") if financial_data else None)
+            or (litigation_data.get("company_name") if litigation_data else None)
+        )
 
-        # If still missing, try to fetch from database
-        if not company_name or company_name == customer_id:
+        # If still missing or a customer_id fallback, try DB
+        import re as _re
+        _is_id_fallback = lambda n: not n or bool(_re.match(r'^cust_\d+$', n))
+        if _is_id_fallback(company_name):
             try:
-                # Attempt to get real company name from database via QueryAgent
-                if hasattr(self, '_query_agent') and self._query_agent:
+                if self._query_agent:
                     customer = self._query_agent.get_customer(customer_id)
                     if customer and customer.get("name"):
                         company_name = customer.get("name")
@@ -289,20 +296,16 @@ class AggregatorAgent(BaseAgent):
             except Exception as e:
                 logger.debug(f"[AggregatorAgent] Failed to fetch company_name from DB: {e}")
 
-        # Final validation: use customer_id as fallback if no real company name found
-        # Risk profile aggregation should not be blocked by missing company name
-        if not company_name or company_name == customer_id:
-            logger.debug(
-                f"[AggregatorAgent] No company_name for {customer_id}, using customer_id as fallback"
-            )
-            company_name = customer_id
-
-        company_name = company_name.strip()
+        # If still unresolved, leave as None — DBAgent will handle the fallback
+        # Do NOT use customer_id as a company name (it's meaningless in the output)
+        if _is_id_fallback(company_name):
+            company_name = None
 
         # Compute confidence (average of available confidences)
-        fin_confidence = financial_data.get("payload", {}).get("confidence", 0.8)
-        lit_confidence = litigation_data.get("payload", {}).get("confidence", 0.7)
-        confidence = (fin_confidence + lit_confidence) / 2
+        fin_confidence = financial_data.get("payload", {}).get("confidence", 0.8) if financial_data else 0.0
+        lit_confidence = litigation_data.get("payload", {}).get("confidence", 0.7) if litigation_data else 0.0
+        valid_confidences = [c for c in [fin_confidence, lit_confidence] if c > 0]
+        confidence = sum(valid_confidences) / len(valid_confidences) if valid_confidences else 0.5
 
         # Build payload
         payload = {
@@ -314,8 +317,8 @@ class AggregatorAgent(BaseAgent):
             "combined_risk": round(combined_risk, 4),
             "severity": severity,
 
-            "financial_source": financial_data.get("source", "unknown"),
-            "litigation_source": litigation_data.get("source", "unknown"),
+            "financial_source": financial_data.get("source", "unknown") if financial_data else "none",
+            "litigation_source": litigation_data.get("source", "unknown") if litigation_data else "none",
 
             "confidence": round(confidence, 4),
             "generated_at": datetime.utcnow().isoformat(),
