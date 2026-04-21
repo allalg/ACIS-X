@@ -926,6 +926,7 @@ class KafkaClient:
                 self.flush(timeout=5.0)
             except Exception as e:
                 logger.warning(f"Error flushing producer: {e}")
+            self._producer = None
 
         # Close consumer
         if self._consumer:
@@ -936,6 +937,7 @@ class KafkaClient:
                     self._consumer.close()
             except Exception as e:
                 logger.warning(f"Error closing consumer: {e}")
+            self._consumer = None
 
         logger.info("KafkaClient closed")
 

@@ -82,9 +82,34 @@ class RuntimeManager(BaseAgent):
         self._next_port = 9100
         self._replica_counters: Dict[str, int] = {}
 
+        # FIX 4: Live agent registry for real in-process restarts.
+        # Maps agent_id (str) -> actual BaseAgent instance.
+        # Populated via register_live_agents() after all agents are constructed.
+        self._live_agents: Dict[str, Any] = {}
+
     def subscribe(self) -> List[str]:
         """Runtime manager consumes orchestration commands from the system topic."""
         return ["acis.system"]
+
+    def register_live_agents(self, agents: List[Any]) -> None:
+        """FIX 4: Register actual in-process agent objects for real restarts.
+
+        Call this after all agents have been constructed but before start() is
+        called. Maps agent_id -> agent object so _handle_placement_completed
+        can call .stop() / .start() on the real instance instead of just
+        updating the simulated registry.
+
+        Args:
+            agents: List of BaseAgent (or compatible) instances.
+        """
+        self._live_agents = {a.instance_id: a for a in agents if hasattr(a, "instance_id")}
+        # Also map by agent_id pattern used in restart payloads (agent_<name>_<uuid>)
+        for a in agents:
+            if hasattr(a, "instance_id"):
+                self._live_agents[a.instance_id] = a
+        logger.info(
+            f"[RuntimeManager] Registered {len(self._live_agents)} live agents for real restarts"
+        )
 
     def process_event(self, event: Event) -> None:
         """Handle simulated runtime commands."""
@@ -285,7 +310,30 @@ class RuntimeManager(BaseAgent):
         if operation == "restart":
             # Handle restart
             agent_id = payload.get("agent_id")
+            instance_id = payload.get("instance_id")
             target_agent_id = agent_id or f"agent_{agent_name.lower()}_{instance_id}"
+
+            # FIX 4: Attempt real in-process restart before falling back to simulation.
+            live_agent = self._live_agents.get(instance_id) or self._live_agents.get(target_agent_id)
+            if live_agent is not None:
+                logger.info(
+                    f"[RuntimeManager] Phase 2: Real restart for {agent_name} "
+                    f"(instance={instance_id}) - stopping agent thread"
+                )
+                try:
+                    live_agent.stop()
+                    import time as _time
+                    _time.sleep(0.5)   # Brief pause to let consumer thread flush
+                    live_agent.start()
+                    logger.info(
+                        f"[RuntimeManager] Phase 2: Real restart complete for {agent_name}"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"[RuntimeManager] Real restart failed for {agent_name}: {exc} "
+                        f"- falling back to simulated restart"
+                    )
+
             with self._instances_lock:
                 instance = self._instances.get(target_agent_id)
                 if instance is None:

@@ -476,7 +476,16 @@ class SelfHealingAgent(BaseAgent):
             return
 
         if snapshot.status == AgentStatus.OVERLOADED.value or trigger == "overloaded":
-            # Use score-based decision for overload instead of immediate scale
+            # FIX 1b: Apply DEGRADED_RESTART_DELAY grace period to overload too.
+            # Only act if overload has been sustained beyond the grace window.
+            if snapshot.last_overloaded_at:
+                overload_age = (now - snapshot.last_overloaded_at).total_seconds()
+                if overload_age < self.DEGRADED_RESTART_DELAY_SECONDS:
+                    logger.debug(
+                        f"[SelfHealing] {snapshot.agent_id} overloaded but within grace period "
+                        f"({overload_age:.0f}s < {self.DEGRADED_RESTART_DELAY_SECONDS}s) - watching"
+                    )
+                    return
             self._apply_score_decision(agent_id, snapshot)
             return
 
@@ -527,7 +536,11 @@ class SelfHealingAgent(BaseAgent):
         if state.status == AgentStatus.DEGRADED.value:
             status_score = 0.5
         elif state.status == AgentStatus.OVERLOADED.value:
-            status_score = 1.0  # Treat overload as critical
+            # FIX 1: Treat overload same as DEGRADED (0.5, not 1.0).
+            # This prevents transient CPU spikes from immediately scoring >= SCORE_DEGRADED
+            # (0.40) purely from the status weight and triggering spurious restarts.
+            # Sustained overload (high CPU + high status) will still cross the threshold.
+            status_score = 0.5
         elif state.status == AgentStatus.CRITICAL.value:
             status_score = 1.0
 
@@ -675,10 +688,15 @@ class SelfHealingAgent(BaseAgent):
         return (now - state.last_fallback_selected).total_seconds() >= self.FALLBACK_COOLDOWN_SECONDS
 
     def _emit_recovery_triggered(self, state: AgentRecoveryState, action: str, decision_rule: str) -> None:
-        """Publish recovery.triggered event."""
+        """Publish recovery.triggered event unconditionally on every decision.
+
+        FIX 2: Removed cooldown gate from this method. recovery.triggered is
+        an observability event and must fire on every real decision so that
+        dashboards and alerting systems receive it. The action-command methods
+        (_publish_restart, _publish_scale, _publish_spawn_and_placement) keep
+        their own cooldowns to prevent command storms.
+        """
         now = datetime.utcnow()
-        if not self._can_emit_recovery(state, now):
-            return
 
         payload = {
             "agent_id": state.agent_id,
@@ -700,6 +718,11 @@ class SelfHealingAgent(BaseAgent):
             entity_id=state.agent_name,
             payload=payload,
             correlation_id=self.create_correlation_id(),
+        )
+
+        logger.info(
+            f"[SelfHealing] recovery.triggered: agent={state.agent_id} "
+            f"action={action} rule={decision_rule} status={state.status}"
         )
 
         with self._state_lock:

@@ -72,11 +72,11 @@ DEGRADED_RESTART_DELAY = int(
 )
 
 LAG_SCALE_THRESHOLD = int(
-    os.getenv("ACIS_LAG_SCALE_THRESHOLD", "5000")
+    os.getenv("ACIS_LAG_SCALE_THRESHOLD", "50")    # FIX 3: was 5000 – unreachable in single-process sim
 )
 
 CRITICAL_LAG_THRESHOLD = int(
-    os.getenv("ACIS_CRITICAL_LAG_THRESHOLD", "10000")
+    os.getenv("ACIS_CRITICAL_LAG_THRESHOLD", "200")  # FIX 3: was 10000 – unreachable in single-process sim
 )
 
 

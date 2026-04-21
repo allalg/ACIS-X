@@ -247,8 +247,8 @@ class AggregatorAgent(BaseAgent):
 
         logger.info(f"[AggregatorAgent] Aggregating risk for customer={customer_id}")
 
-        # Extract risk values — default to 0.0 if that signal is absent
-        financial_risk = financial_data.get("risk", 0.0) if financial_data else 0.0
+        # Extract risk values — financial_risk can be None if absent/private company
+        financial_risk = financial_data.get("risk") if financial_data else None
         litigation_risk = litigation_data.get("risk", 0.0) if litigation_data else 0.0
 
         # FIX 9: DEDUPLICATION - Only publish if risk values actually changed
@@ -259,14 +259,19 @@ class AggregatorAgent(BaseAgent):
 
         # If both financial and litigation risks haven't changed, skip publishing
         if last_fin_risk == financial_risk and last_lit_risk == litigation_risk:
+            fin_str = f"{financial_risk:.4f}" if financial_risk is not None else "None"
             logger.debug(
                 f"[AggregatorAgent] Skipping publish for {customer_id}: "
-                f"financial={financial_risk:.4f}, litigation={litigation_risk:.4f} (unchanged)"
+                f"financial={fin_str}, litigation={litigation_risk:.4f} (unchanged)"
             )
             return
 
         # Compute combined risk
-        combined_risk = (self.FINANCIAL_WEIGHT * financial_risk) + (self.LITIGATION_WEIGHT * litigation_risk)
+        if financial_risk is not None:
+            combined_risk = (self.FINANCIAL_WEIGHT * financial_risk) + (self.LITIGATION_WEIGHT * litigation_risk)
+        else:
+            # Calculate risk based on external litigation agent only if financial data is missing
+            combined_risk = litigation_risk
         combined_risk = max(0.0, min(1.0, combined_risk))  # Clamp to [0, 1]
 
         # Determine severity
@@ -302,8 +307,14 @@ class AggregatorAgent(BaseAgent):
             company_name = None
 
         # Compute confidence (average of available confidences)
-        fin_confidence = financial_data.get("payload", {}).get("confidence", 0.8) if financial_data else 0.0
+        # Only include financial confidence if we actually have a financial risk score
+        if financial_data and financial_risk is not None:
+            fin_confidence = financial_data.get("payload", {}).get("confidence", 0.8)
+        else:
+            fin_confidence = 0.0
+            
         lit_confidence = litigation_data.get("payload", {}).get("confidence", 0.7) if litigation_data else 0.0
+        
         valid_confidences = [c for c in [fin_confidence, lit_confidence] if c > 0]
         confidence = sum(valid_confidences) / len(valid_confidences) if valid_confidences else 0.5
 
@@ -312,7 +323,7 @@ class AggregatorAgent(BaseAgent):
             "customer_id": customer_id,
             "company_name": company_name,
 
-            "financial_risk": round(financial_risk, 4),
+            "financial_risk": round(financial_risk, 4) if financial_risk is not None else None,
             "litigation_risk": round(litigation_risk, 4),
             "combined_risk": round(combined_risk, 4),
             "severity": severity,
@@ -342,5 +353,5 @@ class AggregatorAgent(BaseAgent):
         logger.info(
             f"[AggregatorAgent] Published risk.profile.updated: customer={customer_id}, "
             f"combined_risk={combined_risk:.4f}, severity={severity}, "
-            f"financial={financial_risk:.4f}, litigation={litigation_risk:.4f}"
+            f"financial={financial_risk if financial_risk is not None else 'None'}, litigation={litigation_risk:.4f}"
         )

@@ -536,6 +536,9 @@ class ExternalDataAgent(BaseAgent):
             val_bse = bse.get(key)
             data[key] = val_nse if val_nse is not None else val_bse
             
+        # FIX: Always include updated_at timestamp so cache TTL logic works
+        data["updated_at"] = datetime.utcnow().isoformat()
+            
         return data
 
     def _enrich_with_screener_fallback(self, data: Dict[str, Any], company_name: str, slug: str) -> Dict[str, Any]:
@@ -554,7 +557,7 @@ class ExternalDataAgent(BaseAgent):
         data["risk"] = self._compute_risk(data)
         return data
 
-    def _compute_risk(self, data: Dict) -> float:
+    def _compute_risk(self, data: Dict) -> Optional[float]:
         """
         Weighted financial risk model.
 
@@ -565,7 +568,7 @@ class ExternalDataAgent(BaseAgent):
         - coverage risk
         - efficiency risk
 
-        Returns score in [0.0, 1.0]
+        Returns score in [0.0, 1.0] or None if no signals available.
         """
 
         def normalize(val, low, high):
@@ -633,7 +636,7 @@ class ExternalDataAgent(BaseAgent):
         # ----------------------------
         total_weight = sum(w for _, _, w in scores)
         if total_weight == 0:
-            return 0.3  # fallback default
+            return None  # no external financial data, return None
 
         weighted_sum = sum(score * weight for _, score, weight in scores)
 
@@ -722,7 +725,7 @@ class ExternalDataAgent(BaseAgent):
                     f"min interval is {self.THROTTLE_MIN_HOURS}h"
                 )
                 # Don't fetch, use default risk
-                external_risk = 0.3
+                external_risk = None
                 financial_data = {
                     "company_name": slug,
                     "risk": external_risk,
@@ -742,7 +745,7 @@ class ExternalDataAgent(BaseAgent):
                 financial_data = self._fetch_primary_exchange_data(company_name, slug)
                 financial_data = self._enrich_with_screener_fallback(financial_data, company_name, slug)
                 self._store_financials(financial_data)
-                external_risk = financial_data["risk"]
+                external_risk = financial_data.get("risk")
                 self._last_fetch_time[slug] = current_time  # Update throttle time
 
         # Step 5: Create enriched payload with all financial signals
@@ -756,27 +759,28 @@ class ExternalDataAgent(BaseAgent):
             "market_cap": financial_data.get("market_cap"),
             "sales_growth": financial_data.get("sales_growth"),
             "profit_growth": financial_data.get("profit_growth"),
-            "operating_margin": financial_data.get("operating_margin"),
             "interest_coverage": financial_data.get("interest_coverage"),
-            "external_risk": round(external_risk, 4),
+            "external_risk": round(external_risk, 4) if external_risk is not None else None,
             "source": financial_data.get("source", "screener.in"),
             "generated_at": datetime.utcnow().isoformat()
         }
 
-        # FIX 9: DEDUPLICATION - Skip publishing if external_risk unchanged
         last_risk = self._last_published_risk.get(customer_id)
+        current_risk_str = f"{round(external_risk, 4)}" if external_risk is not None else "None"
         current_signature = (
-            f"{round(external_risk, 4)}|{financial_data.get('pe')}|{financial_data.get('roe')}|"
+            f"{current_risk_str}|{financial_data.get('pe')}|{financial_data.get('roe')}|"
             f"{financial_data.get('roce')}|{financial_data.get('debt')}|{financial_data.get('market_cap')}"
         )
+        safe_external_risk = round(external_risk, 4) if external_risk is not None else None
+        
         if (
-            last_risk is not None
-            and last_risk == round(external_risk, 4)
+            last_risk == safe_external_risk
             and self._last_published_signature.get(customer_id) == current_signature
         ):
+            risk_str = f"{external_risk:.4f}" if external_risk is not None else "None"
             logger.debug(
                 f"[ExternalDataAgent] Skipping publish for {customer_id}: "
-                f"external_risk={external_risk:.4f} (unchanged)"
+                f"external_risk={risk_str} (unchanged)"
             )
             return
 
@@ -794,7 +798,7 @@ class ExternalDataAgent(BaseAgent):
             self._last_published_risk.popitem(last=False)  # evict oldest
         if len(self._last_published_signature) >= self._MAX_RISK_TRACK:
             self._last_published_signature.popitem(last=False)
-        self._last_published_risk[customer_id] = round(external_risk, 4)
+        self._last_published_risk[customer_id] = safe_external_risk
         self._last_published_signature[customer_id] = current_signature
 
         logger.info(

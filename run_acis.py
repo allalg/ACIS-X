@@ -292,11 +292,8 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
             registry=registry_service,
         ),
         TimeTickAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
-        ScenarioGeneratorAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            generation_interval_seconds=3.0,
-            query_agent=query_agent
-        ),
+        # Consumer agents — all started BEFORE ScenarioGeneratorAgent so they
+        # are subscribed and ready to process events before the first batch fires.
         db_agent,
         memory_agent,
         query_agent,
@@ -325,6 +322,14 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
             query_agent=query_agent
         ),
         collections_agent,
+        # ScenarioGeneratorAgent LAST: ensures all consumers are subscribed
+        # before the first customer.profile.updated event is published.
+        # FIX 5: Prevents cust_00001 NULL-name race on fresh DB start.
+        ScenarioGeneratorAgent(
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
+            generation_interval_seconds=5.0,
+            query_agent=query_agent
+        ),
     ]
 
     return registry_service, agents
@@ -339,6 +344,15 @@ def main() -> None:
     _reset_consumer_group_offsets_on_first_run(_bootstrap_servers())
 
     registry_service, agents = _build_components()
+
+    # FIX 4b: Give RuntimeManager a reference to every live agent so it can
+    # perform real stop/start restarts instead of purely simulated ones.
+    for agent in agents:
+        if hasattr(agent, "register_live_agents"):
+            agent.register_live_agents(agents)
+            logger.info("[Bootstrap] Live agent registry wired into RuntimeManager")
+            break
+
     threads: List[threading.Thread] = []
 
     def _request_shutdown(signum: int, frame: Any) -> None:
