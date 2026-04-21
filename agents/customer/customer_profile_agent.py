@@ -45,10 +45,10 @@ class CustomerProfileAgent(BaseAgent):
     TOPIC_RISK = "acis.risk"
     TOPIC_PROFILE = "acis.customers"
 
-    def __init__(self, kafka_client: Any):
+    def __init__(self, kafka_client: Any, query_agent: Any = None):
         super().__init__(
             agent_name="CustomerProfileAgent",
-            agent_version="2.1.0",  # Bumped: CRITICAL - Removed decision authority, pure context now
+            agent_version="2.2.0",
             group_id="customer-profile-group",
             subscribed_topics=[
                 self.TOPIC_METRICS,
@@ -62,6 +62,9 @@ class CustomerProfileAgent(BaseAgent):
             agent_type="CustomerProfileAgent",
         )
 
+        # Optional QueryAgent for DB name resolution
+        self._query_agent = query_agent
+
         # In-memory profile state (NOT source of truth)
         self._state: Dict[str, Dict[str, Any]] = {}
 
@@ -69,6 +72,11 @@ class CustomerProfileAgent(BaseAgent):
         self.MAX_CUSTOMERS = 10000  # Maximum customers to track
         self.TTL_SECONDS = 24 * 3600  # 24 hours
         self._last_cleanup = time.time()
+
+    def set_query_agent(self, query_agent: Any) -> None:
+        """Set QueryAgent reference for DB name resolution."""
+        self._query_agent = query_agent
+        logger.info("[CustomerProfileAgent] QueryAgent reference set")
 
     def subscribe(self) -> List[str]:
         return [
@@ -522,9 +530,9 @@ class CustomerProfileAgent(BaseAgent):
         Emit profile update event.
 
         FIX 2: ONLY computes risk and metrics (no business decisions).
-                Policy decisions (blocked/restricted) belong in CollectionsAgent.
         FIX 5: ONLY emits if risk changed significantly (>0.02 threshold).
-                Reduces event spam and Kafka load.
+        FIX 8: NEVER emits customer_name=None — looks up from DB via QueryAgent
+                and omits the field entirely if no name is available yet.
         """
         state = self._state.get(customer_id)
         if not state:
@@ -550,22 +558,37 @@ class CustomerProfileAgent(BaseAgent):
         # Update previous risk for next comparison
         state["previous_risk_score"] = risk_score
 
-        # FIX 2: Emit ONLY profile metrics (no business decisions)
-        # Business decisions (blocked/restricted) belong in CollectionsAgent or Policy layer
         outstanding = float(state.get("total_outstanding", 0.0))
         delay = float(state.get("avg_delay", 0.0))
 
-        payload = {
+        # FIX 8: Resolve company name — NEVER emit customer_name=None.
+        # Priority: in-state name → DB lookup → omit field entirely.
+        customer_name = state.get("company_name")
+        if not customer_name and self._query_agent:
+            try:
+                cust = self._query_agent.get_customer(customer_id)
+                if cust and cust.get("name"):
+                    customer_name = cust["name"]
+                    state["company_name"] = customer_name  # Cache for next emit
+                    logger.debug(
+                        f"[CustomerProfile] Resolved name from DB: {customer_id} → {customer_name}"
+                    )
+            except Exception as e:
+                logger.debug(f"[CustomerProfile] DB name lookup failed (non-fatal): {e}")
+
+        # Build payload — omit customer_name entirely if still None so DBAgent
+        # _handle_customer_profile won't set name=NULL in its UPDATE.
+        payload: dict = {
             "customer_id": customer_id,
-            "customer_name": state.get("company_name"),  # FIX 7: Forward customer name to DBAgent
             "risk_score": round(risk_score, 4),
             "total_outstanding": round(outstanding, 2),
             "avg_delay": round(delay, 2),
             "on_time_ratio": round(state.get("on_time_ratio", 0.5), 4),
-            # Include metadata for downstream systems
             "severity": state.get("severity"),
             "external_risk": round(state.get("external_risk", 0.0), 4),
         }
+        if customer_name:
+            payload["customer_name"] = customer_name
 
         self.publish_event(
             topic=self.TOPIC_PROFILE,
@@ -577,5 +600,6 @@ class CustomerProfileAgent(BaseAgent):
 
         logger.info(
             f"[CustomerProfile] customer={customer_id} "
-            f"risk={risk_score:.4f} outstanding={outstanding:.2f}"
+            f"risk={risk_score:.4f} outstanding={outstanding:.2f} "
+            f"name={'<known>' if customer_name else '<unknown, omitted>'}"
         )

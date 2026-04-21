@@ -245,36 +245,39 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
 
     registry_service = RegistryService(kafka_client=shared_kafka_client)
 
-    # Create QueryAgent FIRST (DB source of truth)
-    query_agent = QueryAgent(kafka_client=_build_kafka_client())
+    # DESIGN: All business agents use auto_offset_reset="latest" so they ONLY
+    # process events generated after they start. This prevents old/poisoned Kafka
+    # messages (from previous broken runs) from replaying into a fresh DB.
+    # On restart, ScenarioGenerator seeds _customers from DB, so no data is lost.
+    query_agent = QueryAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest"))
 
     # Create MemoryAgent with QueryAgent dependency
     memory_agent = MemoryAgent(
-        kafka_client=_build_kafka_client(),
+        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
         query_agent=query_agent
     )
 
     customer_state_agent = CustomerStateAgent(
-        kafka_client=_build_kafka_client(),
+        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
         query_agent=query_agent
     )
 
     overdue_detection_agent = OverdueDetectionAgent(
-        kafka_client=_build_kafka_client(),
+        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
         query_agent=query_agent
     )
 
     collections_agent = CollectionsAgent(
-        kafka_client=_build_kafka_client(),
+        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
         query_agent=query_agent
     )
 
     # Create DBAgent and link with QueryAgent for cache invalidation
-    db_agent = DBAgent(kafka_client=_build_kafka_client())
+    db_agent = DBAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest"))
     db_agent.set_query_agent(query_agent)
 
     # Create AggregatorAgent and link with QueryAgent for company name resolution (FIX #12)
-    aggregator_agent = AggregatorAgent(kafka_client=_build_kafka_client())
+    aggregator_agent = AggregatorAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest"))
     aggregator_agent.set_query_agent(query_agent)
 
     agents: List[Any] = [
@@ -288,10 +291,11 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
             kafka_client=_build_kafka_client(auto_offset_reset="latest"),
             registry=registry_service,
         ),
-        TimeTickAgent(kafka_client=_build_kafka_client()),  # Time infrastructure - required for overdue detection
+        TimeTickAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
         ScenarioGeneratorAgent(
-            kafka_client=_build_kafka_client(),
-            query_agent=query_agent  # FIX #1: Pass QueryAgent for DB-backed customer count check
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
+            generation_interval_seconds=3.0,
+            query_agent=query_agent
         ),
         db_agent,
         memory_agent,
@@ -299,26 +303,28 @@ def _build_components() -> Tuple[RegistryService, List[Any]]:
         customer_state_agent,
         overdue_detection_agent,
         ExternalDataAgent(
-            kafka_client=_build_kafka_client(),
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
             query_agent=query_agent
         ),
         ExternalScrapingAgent(
-            kafka_client=_build_kafka_client(),
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
             query_agent=query_agent
         ),
         aggregator_agent,
         PaymentPredictionAgent(
-            kafka_client=_build_kafka_client(),
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
             query_agent=query_agent
         ),
         RiskScoringAgent(
-            kafka_client=_build_kafka_client(),
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
             query_agent=query_agent,
-            memory_agent=memory_agent  # For temporal trend detection
+            memory_agent=memory_agent
         ),
-        CustomerProfileAgent(kafka_client=_build_kafka_client()),
+        CustomerProfileAgent(
+            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
+            query_agent=query_agent
+        ),
         collections_agent,
-        # REMOVED: CreditPolicyAgent - CollectionsAgent is now the sole decision engine
     ]
 
     return registry_service, agents

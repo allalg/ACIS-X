@@ -799,6 +799,24 @@ class CustomerStateAgent(BaseAgent):
                     """,
                     (customer_id, now, now),
                 )
+                # Immediate name backfill: resolve name from customer_risk_profile
+                # if the profile event hasn't been processed by DBAgent yet.
+                profile_row = cursor.execute(
+                    """
+                    SELECT company_name FROM customer_risk_profile
+                    WHERE customer_id = ?
+                      AND company_name IS NOT NULL
+                      AND company_name NOT LIKE 'cust_%'
+                    LIMIT 1
+                    """,
+                    (customer_id,),
+                ).fetchone()
+                if profile_row and profile_row[0]:
+                    cursor.execute(
+                        "UPDATE customers SET name = ?, updated_at = ? "
+                        "WHERE customer_id = ? AND name IS NULL",
+                        (profile_row[0], now, customer_id),
+                    )
 
                 cursor.execute(
                     """

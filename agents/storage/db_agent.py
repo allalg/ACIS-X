@@ -134,12 +134,13 @@ class DBAgent(BaseAgent):
             try:
                 cursor = conn.cursor()
 
-                # FIX #6: Use DEFERRED and optimized pragmas (WAL removed - was causing issues)
-                # WAL mode can corrupt on older SQLite versions, so use standard mode with proper timeouts
-                cursor.execute("PRAGMA synchronous=NORMAL")  # Balance safety and speed
+                # Enable WAL mode for concurrent reads while DBAgent is writing.
+                # Multiple agents (MemoryAgent, CustomerStateAgent, QueryAgent) read
+                # from the same DB; WAL lets them do so without waiting for writes.
+                cursor.execute("PRAGMA journal_mode = WAL")
+                cursor.execute("PRAGMA synchronous = NORMAL")  # Balance safety and speed
                 cursor.execute("PRAGMA cache_size=-32000")   # 32MB cache
                 cursor.execute("PRAGMA temp_store=MEMORY")
-                cursor.execute("PRAGMA journal_mode=TRUNCATE")  # More stable than DELETE
 
                 # Enable foreign key constraints
                 cursor.execute("PRAGMA foreign_keys = ON")
@@ -307,15 +308,18 @@ class DBAgent(BaseAgent):
         now = datetime.utcnow().isoformat()
 
         # Ensure all customers referenced by payments exist before any invoice backfill.
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-            SELECT DISTINCT COALESCE(customer_id, 'unknown_customer'), ?, ?
-            FROM payments
-            """
-            ,
-            (now, now),
-        )
+        # Use a SELECT-based approach to avoid creating stub rows for customers
+        # that do not yet have a profile — on a fresh DB, payments table is empty
+        # so this is a no-op.  We use DEFERRED FK mode for this insert only.
+        payment_customer_ids = cursor.execute(
+            "SELECT DISTINCT customer_id FROM payments WHERE customer_id IS NOT NULL"
+        ).fetchall()
+        for (cid,) in payment_customer_ids:
+            cursor.execute(
+                "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?, ?, ?)",
+                (cid, now, now),
+            )
+            self._backfill_customer_name(conn, cid)
 
         # 1) Create placeholder invoices for orphan payments to preserve historical payments.
         cursor.execute(
@@ -343,15 +347,15 @@ class DBAgent(BaseAgent):
         )
 
         # Ensure customers exist for placeholder invoices.
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-            SELECT DISTINCT customer_id, ?, ?
-            FROM invoices
-            WHERE customer_id IS NOT NULL
-            """,
-            (now, now),
-        )
+        invoice_customer_ids = cursor.execute(
+            "SELECT DISTINCT customer_id FROM invoices WHERE customer_id IS NOT NULL"
+        ).fetchall()
+        for (cid,) in invoice_customer_ids:
+            cursor.execute(
+                "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?, ?, ?)",
+                (cid, now, now),
+            )
+            self._backfill_customer_name(conn, cid)
 
         # 2) Recompute paid_amount from payments and update status deterministically.
         cursor.execute(
@@ -400,6 +404,46 @@ class DBAgent(BaseAgent):
 
         cleaned = self.UNIT_SUFFIX_PATTERN.sub("", name).strip()
         return cleaned or name
+
+    def _backfill_customer_name(self, conn: sqlite3.Connection, customer_id: str) -> None:
+        """If a customer_id row has name=NULL, attempt to fill it from customer_risk_profile.
+
+        Called immediately after every bare stub INSERT so the window in which a
+        nameless row exists is as short as possible.
+        """
+        try:
+            row = conn.execute(
+                "SELECT name FROM customers WHERE customer_id = ?", (customer_id,)
+            ).fetchone()
+            if row and row[0] is not None:
+                return  # Already has a real name — nothing to do
+
+            # Attempt to resolve from customer_risk_profile
+            profile_row = conn.execute(
+                """
+                SELECT company_name FROM customer_risk_profile
+                WHERE customer_id = ?
+                  AND company_name IS NOT NULL
+                  AND company_name NOT LIKE 'cust\_%' ESCAPE '\\'
+                LIMIT 1
+                """,
+                (customer_id,),
+            ).fetchone()
+
+            if profile_row and profile_row[0]:
+                sanitized = self._sanitize_company_name(profile_row[0])
+                if sanitized:
+                    conn.execute(
+                        "UPDATE customers SET name = ?, updated_at = ? "
+                        "WHERE customer_id = ? AND name IS NULL",
+                        (sanitized, datetime.utcnow().isoformat(), customer_id),
+                    )
+                    logger.info(
+                        "[DBAgent] Backfilled name '%s' for customer %s from risk profile",
+                        sanitized, customer_id,
+                    )
+        except Exception as e:
+            logger.debug("[DBAgent] _backfill_customer_name failed for %s (non-fatal): %s", customer_id, e)
 
     def _cleanup_legacy_company_names(self, conn: sqlite3.Connection) -> None:
         """Backfill cleanup for already-persisted synthetic unit suffixes."""
@@ -530,6 +574,7 @@ class DBAgent(BaseAgent):
                         """,
                         (customer_id, now, now),
                     )
+                    self._backfill_customer_name(conn, customer_id)
 
                 cursor.execute("""
                     INSERT INTO invoices (
@@ -563,12 +608,13 @@ class DBAgent(BaseAgent):
                     total_amount,
                 ))
 
-                # Ensure customer exists
+                # Ensure customer exists (second guard after invoice insert)
                 if customer_id:
                     cursor.execute("""
                         INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
                         VALUES (?, ?, ?)
                     """, (customer_id, now, now))
+                    self._backfill_customer_name(conn, customer_id)
 
                 cursor.execute(
                     """
@@ -679,6 +725,7 @@ class DBAgent(BaseAgent):
                         INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
                         VALUES (?, ?, ?)
                     """, (customer_id, now, now))
+                    self._backfill_customer_name(conn, customer_id)
 
                 # 2) Ensure invoice exists — create placeholder if not yet
                 if invoice_id:
@@ -795,6 +842,7 @@ class DBAgent(BaseAgent):
                         """,
                         (customer_id, timestamp, timestamp),
                     )
+                    self._backfill_customer_name(conn, customer_id)
                 cursor.execute("""
                     INSERT OR IGNORE INTO collections_log (
                         id,
@@ -859,21 +907,42 @@ class DBAgent(BaseAgent):
             try:
                 cursor = conn.cursor()
 
-                # Step 1: Ensure the customer row exists (no-op if already there)
-                cursor.execute("""
-                    INSERT OR IGNORE INTO customers
-                        (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    customer_id,
-                    name,
-                    risk_score   if risk_score   is not None else 0.0,
-                    credit_limit if credit_limit is not None else 0.0,
-                    status,
-                    now, now,
-                ))
+                # Step 1: Ensure the customer row exists.
+                # CRITICAL: Do NOT insert name=NULL — it creates stub rows we can't fix later.
+                # Only include name in the INSERT if we have a real value.
+                if name is not None:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO customers
+                            (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        customer_id,
+                        name,
+                        risk_score   if risk_score   is not None else 0.0,
+                        credit_limit if credit_limit is not None else 0.0,
+                        status,
+                        now, now,
+                    ))
+                else:
+                    # No name — only insert the bare skeleton if the row is truly missing.
+                    # Skip if the row already exists so we don't clobber a real name.
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO customers
+                            (customer_id, risk_score, credit_limit, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        customer_id,
+                        risk_score   if risk_score   is not None else 0.0,
+                        credit_limit if credit_limit is not None else 0.0,
+                        status,
+                        now, now,
+                    ))
+                    # Immediately attempt backfill in case profile arrived earlier
+                    self._backfill_customer_name(conn, customer_id)
 
-                # Step 2: Update only the fields that arrived in this event
+                # Step 2: Unconditionally update name when a real name is present.
+                # This ensures NULL rows (created by stub inserts from invoice/payment handlers)
+                # are overwritten as soon as the profile event arrives.
                 update_fields = []
                 update_params = []
 
@@ -947,6 +1016,15 @@ class DBAgent(BaseAgent):
                     INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
                     VALUES (?, ?, ?)
                 """, (customer_id, created_at, created_at))
+                # Attempt name backfill in case profile event hasn't arrived yet
+                self._backfill_customer_name(conn, customer_id)
+                # Also try the company_name from this litigation event directly
+                if company_name:
+                    conn.execute(
+                        "UPDATE customers SET name = ?, updated_at = ? "
+                        "WHERE customer_id = ? AND name IS NULL",
+                        (company_name, created_at, customer_id),
+                    )
 
                 cursor.execute("""
                     INSERT OR IGNORE INTO external_litigation (

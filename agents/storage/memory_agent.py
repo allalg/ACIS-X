@@ -520,6 +520,25 @@ class MemoryAgent(BaseAgent):
                 """,
                 (customer_id, now, now),
             )
+            # Immediate name backfill: if the profile event hasn't arrived yet,
+            # try to resolve the company name from customer_risk_profile so we
+            # don't leave a permanently NULL-named row.
+            profile_row = cursor.execute(
+                """
+                SELECT company_name FROM customer_risk_profile
+                WHERE customer_id = ?
+                  AND company_name IS NOT NULL
+                  AND company_name NOT LIKE 'cust_%'
+                LIMIT 1
+                """,
+                (customer_id,),
+            ).fetchone()
+            if profile_row and profile_row[0]:
+                cursor.execute(
+                    "UPDATE customers SET name = ?, updated_at = ? "
+                    "WHERE customer_id = ? AND name IS NULL",
+                    (profile_row[0], now, customer_id),
+                )
 
             # IMPROVEMENT: Only update last_payment_date on actual payment events
             # For other events, the existing last_payment_date is preserved

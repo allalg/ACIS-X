@@ -228,43 +228,61 @@ class ScenarioGeneratorAgent(BaseAgent):
         logger.info("Generation loop stopped")
 
     def _seed_customers_from_db(self) -> None:
-        """Load existing customers from DB into memory to avoid recreating them on restart."""
+        """Load existing customers from DB into memory to avoid recreating them on restart.
+
+        KEY RULES:
+        1. ALWAYS advance _customer_counter for every customer_id found in DB
+           (prevents ID collisions even for NULL-named rows).
+        2. Only add a customer to self._customers if it has a real name.
+           NULL-named rows are orphans we do not own — skip tracking them.
+        3. Sync _company_names_used from ALL non-null names in DB so the
+           uniqueness guard is complete even after a partial previous run.
+        """
         if not self._query_agent:
             return
         try:
             db_customers = self._query_agent.get_all_customers()
             if not db_customers:
                 return
+            seeded_count = 0
+            skipped_null = 0
             for c in db_customers:
                 cid = c.get("customer_id")
-                name = c.get("name")
+                name = c.get("name")  # May be None from prior corrupt run
                 if not cid:
                     continue
-                # Reconstruct a minimal in-memory record
-                self._customers[cid] = {
-                    "customer_id": cid,
-                    "customer_name": name,
-                    "credit_limit": c.get("credit_limit", 100000.0),
-                    "currency": "INR",
-                    "risk_level": "low",
-                    "industry": "unknown",
-                    "country": "IN",
-                    "rating": "BBB",
-                    "status": c.get("status", "active"),
-                    "company_type": "unknown",
-                    "updated_at": c.get("updated_at"),
-                }
-                if name:
-                    self._company_names_used.add(name)
-                # Advance counter so new IDs don't collide with existing ones
+                # Rule 1: Always advance counter to prevent ID collisions
                 try:
                     num = int(cid.split("_")[1])
                     self._customer_counter = max(self._customer_counter, num)
                 except (IndexError, ValueError):
                     pass
+                # Rule 2 & 3: Only track named customers in memory
+                if name:
+                    self._company_names_used.add(name)
+                    self._customers[cid] = {
+                        "customer_id": cid,
+                        "customer_name": name,
+                        "credit_limit": c.get("credit_limit", 100000.0),
+                        "currency": "INR",
+                        "risk_level": "low",
+                        "industry": "unknown",
+                        "country": "IN",
+                        "rating": "BBB",
+                        "status": c.get("status", "active"),
+                        "company_type": "unknown",
+                        "updated_at": c.get("updated_at"),
+                    }
+                    seeded_count += 1
+                else:
+                    # NULL-named: counter advanced but NOT tracked in memory.
+                    # ScenarioGenerator will not generate invoices for these.
+                    skipped_null += 1
             logger.info(
-                f"[ScenarioGenerator] Seeded {len(db_customers)} existing customers from DB "
-                f"(counter at {self._customer_counter}, company pool used: {len(self._company_names_used)})"
+                f"[ScenarioGenerator] Seeded {seeded_count} named customers from DB, "
+                f"skipped {skipped_null} NULL-named rows "
+                f"(counter at {self._customer_counter}, "
+                f"company pool used: {len(self._company_names_used)})"
             )
         except Exception as e:
             logger.warning(f"[ScenarioGenerator] Failed to seed customers from DB: {e}")
@@ -318,30 +336,70 @@ class ScenarioGeneratorAgent(BaseAgent):
             logger.warning(f"Failed to get DB invoice count: {e}, using memory count")
             return len(self._invoices)
 
+    def _get_invoiceable_customers(self) -> list:
+        """Return customer IDs that are confirmed in the DB with a real non-null name.
+
+        This is the ONLY safe source for invoice generation because:
+        - self._customers is updated immediately after publish (before DB write)
+        - DB is the ground truth; only DB-confirmed customers avoid FK + NULL races
+        """
+        if not self._query_agent:
+            # No QueryAgent: fall back to in-memory named customers only
+            return [
+                cid for cid, data in self._customers.items()
+                if data.get("customer_name")
+            ]
+        try:
+            db_custs = self._query_agent.get_all_customers()
+            # Only customers with a real, non-placeholder name are invoiceable
+            return [
+                c["customer_id"]
+                for c in db_custs
+                if c.get("customer_id") and c.get("name")
+                and not c["name"].startswith("cust_")
+            ]
+        except Exception as e:
+            logger.warning(f"[ScenarioGenerator] Could not fetch invoiceable customers: {e}")
+            return []
+
     def _generate_batch(self) -> None:
-        """Generate a batch of synthetic events."""
+        """Generate a batch of synthetic events in a phase-controlled fashion.
+
+        Phase 1 (< 3 DB-confirmed named customers): ONLY create customers.
+                 Wait for DBAgent to confirm each one before generating invoices.
+        Phase 2 (>= 3 confirmed named customers): Add invoices (max 2/batch).
+        Phase 3 (>= 1 DB invoice): Add payments.
+
+        Generating only 1 customer per batch and waiting generation_interval
+        between batches gives DBAgent ~3 seconds to write each profile before
+        the next customer event arrives - eliminating the race condition.
+        """
         correlation_id = self.create_correlation_id()
 
-        # Generate customers
-        for _ in range(self.customers_per_batch):
+        # Get DB-confirmed named customers
+        invoiceable = self._get_invoiceable_customers()
+
+        # PHASE 1 & 2: Always try to create ONE new customer per batch.
+        # Never generate a full batch at once - one at a time lets DBAgent keep up.
+        if len(invoiceable) < self.MAX_CUSTOMERS:
             self._generate_customer(correlation_id)
 
-        # FIX #1: Check DB customer count, not memory count!
-        # This prevents FK violations: invoice.customer_id → customers table
-        db_customer_count = self._get_db_customer_count()
-        if db_customer_count > 5:
-            for _ in range(self.invoices_per_batch):
+        # PHASE 2: Only generate invoices once >= 3 named customers are DB-confirmed.
+        # Threshold of 3 ensures FK integrity and real name availability.
+        if len(invoiceable) >= 3:
+            for _ in range(min(self.invoices_per_batch, 2)):
                 self._generate_invoice(correlation_id)
 
-        # Generate payments (need existing invoices in DB, not just memory)
+        # PHASE 3: Payments only after invoices exist in DB.
         db_invoice_count = self._get_db_invoice_count()
-        if db_invoice_count > 2:
+        if db_invoice_count > 0:
             for _ in range(self.payments_per_batch):
                 self._generate_payment(correlation_id)
 
-        # Occasionally generate special scenarios
-        if random.random() < 0.1:  # 10% chance
+        # Occasional special scenarios (only after we have enough customers)
+        if len(invoiceable) >= 5 and random.random() < 0.1:
             self._generate_scenario(correlation_id)
+
 
     # -------------------------------------------------------------------------
     # Customer generation
@@ -361,6 +419,17 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     def _create_customer(self, correlation_id: str) -> str:
         """Create a new customer with real Indian company."""
+        # Sync _company_names_used with DB to catch names from any previous run
+        # that were written to DB but not tracked in this process's memory.
+        if self._query_agent:
+            try:
+                db_custs = self._query_agent.get_all_customers()
+                for c in db_custs:
+                    if c.get("name"):
+                        self._company_names_used.add(c["name"])
+            except Exception as e:
+                logger.debug(f"[ScenarioGenerator] DB name sync failed (non-fatal): {e}")
+
         # Pick a company that hasn't been used yet
         all_companies = [
             (c, "listed") for c in self.LISTED_INDIAN_COMPANIES
@@ -490,9 +559,17 @@ class ScenarioGeneratorAgent(BaseAgent):
         self._invoice_counter += 1
         invoice_id = f"inv_{self._invoice_counter:05d}"
 
-        # Pick a random customer
-        customer_id = random.choice(list(self._customers.keys()))
-        customer = self._customers[customer_id]
+        # Pick only from DB-confirmed named customers to prevent FK + NULL race.
+        # If none are confirmed yet, abort this invoice to avoid creating
+        # skeleton customer rows in DBAgent.
+        invoiceable = self._get_invoiceable_customers()
+        if not invoiceable:
+            logger.debug("[ScenarioGenerator] No DB-confirmed customers yet, skipping invoice creation")
+            self._invoice_counter -= 1  # Roll back — ID not used
+            return ""
+        customer_id = random.choice(invoiceable)
+        # Prefer in-memory data for rich invoice fields; fall back to DB-only dict
+        customer = self._customers.get(customer_id, {"customer_id": customer_id, "credit_limit": 100000.0})
 
         amount = self._generate_invoice_amount(customer["credit_limit"])
 

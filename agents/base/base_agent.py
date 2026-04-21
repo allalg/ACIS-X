@@ -255,7 +255,7 @@ class BaseAgent(ABC):
             try:
                 # FIX 2: Safe polling with explicit exception handling
                 try:
-                    messages = self.kafka_client.poll(timeout_ms=1000)
+                    messages = self.kafka_client.poll(timeout_ms=200)
                 except Exception as e:
                     logger.error(f"Polling error (will retry): {e}")
                     with self._metrics_lock:

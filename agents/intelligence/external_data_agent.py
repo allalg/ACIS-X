@@ -672,8 +672,17 @@ class ExternalDataAgent(BaseAgent):
             except Exception as e:
                 logger.debug(f"[ExternalDataAgent] Failed to lookup customer from QueryAgent: {e}")
 
-        # Final fallback: use customer_id
-        company_name = company_name or customer_id
+        # Never fall back to using customer_id as company name.
+        # Searching Screener/NSE for "cust_00001" is meaningless and will
+        # create ExternalDataEnriched events with no useful payload, which
+        # then cascade into stub customer rows via AggregatorAgent.
+        if not company_name:
+            logger.debug(
+                f"[ExternalDataAgent] Skipping enrichment for {customer_id}: "
+                f"no company name resolved (customer may not be in DB yet)"
+            )
+            return
+
         company_name = company_name.strip()[:100]
 
         # Step 3: Resolve slug FIRST (consistent cache key)
