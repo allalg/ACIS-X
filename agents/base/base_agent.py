@@ -369,6 +369,8 @@ class BaseAgent(ABC):
                         f"Error processing event {event.event_id}, "
                         f"attempt {retry_count}/{self.max_retries}: {e}"
                     )
+                    import traceback
+                    logger.warning(f"Traceback: {traceback.format_exc()}")
 
                     if retry_count >= self.max_retries:
                         self._send_to_dlq(event, message, e, retry_count)

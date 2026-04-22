@@ -123,7 +123,7 @@ class AggregatorAgent(BaseAgent):
 
         logger.info(
             f"[AggregatorAgent] Updated financial data: customer={customer_id}, "
-            f"risk={financial_risk:.4f}, source={source}"
+            f"risk={financial_risk if financial_risk is not None else 'None'}, source={source}"
         )
 
         # Try to aggregate
@@ -249,7 +249,9 @@ class AggregatorAgent(BaseAgent):
 
         # Extract risk values — financial_risk can be None if absent/private company
         financial_risk = financial_data.get("risk") if financial_data else None
-        litigation_risk = litigation_data.get("risk", 0.0) if litigation_data else 0.0
+        if financial_risk is not None: financial_risk = float(financial_risk)
+        litigation_risk = litigation_data.get("risk") if litigation_data else None
+        litigation_risk = float(litigation_risk) if litigation_risk is not None else 0.0
 
         # FIX 9: DEDUPLICATION - Only publish if risk values actually changed
         # Compare against last published values to prevent duplicate events
@@ -260,9 +262,10 @@ class AggregatorAgent(BaseAgent):
         # If both financial and litigation risks haven't changed, skip publishing
         if last_fin_risk == financial_risk and last_lit_risk == litigation_risk:
             fin_str = f"{financial_risk:.4f}" if financial_risk is not None else "None"
+            lit_str = f"{litigation_risk:.4f}" if litigation_risk is not None else "None"
             logger.debug(
                 f"[AggregatorAgent] Skipping publish for {customer_id}: "
-                f"financial={fin_str}, litigation={litigation_risk:.4f} (unchanged)"
+                f"financial={fin_str}, litigation={lit_str} (unchanged)"
             )
             return
 
@@ -353,5 +356,5 @@ class AggregatorAgent(BaseAgent):
         logger.info(
             f"[AggregatorAgent] Published risk.profile.updated: customer={customer_id}, "
             f"combined_risk={combined_risk:.4f}, severity={severity}, "
-            f"financial={financial_risk if financial_risk is not None else 'None'}, litigation={litigation_risk:.4f}"
+            f"financial={financial_risk if financial_risk is not None else 'None'}, litigation={litigation_risk if litigation_risk is not None else 'None'}"
         )

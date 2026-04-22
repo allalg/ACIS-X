@@ -60,6 +60,13 @@ cur.execute('SELECT COUNT(*) FROM external_financials')
 print(cur.fetchone()[0])
 
 print()
+print('=== external_litigation count and sample ===')
+cur.execute('SELECT COUNT(*) FROM external_litigation')
+print(cur.fetchone()[0])
+cur.execute('SELECT customer_id, company_name, litigation_risk, case_count, evidence FROM external_litigation LIMIT 5')
+for r in cur.fetchall(): print(dict(r))
+
+print()
 print('=== collections_log count ===')
 cur.execute('SELECT COUNT(*) FROM collections_log')
 print(cur.fetchone()[0])

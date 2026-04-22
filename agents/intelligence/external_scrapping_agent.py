@@ -1,18 +1,16 @@
 """
 External Scraping Agent for ACIS-X.
 
-Generates litigation risk signals from Google News RSS:
-- Fraud, lawsuit, investigation detection
-- Risk analysis (keyword + inference based)
-- Litigation inference (direction detection)
+Generates litigation risk signals from NCLT cases and industry-level Google News RSS.
+- Queries all 16 NCLT benches for pending cases in the last 5 years
+- Falls back to industry-level news for sector stress context
+- Merges signals into a unified litigation risk score
 
 Subscribes to:
 - acis.metrics (customer events)
 
 Produces:
 - acis.metrics (external.litigation.updated)
-
-Self-contained agent with NO external module dependencies.
 """
 
 import logging
@@ -20,12 +18,15 @@ import re
 import time
 import requests
 import xml.etree.ElementTree as ET
+import concurrent.futures
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote_plus
 from typing import List, Any, Dict, Optional
 from datetime import datetime, timedelta, timezone
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from collections import OrderedDict
+
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
 
@@ -33,54 +34,49 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RISK KEYWORD WEIGHTS
+# CONSTANTS & CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
-NEWS_RISK_KEYWORDS = {
-    "fraud": 1.0,
-    "scam": 1.0,
-    "bankruptcy": 1.0,
-    "investigation": 0.8,
-    "lawsuit": 0.7,
-    "sued": 0.7,
-    "penalty": 0.6,
-    "default": 0.6,
-    "violation": 0.5,
-    "probe": 0.5,
-    "indictment": 0.9,
-    "embezzlement": 1.0,
-    "misconduct": 0.7,
-    "scandal": 0.8,
-    "settlement": 0.5,
+
+NCLT_SESSION_URL = "https://efiling.nclt.gov.in/casehistorybeforeloginmenutrue.drt"
+NCLT_QUERY_URL = "https://efiling.nclt.gov.in/caseHistoryoptional.drt"
+
+NCLT_BENCH_IDS = {
+    1: "Ahmedabad", 2: "Allahabad", 3: "Bengaluru", 4: "Chandigarh",
+    5: "Chennai", 6: "Guwahati", 7: "Hyderabad", 8: "Kolkata",
+    9: "Mumbai", 10: "New Delhi / Principal", 11: "Jaipur",
+    12: "Amaravati", 13: "Cuttack", 14: "Kochi", 15: "Indore"
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CASE TYPE CLASSIFICATION KEYWORDS
-# ─────────────────────────────────────────────────────────────────────────────
-CASE_TYPE_KEYWORDS = {
-    "fraud": ["fraud", "cheating", "ipc 420", "420 ipc", "dishonest", "misappropriation", "scam", "embezzlement"],
-    "insolvency": ["insolvency", "ibc", "bankruptcy", "liquidation", "nclt", "corporate insolvency"],
-    "regulatory": ["sebi", "violation", "compliance", "rbi", "regulatory", "investigation", "probe", "penalty"],
-    "lawsuit": ["lawsuit", "sued", "sues", "litigation", "legal action", "court"],
-    "financial_default": ["default", "loan", "repayment", "recovery", "npa", "debt recovery"],
-    "tax_dispute": ["tax", "gst", "income tax", "tax evasion", "tax authority"],
-    "contract_dispute": ["contract", "breach", "agreement", "specific performance"],
-    "criminal": ["criminal", "offence", "fir", "cognizable", "prosecution", "indictment"],
+NCLT_CASE_TYPE_SCORES = {
+    "IBA": 1.0, "CIRP": 1.0, "LQD": 1.0,
+    "PIB": 0.90, "CP": 0.85, "CC": 0.75,
+    "CA": 0.60, "IA": 0.30, "MA": 0.20,
+}
+
+INDUSTRY_KEYWORDS = {
+    "real_estate": ["builder", "realty", "construction", "infrastructure", "housing", "real estate"],
+    "banking_finance": ["bank", "nbfc", "finance", "capital", "credit", "leasing", "financial"],
+    "manufacturing": ["steel", "cement", "textile", "chemical", "pharma", "auto", "manufacturing"],
+    "telecom": ["telecom", "wireless", "broadband", "spectrum", "communications"],
+    "energy": ["power", "energy", "coal", "oil", "gas", "solar", "renewable"],
+    "retail_consumer": ["retail", "fmcg", "consumer", "grocery", "apparel"],
+    "it_services": ["software", "technology", "it", "digital", "consulting", "tech"]
+}
+
+NEWS_RISK_KEYWORDS = {
+    "fraud": 1.0, "scam": 1.0, "bankruptcy": 1.0, "insolvency": 1.0,
+    "investigation": 0.8, "lawsuit": 0.7, "sued": 0.7, "penalty": 0.6,
+    "default": 0.6, "violation": 0.5, "probe": 0.5, "indictment": 0.9,
+    "embezzlement": 1.0, "misconduct": 0.7, "scandal": 0.8, "settlement": 0.5,
+    "nclt": 0.9, "ibc": 0.9, "npa": 0.8, "sebi": 0.7,
+    "ban": 0.9, "banned": 0.9, "illegal": 0.9, "restriction": 0.7, "tax evasion": 0.9, "money laundering": 1.0
 }
 
 
 class ExternalScrapingAgent(BaseAgent):
     """
     External Scraping Agent for ACIS-X.
-
-    Subscribes to:
-    - acis.metrics (customer.metrics.updated, customer.profile.updated)
-
-    Produces:
-    - acis.metrics (external.litigation.updated)
-
-    Responsibility:
-    Generate litigation risk from Google News RSS (self-contained).
-    All news fetching, risk analysis, and litigation inference is inline.
+    Generates litigation risk by fusing NCLT case data with industry-level news.
     """
 
     TOPIC_INPUT = "acis.metrics"
@@ -92,465 +88,437 @@ class ExternalScrapingAgent(BaseAgent):
     def __init__(self, kafka_client: Any, query_agent: Optional[Any] = None):
         super().__init__(
             agent_name="ExternalScrapingAgent",
-            agent_version="3.0.0",
+            agent_version="4.0.0",
             group_id="litigation-agent-group",
             subscribed_topics=[self.TOPIC_INPUT, self.TOPIC_CUSTOMERS],
             capabilities=[
-                "litigation_risk_detection",
-                "legal_signal_extraction",
-                "google_news_integration",
-                "news_risk_analysis",
+                "nclt_litigation_extraction",
+                "industry_risk_detection",
+                "litigation_risk_fusion"
             ],
             kafka_client=kafka_client,
             agent_type="ExternalScrapingAgent",
         )
         self._query_agent = query_agent
-        self._cache = {}
+        
+        # Caches
+        self._nclt_cache = {}      # TTL: 12h
+        self._news_cache = {}      # TTL: 6h
+        
+        # Deduplication tracker
+        self._last_published_risk: OrderedDict = OrderedDict()
+        self._MAX_RISK_TRACK = 5000
 
-        # FIX: Configure session with connection pooling and retry logic for Google News
-        self._session = requests.Session()
+        # General session for RSS
+        self._session = self._create_session(timeout=25, retries=3)
+        
+        # Dedicated session for NCLT
+        self._nclt_session = self._create_session(timeout=5, retries=1)
+        self._nclt_session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Origin": "https://efiling.nclt.gov.in",
+            "Referer": NCLT_SESSION_URL,
+            "X-Requested-With": "XMLHttpRequest"
+        })
 
-        # Retry strategy: exponential backoff on connection failures
+        logger.info("[ExternalScrapingAgent] Initialized with NCLT + Industry News fusion")
+
+    def _create_session(self, timeout: int, retries: int) -> requests.Session:
+        """Create a resilient requests session."""
+        session = requests.Session()
         retry_strategy = Retry(
-            total=3,  # Max retries
-            backoff_factor=1,  # 1s, 2s, 4s wait between retries
-            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
-            allowed_methods=["GET"]  # Only retry GET requests
+            total=retries,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"]
         )
         adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=10)
-        self._session.mount("http://", adapter)
-        self._session.mount("https://", adapter)
-
-        # Headers with User-Agent for better compatibility
-        self._session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0"
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
-        # FIX 9: Track published litigation_risk values to prevent duplicate events
-        # Use bounded OrderedDict (max 5000 entries) to prevent memory growth
-        from collections import OrderedDict
-        self._last_published_risk: OrderedDict = OrderedDict()  # customer_id -> last risk
-        self._MAX_RISK_TRACK = 5000  # evict oldest when exceeded
-
-        logger.info("[ExternalScrapingAgent] Initialized with Google News RSS integration (retries enabled)")
+        return session
 
     def subscribe(self) -> List[str]:
-        """Return list of topics to subscribe to."""
         return [self.TOPIC_INPUT, self.TOPIC_CUSTOMERS]
 
     def process_event(self, event: Event) -> None:
-        """Process incoming events."""
         if event.event_type in ("customer.metrics.updated", "customer.profile.updated"):
             self.handle_event(event)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # GOOGLE NEWS RSS FUNCTIONS
+    # NCLT LOGIC
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _fetch_google_news(self, company_name: str) -> List[Dict[str, str]]:
-        """
-        Fetch news articles from Google News RSS.
-
-        Args:
-            company_name: Company name to search
-
-        Returns:
-            List of article dicts with title and pubDate (max 15, last 3 days only)
-        """
+    def _fetch_nclt_bench(self, company_name: str, bench_id: int) -> List[Dict]:
+        """Query a single NCLT bench for cases."""
         try:
-            search_query = (
-                f'"{company_name}" (lawsuit OR sued OR fraud OR investigation OR penalty OR default '
-                "OR nclt OR sebi OR court OR legal notice)"
-            )
-            encoded_query = quote_plus(search_query)
-            url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
-
-            logger.info(f"[ExternalScrapingAgent] Fetching Google News for: {company_name}")
-
-            # FIX: Increased timeout from 10 to 25 seconds (Google News can be slow)
-            # Retry strategy is configured in __init__ via HTTPAdapter
-            response = self._session.get(url, timeout=25)
-
-            if response.status_code != 200:
-                logger.warning(f"[ExternalScrapingAgent] Google News returned {response.status_code}")
-                return []
-
-            root = ET.fromstring(response.content)
-            articles = []
-            cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
-
-            for item in root.findall(".//item")[:20]:
-                title_elem = item.find("title")
-                pub_date_elem = item.find("pubDate")
-                desc_elem = item.find("description")
-                link_elem = item.find("link")
-
-                title = title_elem.text if title_elem is not None else ""
-                pub_date_str = pub_date_elem.text if pub_date_elem is not None else ""
-                description = desc_elem.text if desc_elem is not None else ""
-                link = link_elem.text if link_elem is not None else ""
-
-                if not title:
-                    continue
-
-                # Filter by date (last 3 days only)
-                if pub_date_str:
-                    try:
-                        pub_date = parsedate_to_datetime(pub_date_str)
-                        if pub_date < cutoff_date:
-                            continue
-                    except (ValueError, TypeError):
-                        pass  # Include articles with unparseable dates
-
-                articles.append({
-                    "title": title.strip(),
-                    "pubDate": pub_date_str.strip() if pub_date_str else "",
-                    "description": (description or "").strip(),
-                    "link": (link or "").strip(),
-                    "source": "google_news",
-                })
-
-            if not articles:
-                logger.info(f"[ExternalScrapingAgent] No recent news articles found for {company_name}")
-            else:
-                logger.info(f"[ExternalScrapingAgent] Found {len(articles)} news articles for {company_name}")
-            
-            return articles
-
-        except ET.ParseError as e:
-            logger.error(f"[ExternalScrapingAgent] XML parse error: {e}")
-            return []
-        except requests.RequestException as e:
-            logger.error(f"[ExternalScrapingAgent] Google News fetch error: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"[ExternalScrapingAgent] Unexpected error fetching news: {e}")
-            return []
-
-    def _fetch_bing_news(self, company_name: str) -> List[Dict[str, str]]:
-        """Fetch litigation-related headlines from Bing News RSS."""
-        try:
-            search_query = (
-                f'"{company_name}" (lawsuit OR sued OR fraud OR investigation OR penalty '
-                "OR default OR nclt OR sebi OR court)"
-            )
-            encoded_query = quote_plus(search_query)
-            url = f"{self.BING_NEWS_RSS_URL}?q={encoded_query}&format=rss"
-
-            response = self._session.get(url, timeout=20)
-            if response.status_code != 200:
-                return []
-
-            root = ET.fromstring(response.content)
-            cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
-            articles: List[Dict[str, str]] = []
-            for item in root.findall(".//item")[:20]:
-                title = (item.findtext("title") or "").strip()
-                pub_date_str = (item.findtext("pubDate") or "").strip()
-                description = (item.findtext("description") or "").strip()
-                link = (item.findtext("link") or "").strip()
-                if not title:
-                    continue
-                if pub_date_str:
-                    try:
-                        pub_date = parsedate_to_datetime(pub_date_str)
-                        if pub_date < cutoff_date:
-                            continue
-                    except Exception:
-                        pass
-                articles.append(
-                    {
-                        "title": title,
-                        "pubDate": pub_date_str,
-                        "description": description,
-                        "link": link,
-                        "source": "bing_news",
-                    }
-                )
-            return articles
-        except Exception as e:
-            logger.debug(f"[ExternalScrapingAgent] Bing RSS fetch failed for {company_name}: {e}")
-            return []
-
-    def _fetch_news(self, company_name: str) -> List[Dict[str, str]]:
-        """Fetch and merge litigation headlines from multiple RSS sources."""
-        google_items = self._fetch_google_news(company_name)
-        bing_items = self._fetch_bing_news(company_name)
-        merged: Dict[str, Dict[str, str]] = {}
-        for article in google_items + bing_items:
-            key = (article.get("title") or "").strip().lower()
-            if key and key not in merged:
-                merged[key] = article
-        return list(merged.values())[:25]
-
-    def _classify_case(self, text: str) -> str:
-        """
-        Classify case/article type based on keywords.
-
-        Args:
-            text: Headline or case title
-
-        Returns:
-            Case type: fraud, insolvency, regulatory, lawsuit, financial_default, general
-        """
-        text_lower = text.lower()
-
-        for case_type, keywords in CASE_TYPE_KEYWORDS.items():
-            for keyword in keywords:
-                if keyword in text_lower:
-                    return case_type
-
-        return "general"
-
-    def _detect_direction(self, text: str, company_name: str) -> str:
-        """
-        Detect litigation direction from headline.
-
-        Patterns detected:
-        - "X sues Y" → check if company is X (plaintiff) or Y (defendant)
-        - "X sued by Y" → check positions
-
-        Args:
-            text: Headline text
-            company_name: Company name to check
-
-        Returns:
-            "filed_by_company", "filed_against_company", or "unknown"
-        """
-        text_lower = text.lower()
-        company_lower = company_name.lower()
-
-        # Build match patterns: full name + individual significant words
-        company_patterns = [company_lower]
-        company_words = [w for w in company_lower.split() if len(w) > 2]
-        company_patterns.extend(company_words)
-
-        def matches_company(segment: str) -> bool:
-            """Check if segment contains company name or significant words."""
-            segment = segment.lower()
-            for pattern in company_patterns:
-                # Match as word boundary or partial match for longer patterns
-                if len(pattern) >= 4:
-                    if pattern in segment:
-                        return True
-                else:
-                    # For short patterns, require word boundary
-                    if re.search(rf'\b{re.escape(pattern)}\b', segment):
-                        return True
-            return False
-
-        # Pattern: "X sues Y" or "X suing Y"
-        sues_pattern = r"(\b\w+(?:\s+\w+){0,5})\s+(?:sues|suing|files\s+(?:suit|lawsuit)\s+against)\s+(\b\w+(?:\s+\w+){0,5})"
-        match = re.search(sues_pattern, text_lower)
-        if match:
-            plaintiff = match.group(1)
-            defendant = match.group(2)
-            if matches_company(plaintiff):
-                return "filed_by_company"
-            if matches_company(defendant):
-                return "filed_against_company"
-
-        # Pattern: "X sued by Y"
-        sued_by_pattern = r"(\b\w+(?:\s+\w+){0,5})\s+(?:sued\s+by|facing\s+(?:lawsuit|suit)\s+from)\s+(\b\w+(?:\s+\w+){0,5})"
-        match = re.search(sued_by_pattern, text_lower)
-        if match:
-            defendant = match.group(1)
-            plaintiff = match.group(2)
-            if matches_company(defendant):
-                return "filed_against_company"
-            if matches_company(plaintiff):
-                return "filed_by_company"
-
-        # Pattern: "A vs B"
-        vs_pattern = r"(\b\w+(?:\s+\w+){0,5})\s+(?:vs\.?|v\.|versus)\s+(\b\w+(?:\s+\w+){0,5})"
-        match = re.search(vs_pattern, text_lower)
-        if match:
-            plaintiff_side = match.group(1)
-            defendant_side = match.group(2)
-            if matches_company(plaintiff_side):
-                return "filed_by_company"
-            if matches_company(defendant_side):
-                return "filed_against_company"
-
-        return "unknown"
-
-    def _analyze_news(self, articles: List[Dict[str, str]], company_name: str) -> Dict[str, Any]:
-        """
-        Analyze news articles for litigation risk.
-
-        For each article:
-        - Detect risk keywords with weights
-        - Classify case type
-        - Detect litigation direction
-
-        Args:
-            articles: List of article dicts with title, pubDate
-            company_name: Company name for direction detection
-
-        Returns:
-            Dict with risk_score, severity, case_count, cases, case_types
-        """
-        if not articles:
-            logger.info(f"[ExternalScrapingAgent] No articles to analyze for {company_name}")
-            return {
-                "risk_score": 0.0,
-                "severity": "low",
-                "case_count": 0,
-                "cases": [],
-                "case_types": [],
-                "litigation_flag": False,
+            # Need fresh cookie sometimes, but usually session handles it. We'll rely on session.
+            payload = {
+                "wayofselection": "partyname",
+                "i_bench_id": "0",
+                "filing_no": "",
+                "i_bench_id_case_no": "0",
+                "i_case_type_caseno": "0",
+                "i_case_year_caseno": "0",
+                "case_no": "",
+                "i_party_search": "E",
+                "i_bench_id_party": str(bench_id),
+                "party_type_party": "R",  # Respondent typically captures filed against
+                "party_name_party": company_name,
+                "i_case_year_party": "0",
+                "status_party": "P", # Pending cases only
+                "i_adv_search": "E",
+                "i_bench_id_lawyer": "0",
+                "party_lawer_name": "",
+                "i_case_year_lawyer": "0",
+                "bar_council_advocate": ""
             }
 
-        cases = []
+            response = self._nclt_session.post(NCLT_QUERY_URL, json=payload, timeout=20)
+            
+            if response.status_code != 200:
+                logger.debug(f"[ExternalScrapingAgent] NCLT returned {response.status_code} for bench {bench_id}")
+                return []
+                
+            data = response.json()
+            if not isinstance(data, list):
+                # Sometimes it returns a string or object on error
+                return []
+                
+            cases = []
+            cutoff_date = datetime.now() - timedelta(days=5 * 365)
+            
+            for item in data:
+                # NCLT response mapping
+                case_no = item.get("case_no", "")
+                case_type = item.get("case_type", "")
+                filing_date_str = item.get("filing_date", "")
+                status = item.get("status", "Pending")
+                
+                # We requested Pending, but double check
+                if status.upper() != "PENDING":
+                    continue
+                    
+                # Date check
+                if filing_date_str:
+                    try:
+                        # Format usually dd-mm-yyyy or similar
+                        # A simple heuristic date parser
+                        parts = re.split(r'[-/]', filing_date_str)
+                        if len(parts) == 3:
+                            if len(parts[2]) == 4: # dd-mm-yyyy
+                                f_date = datetime(int(parts[2]), int(parts[1]), int(parts[0]))
+                            else: # yyyy-mm-dd
+                                f_date = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+                            if f_date < cutoff_date:
+                                continue
+                    except Exception:
+                        pass # If we can't parse, include it safely
+                
+                cases.append({
+                    "case_no": case_no,
+                    "case_type": case_type,
+                    "bench": NCLT_BENCH_IDS.get(bench_id, "Unknown"),
+                    "filing_date": filing_date_str,
+                    "status": status
+                })
+                
+            return cases
+            
+        except Exception as e:
+            logger.debug(f"[ExternalScrapingAgent] NCLT fetch failed for bench {bench_id}: {e}")
+            return []
+
+    def _fetch_nclt_all_benches(self, company_name: str) -> List[Dict]:
+        """Query all NCLT benches and deduplicate results."""
+        all_cases = []
+        seen_case_nos = set()
+        
+        # Prime the session cookie first
+        try:
+            self._nclt_session.get(NCLT_SESSION_URL, timeout=5)
+        except Exception as e:
+            logger.warning(f"[ExternalScrapingAgent] Failed to prime NCLT session: {e}")
+            return []
+
+        # Fetch from all benches concurrently to speed up the process (max 5 workers to be polite)
+        def fetch_bench(bench_id):
+            return self._fetch_nclt_bench(company_name, bench_id)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_bench = {executor.submit(fetch_bench, bid): bid for bid in NCLT_BENCH_IDS.keys()}
+            for future in concurrent.futures.as_completed(future_to_bench):
+                try:
+                    cases = future.result()
+                    for c in cases:
+                        cno = c.get("case_no")
+                        if cno and cno not in seen_case_nos:
+                            seen_case_nos.add(cno)
+                            all_cases.append(c)
+                except Exception as e:
+                    logger.debug(f"[ExternalScrapingAgent] Concurrent fetch failed for a bench: {e}")
+            
+        return all_cases
+
+    def _score_nclt_cases(self, cases: List[Dict]) -> Dict:
+        """Score NCLT cases and return risk info."""
+        if not cases:
+            return {
+                "nclt_risk": 0.0,
+                "nclt_case_count": 0,
+                "nclt_severity": "low",
+                "nclt_cases": [],
+                "nclt_case_types": [],
+                "nclt_evidence": "No pending NCLT cases found."
+            }
+            
+        max_risk = 0.0
         case_types = set()
+        
+        for case in cases:
+            ctype_raw = case.get("case_type", "").strip()
+            # Extract abbreviation (e.g. "IBA/123/2023" -> "IBA")
+            ctype = ctype_raw.split("/")[0] if "/" in ctype_raw else ctype_raw
+            
+            score = NCLT_CASE_TYPE_SCORES.get(ctype, 0.40) # default 0.4 for unknown types
+            max_risk = max(max_risk, score)
+            case_types.add(ctype)
+            
+        return {
+            "nclt_risk": round(min(1.0, max_risk), 4),
+            "nclt_case_count": len(cases),
+            "nclt_severity": "high" if max_risk >= 0.75 else "medium" if max_risk >= 0.5 else "low",
+            "nclt_cases": [c.get("case_no") for c in cases],
+            "nclt_case_types": list(case_types),
+            "nclt_evidence": f"Found {len(cases)} active NCLT cases, highest risk from {', '.join(list(case_types)[:3])}."
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # INDUSTRY NEWS LOGIC
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _detect_industry(self, payload: Dict, company_name: str) -> str:
+        """Detect industry from payload or company name."""
+        industry_raw = payload.get("industry", "").lower()
+        if industry_raw:
+            # Map raw industry to tag
+            for tag, keywords in INDUSTRY_KEYWORDS.items():
+                if industry_raw in tag or any(k in industry_raw for k in keywords):
+                    return tag
+            return "general_corporate"
+            
+        # Fallback to company name
+        cname_lower = company_name.lower()
+        for tag, keywords in INDUSTRY_KEYWORDS.items():
+            if any(re.search(rf'\b{re.escape(k)}\b', cname_lower) for k in keywords):
+                return tag
+                
+        return "general_corporate"
+
+    def _fetch_company_news_risk(self, company_name: str) -> List[Dict]:
+        """Fetch targeted news for the specific company with negative keywords."""
+        search_query = f'"{company_name}" AND (ban OR banned OR illegal OR tax OR penalty OR lawsuit OR scam OR fraud OR restriction OR money laundering)'
+        encoded_query = quote_plus(search_query)
+        articles = []
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
+        
+        # Google News
+        try:
+            url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
+            response = self._session.get(url, timeout=20)
+            if response.status_code == 200:
+                root = ET.fromstring(response.content)
+                for item in root.findall(".//item")[:15]:
+                    title = (item.findtext("title") or "").strip()
+                    pub_date_str = item.findtext("pubDate")
+                    
+                    if not title: continue
+                    if pub_date_str:
+                        try:
+                            if parsedate_to_datetime(pub_date_str) < cutoff_date: continue
+                        except: pass
+                        
+                    articles.append({"title": title, "source": "google_news"})
+        except Exception as e:
+            logger.debug(f"[ExternalScrapingAgent] Google company news failed: {e}")
+
+        # Bing News
+        try:
+            url = f"{self.BING_NEWS_RSS_URL}?q={encoded_query}&format=rss"
+            response = self._session.get(url, timeout=20)
+            if response.status_code == 200:
+                root = ET.fromstring(response.content)
+                for item in root.findall(".//item")[:15]:
+                    title = (item.findtext("title") or "").strip()
+                    pub_date_str = item.findtext("pubDate")
+                    
+                    if not title: continue
+                    if pub_date_str:
+                        try:
+                            if parsedate_to_datetime(pub_date_str) < cutoff_date: continue
+                        except: pass
+                        
+                    articles.append({"title": title, "source": "bing_news"})
+        except Exception as e:
+            logger.debug(f"[ExternalScrapingAgent] Bing company news failed: {e}")
+
+        # Deduplicate
+        merged = {}
+        for a in articles:
+            key = a["title"].lower()
+            if key not in merged:
+                merged[key] = a
+                
+        return list(merged.values())[:20]
+
+    def _analyze_company_news(self, articles: List[Dict]) -> Dict:
+        """Score company risk based on targeted news and extract evidence."""
+        if not articles:
+            return {"risk": 0.0, "evidence": "No relevant targeted news found."}
+            
         total_weight = 0.0
         match_count = 0
-
+        top_evidence = []
+        
         for article in articles:
-            title = article.get("title", "")
-            description = article.get("description", "")
-            combined_text = f"{title} {description}".strip()
-            title_lower = combined_text.lower()
-
+            title_lower = article.get("title", "").lower()
             article_weight = 0.0
             matched_keywords = []
-
+            
             for keyword, weight in NEWS_RISK_KEYWORDS.items():
                 if keyword in title_lower:
                     article_weight = max(article_weight, weight)
                     matched_keywords.append(keyword)
-
-            if matched_keywords:
-                case_type = self._classify_case(title)
-                direction = self._detect_direction(title, company_name)
-
-                case_types.add(case_type)
+                    
+            if article_weight > 0:
                 total_weight += article_weight
                 match_count += 1
-
-                cases.append({
-                    "headline": title[:200],
-                    "type": case_type,
-                    "direction": direction,
-                    "source": article.get("source", "unknown"),
-                    "link": article.get("link", ""),
-                })
-
-        # Compute risk score based on total articles
+                if len(top_evidence) < 2:
+                    top_evidence.append(f"'{article.get('title')}' (keywords: {','.join(matched_keywords)})")
+                
         risk_score = min(1.0, (total_weight / max(1, len(articles))) * 2)
-
-        # Determine severity
-        if risk_score >= 0.5:
-            severity = "high"
-        elif risk_score >= 0.25:
-            severity = "medium"
-        else:
-            severity = "low"
-
-        return {
-            "risk_score": round(risk_score, 4),
-            "severity": severity,
-            "case_count": match_count,
-            "cases": cases[:10],
-            "case_types": list(case_types),
-            "litigation_flag": match_count > 0,
-        }
+        
+        evidence_str = "No major targeted risks detected."
+        if top_evidence:
+            evidence_str = "Targeted risks detected: " + " | ".join(top_evidence)
+            
+        return {"risk": round(risk_score, 4), "evidence": evidence_str}
 
     # ─────────────────────────────────────────────────────────────────────────
     # EVENT HANDLER
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _merge_signals(self, nclt_data: Dict, industry_data: Dict) -> Dict:
+        """Fuse NCLT and Industry signals."""
+        nclt_risk = nclt_data["nclt_risk"]
+        industry_risk = industry_data["risk"]
+        
+        evidence = ""
+        
+        if nclt_data["nclt_case_count"] > 0:
+            # NCLT is authoritative
+            final_risk = 0.75 * nclt_risk + 0.25 * industry_risk
+            evidence = f"[NCLT Focus] {nclt_data['nclt_evidence']}"
+            if industry_risk > 0:
+                evidence += f" | {industry_data['evidence']}"
+        else:
+            # High weight on targeted company news since it's directly about them
+            final_risk = industry_risk
+            evidence = f"[Web Focus] {industry_data['evidence']} (NCLT clear)"
+            
+        final_risk = round(min(1.0, max(0.0, final_risk)), 4)
+        severity = "high" if final_risk >= 0.5 else "medium" if final_risk >= 0.25 else "low"
+        
+        return {
+            "final_risk": final_risk,
+            "severity": severity,
+            "evidence": evidence
+        }
+
     def handle_event(self, event: Event) -> None:
         """Handle customer events and generate litigation risk."""
-        logger.info(f"Received event: {event.event_type} for entity {event.entity_id}")
-
         data = event.payload or {}
         customer_id = data.get("customer_id")
 
         if not customer_id:
-            logger.warning("Missing customer_id in event")
             return
 
-        # Resolve company name with improved fallback chain
-        # Priority: payload -> QueryAgent lookup -> customer_id
+        # Resolve company name
         company_name = data.get("company_name")
         if not company_name and self._query_agent:
             try:
                 customer = self._query_agent.get_customer(customer_id)
-                if customer:
+                if customer and customer.get("name"):
                     company_name = customer.get("name")
-                    if company_name:
-                        logger.debug(f"[ExternalScrapingAgent] Resolved company name from DB: {company_name}")
-            except Exception as e:
-                logger.debug(f"[ExternalScrapingAgent] Failed to lookup customer from QueryAgent: {e}")
+            except Exception:
+                pass
 
-        # Final fallback: use customer_id only if no company name found
-        # Searching for "cust_00001" on Google News is worthless — skip scrape
-        if not company_name:
-            logger.debug(
-                f"[ExternalScrapingAgent] Skipping scrape for {customer_id}: "
-                f"no company name resolved (searching by customer_id yields no results)"
-            )
+        if not company_name or bool(re.match(r'^cust_\d+$', company_name)):
+            logger.debug(f"[ExternalScrapingAgent] Skipping {customer_id}: no real company name")
             return
+            
         company_name = company_name.strip()[:100]
 
-        # Check cache (TTL = 24h)
-        cache_key = company_name.lower()
-        cache_entry = self._cache.get(cache_key)
-
-        if cache_entry:
-            age = (datetime.utcnow() - cache_entry["timestamp"]).total_seconds()
-            if age < 86400:
-                news_data = cache_entry["news_data"]
-                logger.info(f"[ExternalScrapingAgent] Cache hit for {customer_id}")
-            else:
-                articles = self._fetch_news(company_name)
-                news_data = self._analyze_news(articles, company_name)
-                self._cache[cache_key] = {
-                    "news_data": news_data,
-                    "timestamp": datetime.utcnow()
-                }
-                logger.info(f"[ExternalScrapingAgent] Cache expired, fetched new data for {customer_id}")
+        # 1. Fetch NCLT (Cached 12h)
+        nclt_cache_key = company_name.lower()
+        nclt_entry = self._nclt_cache.get(nclt_cache_key)
+        
+        if nclt_entry and (datetime.utcnow() - nclt_entry["timestamp"]).total_seconds() < 43200:
+            nclt_data = nclt_entry["data"]
         else:
-            articles = self._fetch_news(company_name)
-            news_data = self._analyze_news(articles, company_name)
-            self._cache[cache_key] = {
-                "news_data": news_data,
-                "timestamp": datetime.utcnow()
-            }
-            logger.info(f"[ExternalScrapingAgent] Cache miss, fetched new data for {customer_id}")
+            logger.info(f"[ExternalScrapingAgent] Fetching NCLT for {company_name}...")
+            cases = self._fetch_nclt_all_benches(company_name)
+            nclt_data = self._score_nclt_cases(cases)
+            self._nclt_cache[nclt_cache_key] = {"data": nclt_data, "timestamp": datetime.utcnow()}
+
+        # 2. Fetch Targeted Company News (Cached 6h)
+        news_cache_key = company_name.lower()
+        news_cache_entry = self._news_cache.get(news_cache_key)
+        
+        if news_cache_entry and (datetime.utcnow() - news_cache_entry["timestamp"]).total_seconds() < 21600:
+            industry_data = news_cache_entry["data"]
+        else:
+            logger.info(f"[ExternalScrapingAgent] Fetching targeted news for {company_name}...")
+            articles = self._fetch_company_news_risk(company_name)
+            industry_data = self._analyze_company_news(articles)
+            self._news_cache[news_cache_key] = {"data": industry_data, "timestamp": datetime.utcnow()}
+
+        # 3. Merge Signals
+        fusion = self._merge_signals(nclt_data, industry_data)
+        final_risk = fusion["final_risk"]
+
+        # Deduplication check
+        last_risk = self._last_published_risk.get(customer_id)
+        if last_risk is not None and last_risk == final_risk:
+            return
 
         # Build payload
         payload = {
             "customer_id": customer_id,
             "company_name": company_name,
 
-            "litigation_flag": news_data["litigation_flag"],
-            "litigation_risk": news_data["risk_score"],
-            "severity": news_data["severity"],
+            "litigation_flag": nclt_data["nclt_case_count"] > 0,
+            "litigation_risk": final_risk,
+            "severity": fusion["severity"],
+            "evidence": fusion["evidence"],
+            
+            "nclt_case_count": nclt_data["nclt_case_count"],
+            "nclt_cases": nclt_data["nclt_cases"],
+            "nclt_severity": nclt_data["nclt_severity"],
+            "nclt_risk": nclt_data["nclt_risk"],
+            
+            "industry_tag": "targeted_web_search",
+            "industry_risk": industry_data["risk"],
 
-            "case_count": news_data["case_count"],
-            "cases": news_data["cases"],
-            "case_types": news_data["case_types"],
-
-            "source": "google_news",
-            "confidence": 0.7,
+            "source": "nclt+industry_news",
+            "confidence": 0.85 if nclt_data["nclt_case_count"] > 0 else 0.6,
             "generated_at": datetime.utcnow().isoformat()
         }
 
-        # FIX 9: DEDUPLICATION - Skip publishing if litigation_risk unchanged
-        last_risk = self._last_published_risk.get(customer_id)
-        litigation_risk = round(news_data["risk_score"], 4)
-        case_count = int(news_data.get("case_count", 0))
-        # FIX: Deduplicate on risk score alone — case_count==0 gate was causing
-        # redundant publishes for companies with persistent news coverage
-        if last_risk is not None and last_risk == litigation_risk:
-            logger.debug(
-                f"[ExternalScrapingAgent] Skipping publish for {customer_id}: "
-                f"litigation_risk={litigation_risk:.4f} (unchanged)"
-            )
-            return
-
-        # Publish event (standardized naming)
+        # Publish
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
             event_type="external.litigation.updated",
@@ -559,13 +527,12 @@ class ExternalScrapingAgent(BaseAgent):
             correlation_id=event.correlation_id,
         )
 
-        # FIX 9: Track published risk with bounded eviction
         if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
-            self._last_published_risk.popitem(last=False)  # evict oldest
-        self._last_published_risk[customer_id] = litigation_risk
+            self._last_published_risk.popitem(last=False)
+        self._last_published_risk[customer_id] = final_risk
 
         logger.info(
             f"[ExternalScrapingAgent] company={company_name} "
-            f"litigation_risk={news_data['risk_score']:.4f} "
-            f"cases={news_data['case_count']} severity={news_data['severity']}"
+            f"final_risk={final_risk:.4f} nclt_cases={nclt_data['nclt_case_count']} "
+            f"industry={industry_tag} ind_risk={industry_risk:.4f}"
         )

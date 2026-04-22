@@ -245,6 +245,7 @@ class DBAgent(BaseAgent):
                         case_count INTEGER,
                         case_types TEXT,
                         cases TEXT,
+                        evidence TEXT,
                         source TEXT,
                         confidence REAL,
                         created_at TEXT
@@ -995,9 +996,10 @@ class DBAgent(BaseAgent):
         company_name = self._sanitize_company_name(company_name)
         litigation_risk = data.get("litigation_risk", 0.0)
         severity = data.get("severity")
-        case_count = data.get("case_count", 0)
+        case_count = data.get("case_count") or data.get("nclt_case_count", 0)
         case_types = data.get("case_types", [])
-        cases = data.get("cases", [])
+        cases = data.get("cases") or data.get("nclt_cases", [])
+        evidence = data.get("evidence", "")
         source = data.get("source")
         confidence = data.get("confidence", 0.0)
         created_at = datetime.utcnow().isoformat()
@@ -1036,11 +1038,12 @@ class DBAgent(BaseAgent):
                         case_count,
                         case_types,
                         cases,
+                        evidence,
                         source,
                         confidence,
                         created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     event.event_id,
                     customer_id,
@@ -1050,6 +1053,7 @@ class DBAgent(BaseAgent):
                     case_count,
                     json.dumps(case_types or []),
                     json.dumps(cases or []),
+                    evidence,
                     source,
                     confidence,
                     created_at

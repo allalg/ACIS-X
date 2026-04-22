@@ -96,8 +96,10 @@ class PaymentPredictionAgent(BaseAgent):
 
         # Get external data if available
         external_data = self.external_cache.get(customer_id, {})
-        financial_score = external_data.get("financial_score", 0.6)
-        external_risk = external_data.get("external_risk", 0.5)
+        financial_score = external_data.get("financial_score")
+        financial_score = float(financial_score) if financial_score is not None else 0.6
+        external_risk = external_data.get("external_risk")
+        external_risk = float(external_risk) if external_risk is not None else 0.5
         litigation_flag = external_data.get("litigation_flag", False)
 
         # Step 4: Predict risk for each pending invoice

@@ -802,5 +802,5 @@ class ExternalDataAgent(BaseAgent):
         self._last_published_signature[customer_id] = current_signature
 
         logger.info(
-            f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk:.4f}"
+            f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk if external_risk is not None else 'None'}"
         )
