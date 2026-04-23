@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { BUSINESS_AGENTS, OPERATIONAL_AGENTS } from '../../types/agent'
+import { PIPELINE_AGENTS, OPERATIONAL_AGENTS } from '../../types/agent'
 import type { EventEnvelope } from '../../types/events'
 import { AgentBranch } from './AgentBranch'
 import { AgentNode } from './AgentNode'
@@ -12,33 +12,25 @@ type KafkaBusCanvasProps = {
   focusAgent: string
 }
 
-const colorClasses = [
+const pipelineColors = [
   'agent-color-scenario',
   'agent-color-customer-state',
-  'agent-color-aggregator',
   'agent-color-profile',
-  'agent-color-risk-scoring',
   'agent-color-payment-pred',
-  'agent-color-collections',
-  'agent-color-overdue',
+  'agent-color-risk-scoring',
   'agent-color-credit-policy',
-  'agent-color-external-data',
-  'agent-color-external-scrape',
-  'agent-color-db',
-  'agent-color-memory',
-  'agent-color-query',
-  'agent-color-time-tick',
+  'agent-color-collections',
 ]
 
 export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
-  const spacing = 920 / BUSINESS_AGENTS.length
+  const spacing = 820 / PIPELINE_AGENTS.length
 
   const positions = useMemo(
-    () => BUSINESS_AGENTS.map((_, index) => 60 + spacing * index),
+    () => PIPELINE_AGENTS.map((_, index) => 100 + spacing * index),
     [spacing],
   )
 
-  const opPositions = useMemo(() => [430, 480, 530, 580, 630], [])
+  const opPositions = useMemo(() => [300, 400, 500, 600, 700], [])
 
   const lastEventsBySource = useMemo(() => {
     const map = new Map<string, EventEnvelope>()
@@ -50,7 +42,7 @@ export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
 
   const positionMap = useMemo(
     () =>
-      BUSINESS_AGENTS.reduce<Record<string, { x: number; y: number }>>((acc, agent, index) => {
+      PIPELINE_AGENTS.reduce<Record<string, { x: number; y: number }>>((acc, agent, index) => {
         acc[agent] = { x: positions[index], y: 180 }
         return acc
       }, {}),
@@ -64,7 +56,7 @@ export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
 
         <OperationalAgentStrip agents={[...OPERATIONAL_AGENTS]} positions={opPositions} />
 
-        {BUSINESS_AGENTS.map((agent, index) => {
+        {PIPELINE_AGENTS.map((agent, index) => {
           const sourceEvent = lastEventsBySource.get(agent)
           const ageMs = sourceEvent
             ? Date.now() - new Date(sourceEvent.event_time).getTime()
@@ -77,14 +69,14 @@ export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
                 x={positions[index]}
                 fromY={180}
                 toY={262}
-                colorClass={colorClasses[index]}
+                colorClass={pipelineColors[index]}
                 dimmed={status === 'idle'}
               />
               <AgentNode
                 x={positions[index]}
                 y={284}
                 label={agent}
-                colorClass={colorClasses[index]}
+                colorClass={pipelineColors[index]}
                 status={status}
               />
             </g>

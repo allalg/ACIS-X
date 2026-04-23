@@ -9,7 +9,7 @@ type PacketOrchestratorProps = {
 }
 
 export function PacketOrchestrator({ events, positionMap, focusAgent }: PacketOrchestratorProps) {
-  const recentEvents = events.slice(-20)
+  const recentEvents = events.slice(-5)
 
   return (
     <AnimatePresence>

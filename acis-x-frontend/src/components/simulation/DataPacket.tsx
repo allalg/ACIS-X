@@ -13,9 +13,10 @@ export function DataPacket({ id, label, colorClass, x, y }: DataPacketProps) {
     <motion.g
       key={id}
       className={`data-packet ${colorClass}`}
-      initial={{ opacity: 0, x: -8, y: 0 }}
-      animate={{ opacity: 1, x: 0, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
       transform={`translate(${x} ${y})`}
     >
       <rect x="-16" y="-8" width="32" height="16" rx="8" />

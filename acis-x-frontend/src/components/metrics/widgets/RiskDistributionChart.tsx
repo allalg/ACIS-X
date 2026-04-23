@@ -36,7 +36,7 @@ export function RiskDistributionChart({ rows }: RiskDistributionChartProps) {
           <XAxis dataKey="severity" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
           <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
           <Tooltip
-            contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)' }}
+            contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)' }}
             cursor={{ fill: 'var(--accent-blue-soft)' }}
           />
           <Bar dataKey="count" radius={[4, 4, 0, 0]}>

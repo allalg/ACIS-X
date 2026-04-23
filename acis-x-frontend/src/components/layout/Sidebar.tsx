@@ -1,31 +1,25 @@
-import { useEffect, useState } from 'react'
 import { SidebarNav } from './SidebarNav'
 import { SystemHealthBadge } from './SystemHealthBadge'
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+type SidebarProps = {
+  collapsed: boolean
+  onToggle: () => void
+}
 
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 1279px)')
-    const syncCollapsed = () => setCollapsed(query.matches)
-    syncCollapsed()
-    query.addEventListener('change', syncCollapsed)
-    return () => query.removeEventListener('change', syncCollapsed)
-  }, [])
-
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside className={collapsed ? 'sidebar collapsed' : 'sidebar'}>
       <header className="sidebar-brand">
         <strong className="mono">ACIS-X</strong>
-        {!collapsed ? <span>Credit Intelligence</span> : null}
+        <span className="sidebar-label">Credit Intelligence</span>
       </header>
 
       <SidebarNav collapsed={collapsed} />
 
       <footer className="sidebar-footer">
-        {!collapsed ? <SystemHealthBadge /> : null}
-        <button className="button-dark sidebar-toggle" onClick={() => setCollapsed((prev) => !prev)}>
-          {collapsed ? '>' : '<'}
+        <SystemHealthBadge />
+        <button className="button-dark sidebar-toggle" onClick={onToggle} aria-label="Toggle sidebar">
+          {collapsed ? '›' : '‹'}
         </button>
       </footer>
     </aside>

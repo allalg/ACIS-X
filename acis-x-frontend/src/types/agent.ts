@@ -45,6 +45,17 @@ export const BUSINESS_AGENTS = [
   'TimeTickAgent',
 ] as const
 
+/** Core pipeline agents displayed in the simulation canvas SVG */
+export const PIPELINE_AGENTS = [
+  'ScenarioGeneratorAgent',
+  'CustomerStateAgent',
+  'CustomerProfileAgent',
+  'PaymentPredictionAgent',
+  'RiskScoringAgent',
+  'CreditPolicyAgent',
+  'CollectionsAgent',
+] as const
+
 export const OPERATIONAL_AGENTS = [
   'MonitoringAgent',
   'SelfHealingAgent',

@@ -5,12 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(amount: number, _currency = 'INR'): string {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency,
+    currency: 'INR',
     maximumFractionDigits: 2,
   }).format(amount)
+}
+
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-IN').format(value)
 }
 
 export function formatRelativeTime(isoString: string): string {
@@ -34,7 +38,7 @@ export function formatRelativeTime(isoString: string): string {
 
 export function formatTimestamp(isoString: string): string {
   const date = new Date(isoString)
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('en-IN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',

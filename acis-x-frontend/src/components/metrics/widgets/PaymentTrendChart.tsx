@@ -27,7 +27,7 @@ export function PaymentTrendChart({ rows }: PaymentTrendChartProps) {
           <CartesianGrid stroke="var(--bg-border-subtle)" strokeDasharray="2 2" />
           <XAxis dataKey="day" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
           <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
-          <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)' }} />
+          <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)' }} />
           <Area
             type="monotone"
             dataKey="onTimeRatio"

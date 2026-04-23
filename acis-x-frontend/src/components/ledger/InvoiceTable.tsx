@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { formatCurrency } from '../../lib/utils'
 import type { Invoice } from '../../types/ledger'
 import { EmptyState } from '../ui/EmptyState'
@@ -20,6 +20,7 @@ export function InvoiceTable({
   highlightedInvoiceId,
 }: InvoiceTableProps) {
   const [statusFilter, setStatusFilter] = useState<(typeof filters)[number]>('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const rows = useMemo(() => {
     return invoices
@@ -29,6 +30,10 @@ export function InvoiceTable({
 
   if (!loading && rows.length === 0) {
     return <EmptyState description="No invoices have been generated yet." />
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id))
   }
 
   return (
@@ -61,26 +66,69 @@ export function InvoiceTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((invoice) => (
-              <tr
-                key={invoice.invoice_id}
-                onMouseEnter={() => onHoverInvoiceId(invoice.invoice_id)}
-                onMouseLeave={() => onHoverInvoiceId(null)}
-                className={`${invoice.status === 'overdue' ? 'row-overdue' : ''} ${highlightedInvoiceId === invoice.invoice_id ? 'row-highlight' : ''}`}
-              >
-                <td className="mono">{invoice.invoice_id}</td>
-                <td>{invoice.customer_name}</td>
-                <td className="numeric">{formatCurrency(invoice.total_amount, invoice.currency)}</td>
-                <td className="numeric">{formatCurrency(invoice.paid_amount, invoice.currency)}</td>
-                <td className="numeric">{new Date(invoice.due_date).toLocaleDateString()}</td>
-                <td>
-                  <StatusBadge status={invoice.status} />
-                </td>
-                <td className={invoice.status === 'overdue' ? 'overdue-days numeric' : 'numeric'}>
-                  {invoice.days_overdue}
-                </td>
-              </tr>
-            ))}
+            {rows.map((invoice) => {
+              const isExpanded = expandedId === invoice.invoice_id
+              const balance = invoice.total_amount - invoice.paid_amount
+              return (
+                <Fragment key={invoice.invoice_id}>
+                  <tr
+                    key={invoice.invoice_id}
+                    onClick={() => toggleExpand(invoice.invoice_id)}
+                    onMouseEnter={() => onHoverInvoiceId(invoice.invoice_id)}
+                    onMouseLeave={() => onHoverInvoiceId(null)}
+                    className={`row-clickable ${invoice.status === 'overdue' ? 'row-overdue' : ''} ${highlightedInvoiceId === invoice.invoice_id ? 'row-highlight' : ''}`}
+                  >
+                    <td className="mono">{invoice.invoice_id}</td>
+                    <td>{invoice.customer_name}</td>
+                    <td className="numeric">{formatCurrency(invoice.total_amount, invoice.currency)}</td>
+                    <td className="numeric">{formatCurrency(invoice.paid_amount, invoice.currency)}</td>
+                    <td className="numeric">{new Date(invoice.due_date).toLocaleDateString('en-IN')}</td>
+                    <td>
+                      <StatusBadge status={invoice.status} />
+                    </td>
+                    <td className={invoice.status === 'overdue' ? 'overdue-days numeric' : 'numeric'}>
+                      {invoice.days_overdue}
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr key={`${invoice.invoice_id}-detail`} className="expanded-row">
+                      <td colSpan={7}>
+                        <div className="expanded-detail">
+                          <div className="detail-grid">
+                            <div className="detail-item">
+                              <span className="detail-label">Customer ID</span>
+                              <span className="detail-value mono">{invoice.customer_id}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Outstanding Balance</span>
+                              <span className={`detail-value numeric ${balance > 0 ? 'kpi-danger' : 'kpi-success'}`}>
+                                {formatCurrency(balance, invoice.currency)}
+                              </span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Issued Date</span>
+                              <span className="detail-value numeric">{new Date(invoice.issued_date).toLocaleDateString('en-IN')}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Due Date</span>
+                              <span className="detail-value numeric">{new Date(invoice.due_date).toLocaleDateString('en-IN')}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Created</span>
+                              <span className="detail-value numeric">{new Date(invoice.created_at).toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Last Updated</span>
+                              <span className="detail-value numeric">{new Date(invoice.updated_at).toLocaleString('en-IN')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>

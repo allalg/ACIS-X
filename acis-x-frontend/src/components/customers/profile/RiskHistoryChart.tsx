@@ -32,7 +32,7 @@ export function RiskHistoryChart({ currentRisk }: RiskHistoryChartProps) {
               }
               return `${Math.round(value * 100)}%`
             }}
-            contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)' }}
+            contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)' }}
           />
           <Line type="monotone" dataKey="risk" stroke="var(--accent-blue)" strokeWidth={2} dot={false} />
           <Line type="monotone" dataKey={() => 0.4} stroke="var(--accent-amber)" strokeDasharray="4 3" dot={false} />

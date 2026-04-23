@@ -25,9 +25,10 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
           key={to}
           to={to}
           className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+          title={collapsed ? label : undefined}
         >
           <Icon size={16} />
-          {!collapsed ? <span>{label}</span> : null}
+          <span className="sidebar-label">{label}</span>
         </NavLink>
       ))}
     </nav>
