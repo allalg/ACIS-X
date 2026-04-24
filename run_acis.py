@@ -23,6 +23,9 @@ import sys
 import threading
 from typing import Any, Dict, List, Tuple
 import pathlib
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from kafka.admin import KafkaAdminClient, ConfigResource, ConfigResourceType
 

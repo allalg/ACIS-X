@@ -237,8 +237,8 @@ class DBAgent(BaseAgent):
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS external_litigation (
-                        id TEXT PRIMARY KEY,
-                        customer_id TEXT,
+                        customer_id TEXT PRIMARY KEY,
+                        id TEXT UNIQUE,
                         company_name TEXT,
                         litigation_risk REAL,
                         severity TEXT,
@@ -1029,7 +1029,7 @@ class DBAgent(BaseAgent):
                     )
 
                 cursor.execute("""
-                    INSERT OR IGNORE INTO external_litigation (
+                    INSERT OR REPLACE INTO external_litigation (
                         id,
                         customer_id,
                         company_name,

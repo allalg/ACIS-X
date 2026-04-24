@@ -14,6 +14,8 @@ Produces:
 """
 
 import logging
+import json
+import os
 import re
 import time
 import requests
@@ -44,7 +46,8 @@ NCLT_BENCH_IDS = {
     1: "Ahmedabad", 2: "Allahabad", 3: "Bengaluru", 4: "Chandigarh",
     5: "Chennai", 6: "Guwahati", 7: "Hyderabad", 8: "Kolkata",
     9: "Mumbai", 10: "New Delhi / Principal", 11: "Jaipur",
-    12: "Amaravati", 13: "Cuttack", 14: "Kochi", 15: "Indore"
+    12: "Amaravati", 13: "Cuttack", 14: "Kochi", 15: "Indore",
+    16: "Additional Bench"
 }
 
 NCLT_CASE_TYPE_SCORES = {
@@ -53,24 +56,7 @@ NCLT_CASE_TYPE_SCORES = {
     "CA": 0.60, "IA": 0.30, "MA": 0.20,
 }
 
-INDUSTRY_KEYWORDS = {
-    "real_estate": ["builder", "realty", "construction", "infrastructure", "housing", "real estate"],
-    "banking_finance": ["bank", "nbfc", "finance", "capital", "credit", "leasing", "financial"],
-    "manufacturing": ["steel", "cement", "textile", "chemical", "pharma", "auto", "manufacturing"],
-    "telecom": ["telecom", "wireless", "broadband", "spectrum", "communications"],
-    "energy": ["power", "energy", "coal", "oil", "gas", "solar", "renewable"],
-    "retail_consumer": ["retail", "fmcg", "consumer", "grocery", "apparel"],
-    "it_services": ["software", "technology", "it", "digital", "consulting", "tech"]
-}
 
-NEWS_RISK_KEYWORDS = {
-    "fraud": 1.0, "scam": 1.0, "bankruptcy": 1.0, "insolvency": 1.0,
-    "investigation": 0.8, "lawsuit": 0.7, "sued": 0.7, "penalty": 0.6,
-    "default": 0.6, "violation": 0.5, "probe": 0.5, "indictment": 0.9,
-    "embezzlement": 1.0, "misconduct": 0.7, "scandal": 0.8, "settlement": 0.5,
-    "nclt": 0.9, "ibc": 0.9, "npa": 0.8, "sebi": 0.7,
-    "ban": 0.9, "banned": 0.9, "illegal": 0.9, "restriction": 0.7, "tax evasion": 0.9, "money laundering": 1.0
-}
 
 
 class ExternalScrapingAgent(BaseAgent):
@@ -104,6 +90,11 @@ class ExternalScrapingAgent(BaseAgent):
         # Caches
         self._nclt_cache = {}      # TTL: 12h
         self._news_cache = {}      # TTL: 6h
+        self._llm_cache = {}       # LLM response cache
+        
+        # Memory Store
+        self._risk_history: Dict[str, List[Dict]] = {}
+        self._MAX_HISTORY = 20
         
         # Deduplication tracker
         self._last_published_risk: OrderedDict = OrderedDict()
@@ -145,7 +136,11 @@ class ExternalScrapingAgent(BaseAgent):
         return [self.TOPIC_INPUT, self.TOPIC_CUSTOMERS]
 
     def process_event(self, event: Event) -> None:
-        if event.event_type in ("customer.metrics.updated", "customer.profile.updated"):
+        # Ignore our own output to prevent self-triggering loops
+        if event.event_type == "external.litigation.updated":
+            return
+            
+        if event.event_type.startswith("customer.") or event.event_type.startswith("external."):
             self.handle_event(event)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -300,27 +295,16 @@ class ExternalScrapingAgent(BaseAgent):
     # INDUSTRY NEWS LOGIC
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _detect_industry(self, payload: Dict, company_name: str) -> str:
-        """Detect industry from payload or company name."""
-        industry_raw = payload.get("industry", "").lower()
-        if industry_raw:
-            # Map raw industry to tag
-            for tag, keywords in INDUSTRY_KEYWORDS.items():
-                if industry_raw in tag or any(k in industry_raw for k in keywords):
-                    return tag
-            return "general_corporate"
-            
-        # Fallback to company name
-        cname_lower = company_name.lower()
-        for tag, keywords in INDUSTRY_KEYWORDS.items():
-            if any(re.search(rf'\b{re.escape(k)}\b', cname_lower) for k in keywords):
-                return tag
-                
-        return "general_corporate"
 
-    def _fetch_company_news_risk(self, company_name: str) -> List[Dict]:
-        """Fetch targeted news for the specific company with negative keywords."""
-        search_query = f'"{company_name}" AND (ban OR banned OR illegal OR tax OR penalty OR lawsuit OR scam OR fraud OR restriction OR money laundering)'
+
+    def _fetch_company_news_risk(self, company_name: str, aliases: List[str] = None) -> List[Dict]:
+        """Fetch targeted news for the specific company and aliases."""
+        query_parts = [f'"{company_name}"']
+        if aliases:
+            for alias in aliases:
+                if alias and len(alias) >= 3:
+                    query_parts.append(f'"{alias}"')
+        search_query = " OR ".join(query_parts)
         encoded_query = quote_plus(search_query)
         articles = []
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
@@ -334,14 +318,14 @@ class ExternalScrapingAgent(BaseAgent):
                 for item in root.findall(".//item")[:15]:
                     title = (item.findtext("title") or "").strip()
                     pub_date_str = item.findtext("pubDate")
+                    description = (item.findtext("description") or "").strip()
                     
                     if not title: continue
                     if pub_date_str:
                         try:
                             if parsedate_to_datetime(pub_date_str) < cutoff_date: continue
                         except: pass
-                        
-                    articles.append({"title": title, "source": "google_news"})
+                    articles.append({"title": title, "description": description, "pubDate": pub_date_str, "source": "google_news"})
         except Exception as e:
             logger.debug(f"[ExternalScrapingAgent] Google company news failed: {e}")
 
@@ -354,14 +338,14 @@ class ExternalScrapingAgent(BaseAgent):
                 for item in root.findall(".//item")[:15]:
                     title = (item.findtext("title") or "").strip()
                     pub_date_str = item.findtext("pubDate")
+                    description = (item.findtext("description") or "").strip()
                     
                     if not title: continue
                     if pub_date_str:
                         try:
                             if parsedate_to_datetime(pub_date_str) < cutoff_date: continue
                         except: pass
-                        
-                    articles.append({"title": title, "source": "bing_news"})
+                    articles.append({"title": title, "description": description, "pubDate": pub_date_str, "source": "bing_news"})
         except Exception as e:
             logger.debug(f"[ExternalScrapingAgent] Bing company news failed: {e}")
 
@@ -374,49 +358,301 @@ class ExternalScrapingAgent(BaseAgent):
                 
         return list(merged.values())[:20]
 
-    def _analyze_company_news(self, articles: List[Dict]) -> Dict:
-        """Score company risk based on targeted news and extract evidence."""
-        if not articles:
-            return {"risk": 0.0, "evidence": "No relevant targeted news found."}
-            
-        total_weight = 0.0
-        match_count = 0
-        top_evidence = []
+    def _is_relevant(self, text: str, company: str, aliases: List[str] = None) -> bool:
+        text = text.lower()
+        company = company.lower()
         
-        for article in articles:
-            title_lower = article.get("title", "").lower()
-            article_weight = 0.0
-            matched_keywords = []
-            
-            for keyword, weight in NEWS_RISK_KEYWORDS.items():
-                if keyword in title_lower:
-                    article_weight = max(article_weight, weight)
-                    matched_keywords.append(keyword)
-                    
-            if article_weight > 0:
-                total_weight += article_weight
-                match_count += 1
-                if len(top_evidence) < 2:
-                    top_evidence.append(f"'{article.get('title')}' (keywords: {','.join(matched_keywords)})")
+        clean_company = company.replace("limited", "").replace("ltd", "").replace("pvt", "").replace("private", "").strip()
+        variants = set([company, clean_company])
+        
+        words = clean_company.split()
+        if len(words) > 1:
+            acronym = "".join([w[0] for w in words if w]).lower()
+            if len(acronym) >= 3:
+                variants.add(acronym)
                 
-        risk_score = min(1.0, (total_weight / max(1, len(articles))) * 2)
+        if words and len(words[0]) >= 4:
+            variants.add(words[0])
+
+        if aliases:
+            for alias in aliases:
+                if alias and len(alias) >= 3:
+                    variants.add(alias.lower())
+
+        variants = {v for v in variants if len(v) >= 3}
+        return any(v in text for v in variants)
+
+    def _call_llm(self, prompt: str) -> dict:
+        """Call Groq API for LLM-based extraction."""
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            logger.error("[ExternalScrapingAgent] GROQ_API_KEY not found.")
+            return {}
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
         
-        evidence_str = "No major targeted risks detected."
-        if top_evidence:
-            evidence_str = "Targeted risks detected: " + " | ".join(top_evidence)
+        system_prompt = "You are a financial risk intelligence system. Extract structured risk signals about a company from news articles. Be precise and avoid false positives."
+        
+        data = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.0,
+            "response_format": {"type": "json_object"}
+        }
+        
+        try:
+            response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                result = response.json()
+                content = result["choices"][0]["message"]["content"]
+                try:
+                    return json.loads(content)
+                except Exception:
+                    logger.error("[ExternalScrapingAgent] Failed to parse LLM JSON")
+                    return {}
+            else:
+                logger.error(f"[ExternalScrapingAgent] Groq API error: {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"[ExternalScrapingAgent] LLM call failed: {e}")
+            return {}
+
+    def _build_multi_article_context(self, articles: List[Dict]) -> str:
+        context_blocks = []
+        for i, article in enumerate(articles[:5]):  # limit to 5
+            title = article.get("title", "")
+            desc = article.get("description", "")
+            # calculate age
+            pub_date_str = article.get("pubDate")
+            age_info = ""
+            if pub_date_str:
+                try:
+                    pub_date = parsedate_to_datetime(pub_date_str)
+                    age_hours = (datetime.now(timezone.utc) - pub_date).total_seconds() / 3600
+                    age_info = f"\nAge: {round(age_hours, 1)} hours"
+                except Exception:
+                    pass
             
-        return {"risk": round(risk_score, 4), "evidence": evidence_str}
+            context_blocks.append(
+                f"[Article {i+1}]\nTitle: {title}\nContent: {desc}{age_info}"
+            )
+        return "\n\n".join(context_blocks)
+
+    def _analyze_company_news(self, articles: List[Dict], company_name: str, industry: str = "unknown", aliases: List[str] = None) -> Dict:
+        if not articles:
+            return {
+                "litigation_risk_score": 0.0,
+                "articles_analyzed": 0,
+                "risk": 0.0,
+                "evidence": "No relevant news found.",
+                "analysis_status": "skipped_no_articles"
+            }
+
+        # Pre-filter
+        relevant_articles = [
+            a for a in articles
+            if self._is_relevant(a.get("title","") + " " + a.get("description",""), company_name, aliases=aliases)
+        ][:5]
+
+        if not relevant_articles:
+            return {
+                "litigation_risk_score": 0.0,
+                "articles_analyzed": 0,
+                "risk": 0.0,
+                "evidence": "No relevant articles after filtering.",
+                "analysis_status": "skipped_filtered"
+            }
+
+        context = self._build_multi_article_context(relevant_articles)
+
+        prompt = f"""You are an advanced financial risk intelligence system.
+
+You are given MULTIPLE news articles about a company.
+
+Your job is to:
+- Analyze all articles together
+- Identify consistent risk signals
+- Ignore isolated or weak signals
+- Avoid false positives
+
+---
+
+COMPANY:
+{company_name}
+
+INDUSTRY:
+{industry}
+
+ARTICLES:
+{context}
+
+---
+
+TASK:
+
+1. Determine if there is a CONSISTENT and MATERIAL risk signal across the articles.
+
+2. Consider:
+   - Are multiple sources reporting the same issue?
+   - Is the issue serious (fraud, legal, regulatory, insolvency)?
+   - Is the company clearly the subject?
+
+3. Ignore:
+   - Single weak mentions
+   - Unrelated companies
+   - Generic industry news
+
+---
+
+OUTPUT (STRICT JSON):
+
+{{
+  "risk_detected": true/false,
+  "risk_types": [],
+  "severity": "low/medium/high",
+  "confidence": 0.0,
+  "summary": "2–3 line explanation combining all evidence",
+  "evidence_articles": [],
+  "signal_count": 0
+}}"""
+
+        response = self._call_llm(prompt)
+
+        if not response:
+            return {
+                "litigation_risk_score": 0.0,
+                "articles_analyzed": len(relevant_articles),
+                "risk": 0.0,
+                "evidence": "LLM analysis failed. Defaulting to safe score.",
+                "analysis_status": "failed"
+            }
+
+        if not response.get("risk_detected"):
+            return {
+                "litigation_risk_score": 0.0,
+                "articles_analyzed": len(relevant_articles),
+                "risk": 0.0,
+                "evidence": "No consistent risk signals.",
+                "analysis_status": "success_no_risk"
+            }
+
+        severity_map = {"low": 0.3, "medium": 0.6, "high": 1.0}
+        severity = response.get("severity", "low").lower()
+        confidence = float(response.get("confidence", 0.5))
+        signal_count = int(response.get("signal_count", 1))
+        
+        # Clamp confidence
+        confidence = min(confidence, 0.85)
+
+        # Time decay logic: bounded and robust
+        decay = 1.0
+        evidence_indices = response.get("evidence_articles", [])
+        
+        valid_pub_dates = []
+        if isinstance(evidence_indices, list):
+            for idx in evidence_indices:
+                try:
+                    i = int(idx) - 1
+                    if 0 <= i < len(relevant_articles):
+                        pub_date_str = relevant_articles[i].get("pubDate")
+                        if pub_date_str:
+                            valid_pub_dates.append(parsedate_to_datetime(pub_date_str))
+                except Exception:
+                    pass
+                    
+        # Fallback to all relevant articles if indices were bad
+        if not valid_pub_dates:
+            for article in relevant_articles:
+                pub_date_str = article.get("pubDate")
+                if pub_date_str:
+                    try:
+                        valid_pub_dates.append(parsedate_to_datetime(pub_date_str))
+                    except Exception:
+                        pass
+
+        if valid_pub_dates:
+            min_age_hours = min([max(0, (datetime.now(timezone.utc) - pd).total_seconds() / 3600) for pd in valid_pub_dates])
+            decay = max(0.5, 1 - (min_age_hours / 72))
+            confidence *= decay
+
+        # Signal consistency boost
+        if signal_count >= 3:
+            confidence = min(0.95, confidence * 1.2)
+        elif signal_count == 1:
+            confidence *= 0.8
+
+        score = severity_map.get(severity, 0.3) * confidence
+
+        return {
+            "litigation_risk_score": round(score, 4),
+            "articles_analyzed": len(relevant_articles),
+            "risk": round(score, 4),
+            "evidence": response.get("summary", ""),
+            "analysis_status": "success_risk_found"
+        }
 
     # ─────────────────────────────────────────────────────────────────────────
     # EVENT HANDLER
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _temporal_adjustment(self, customer_id: str, current_risk: float) -> tuple[float, float]:
+        history = self._risk_history.get(customer_id, [])
+        
+        if not history:
+            return current_risk, 0.0
+
+        now = datetime.utcnow()
+
+        weighted_sum = 0.0
+        total_weight = 0.0
+
+        for entry in history:
+            age_hours = (now - entry["timestamp"]).total_seconds() / 3600
+            
+            # decay (older = less weight)
+            weight = max(0.2, 1 - (age_hours / 72))
+            
+            # Use base_risk to prevent compounding adjustments
+            raw_risk = entry.get("base_risk", entry.get("risk", 0.0))
+            weighted_sum += raw_risk * weight
+            total_weight += weight
+
+        historical_avg = weighted_sum / total_weight if total_weight else 0.0
+
+        # trend boost / suppression
+        if current_risk > historical_avg:
+            adjusted = current_risk * 1.1   # spike boost
+        else:
+            adjusted = current_risk * 0.9   # decay
+
+        recent = history[-3:]
+
+        # repeated signal boost
+        if len(recent) >= 3 and all(h.get("base_risk", h.get("risk", 0.0)) > 0.5 for h in recent):
+            adjusted = min(1.0, adjusted * 1.2)
+
+        # sudden spike detection
+        if len(recent) >= 1:
+            prev = recent[-1].get("base_risk", recent[-1].get("risk", 0.0))
+            if current_risk - prev > 0.4:
+                adjusted = min(1.0, adjusted * 1.25)
+
+        return min(1.0, max(0.0, round(adjusted, 4))), historical_avg
+
     def _merge_signals(self, nclt_data: Dict, industry_data: Dict) -> Dict:
         """Fuse NCLT and Industry signals."""
         nclt_risk = nclt_data["nclt_risk"]
         industry_risk = industry_data["risk"]
+        analysis_status = industry_data.get("analysis_status", "unknown")
         
         evidence = ""
+        confidence = 0.0
         
         if nclt_data["nclt_case_count"] > 0:
             # NCLT is authoritative
@@ -424,10 +660,22 @@ class ExternalScrapingAgent(BaseAgent):
             evidence = f"[NCLT Focus] {nclt_data['nclt_evidence']}"
             if industry_risk > 0:
                 evidence += f" | {industry_data['evidence']}"
+            confidence = 0.85
         else:
             # High weight on targeted company news since it's directly about them
             final_risk = industry_risk
-            evidence = f"[Web Focus] {industry_data['evidence']} (NCLT clear)"
+            if analysis_status == "failed":
+                evidence = "[Analysis Failed] Could not complete LLM risk analysis."
+                confidence = 0.1
+            elif analysis_status == "skipped_no_articles" or analysis_status == "skipped_filtered":
+                evidence = "[No News] No relevant articles found."
+                confidence = 0.9
+            elif analysis_status == "success_no_risk":
+                evidence = "[News Clear] " + industry_data.get("evidence", "No consistent risk signals.")
+                confidence = 0.8
+            else:
+                evidence = f"[Web Focus] {industry_data['evidence']}"
+                confidence = 0.7
             
         final_risk = round(min(1.0, max(0.0, final_risk)), 4)
         severity = "high" if final_risk >= 0.5 else "medium" if final_risk >= 0.25 else "low"
@@ -435,7 +683,9 @@ class ExternalScrapingAgent(BaseAgent):
         return {
             "final_risk": final_risk,
             "severity": severity,
-            "evidence": evidence
+            "evidence": evidence,
+            "confidence": confidence,
+            "analysis_status": analysis_status
         }
 
     def handle_event(self, event: Event) -> None:
@@ -446,13 +696,25 @@ class ExternalScrapingAgent(BaseAgent):
         if not customer_id:
             return
 
-        # Resolve company name
+        # Resolve company name and industry
         company_name = data.get("company_name")
-        if not company_name and self._query_agent:
+        industry = "unknown"
+        aliases = []
+        if self._query_agent:
             try:
                 customer = self._query_agent.get_customer(customer_id)
-                if customer and customer.get("name"):
-                    company_name = customer.get("name")
+                if customer:
+                    if customer.get("name"):
+                        company_name = customer.get("name")
+                    # Try harder to extract real industry/sector
+                    industry = customer.get("industry", customer.get("sector", "unknown"))
+                    
+                    if customer.get("aliases"):
+                        aliases.extend(customer.get("aliases", []))
+                    if customer.get("ticker"):
+                        aliases.append(customer.get("ticker"))
+                    if customer.get("parent_company"):
+                        aliases.append(customer.get("parent_company"))
             except Exception:
                 pass
 
@@ -482,13 +744,27 @@ class ExternalScrapingAgent(BaseAgent):
             industry_data = news_cache_entry["data"]
         else:
             logger.info(f"[ExternalScrapingAgent] Fetching targeted news for {company_name}...")
-            articles = self._fetch_company_news_risk(company_name)
-            industry_data = self._analyze_company_news(articles)
+            articles = self._fetch_company_news_risk(company_name, aliases=aliases)
+            industry_data = self._analyze_company_news(articles, company_name=company_name, industry=industry, aliases=aliases)
             self._news_cache[news_cache_key] = {"data": industry_data, "timestamp": datetime.utcnow()}
 
         # 3. Merge Signals
         fusion = self._merge_signals(nclt_data, industry_data)
-        final_risk = fusion["final_risk"]
+        base_risk = fusion["final_risk"]
+        
+        # 4. Temporal Adjustment
+        final_risk, historical_avg = self._temporal_adjustment(customer_id, base_risk)
+        
+        # Store History
+        history = self._risk_history.setdefault(customer_id, [])
+        history.append({
+            "timestamp": datetime.utcnow(),
+            "base_risk": base_risk,
+            "risk": final_risk,
+            "source": "nclt+news",
+        })
+        if len(history) > self._MAX_HISTORY:
+            history.pop(0)
 
         # Deduplication check
         last_risk = self._last_published_risk.get(customer_id)
@@ -514,7 +790,12 @@ class ExternalScrapingAgent(BaseAgent):
             "industry_risk": industry_data["risk"],
 
             "source": "nclt+industry_news",
-            "confidence": 0.85 if nclt_data["nclt_case_count"] > 0 else 0.6,
+            "confidence": fusion["confidence"],
+            "analysis_status": fusion["analysis_status"],
+            "temporal_context": {
+                "history_length": len(self._risk_history.get(customer_id, [])),
+                "recent_avg": round(historical_avg, 4) if history else 0.0,
+            },
             "generated_at": datetime.utcnow().isoformat()
         }
 
@@ -534,5 +815,5 @@ class ExternalScrapingAgent(BaseAgent):
         logger.info(
             f"[ExternalScrapingAgent] company={company_name} "
             f"final_risk={final_risk:.4f} nclt_cases={nclt_data['nclt_case_count']} "
-            f"industry={industry_tag} ind_risk={industry_risk:.4f}"
+            f"industry={'targeted_web_search'} ind_risk={industry_data['risk']:.4f}"
         )
