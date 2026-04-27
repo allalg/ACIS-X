@@ -20,7 +20,8 @@ cp .env.example .env.local
 npm run deploy:local
 ```
 
-This builds the app and serves the production bundle at `http://localhost:4173`.
+This builds the app and serves the production bundle on `0.0.0.0:4173`
+(for example `http://localhost:4173` and your local network IP).
 
 ## Environment variables
 
