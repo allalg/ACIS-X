@@ -295,37 +295,223 @@ class ExternalScrapingAgent(BaseAgent):
         return all_cases
 
 
-    def _score_nclt_cases(self, cases: List[Dict]) -> Dict:
-        """Score NCLT cases and return risk info."""
-        if not cases:
-            return {
-                "nclt_risk": 0.0,
-                "nclt_case_count": 0,
-                "nclt_severity": "low",
-                "nclt_cases": [],
-                "nclt_case_types": [],
-                "nclt_evidence": "No pending NCLT cases found."
+
+    def _unified_llm_analysis(
+        self,
+        company_name: str,
+        industry: str,
+        nclt_cases: List[Dict],
+        articles: List[Dict],
+        casemine_data: Dict,
+        macro_articles: List[Dict] = None,
+        aliases: List[str] = None,
+    ) -> Dict:
+        """
+        Single LLM call that sees ALL evidence and returns one risk score + explanation.
+        Sources: NCLT pending cases + company news + CaseMine + macro/regulatory context.
+        """
+        empty = {
+            "final_risk": 0.0,
+            "severity": "low",
+            "confidence": 0.5,
+            "evidence": "No data available for analysis.",
+            "analysis_status": "skipped_no_data",
+            "risk_types": [],
+            "nclt_case_count": len(nclt_cases),
+            "nclt_cases": [c.get("case_no") for c in nclt_cases],
+            "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+            "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
+        }
+
+        has_nclt     = bool(nclt_cases)
+        has_news     = bool(articles)
+        has_casemine = bool(casemine_data and casemine_data.get("sample_cases"))
+        has_macro    = bool(macro_articles)
+
+        if not has_nclt and not has_news and not has_casemine and not has_macro:
+            empty["evidence"] = "No NCLT cases, news, CaseMine, or macro data found."
+            return empty
+
+        # ── NCLT section ──────────────────────────────────────────────────────
+        if has_nclt:
+            lines = []
+            for c in nclt_cases[:20]:
+                lines.append(
+                    f"  [{c.get('bench','?')}] {c.get('case_no','?')} "
+                    f"type={c.get('case_type','?')} filed={c.get('filing_date','?')}"
+                )
+            nclt_section = f"NCLT PENDING CASES ({len(nclt_cases)} total):\n" + "\n".join(lines)
+        else:
+            nclt_section = "NCLT PENDING CASES: None found across all 16 benches."
+
+        # ── News section (grouped by tier) ────────────────────────────────────
+        tier_labels = {
+            "recent_general":      "RECENT NEWS (last 7 days)",
+            "legal_events":        "LEGAL & REGULATORY EVENTS (last 60 days)",
+            "resolution_tracking": "RESOLUTION / OUTCOME TRACKING (last 60 days)",
+        }
+        if has_news:
+            # Group articles by tier, filter relevant ones per tier
+            news_by_tier: Dict[str, List[Dict]] = {}
+            for a in articles:
+                tier = a.get("news_tier", "recent_general")
+                text = a.get("title", "") + " " + a.get("description", "")
+                if self._is_relevant(text, company_name, aliases=aliases):
+                    news_by_tier.setdefault(tier, []).append(a)
+
+            news_lines = []
+            tier_order = ["recent_general", "legal_events", "resolution_tracking"]
+            for tier in tier_order:
+                items = news_by_tier.get(tier, [])[:5]
+                if items:
+                    news_lines.append(f"[{tier_labels.get(tier, tier)}]")
+                    for i, a in enumerate(items, 1):
+                        pub = a.get("pubDate", "")
+                        age = ""
+                        if pub:
+                            try:
+                                pd = parsedate_to_datetime(pub)
+                                age_days = (datetime.now(timezone.utc) - pd).days
+                                age = f" ({age_days}d ago)"
+                            except Exception:
+                                pass
+                        news_lines.append(f"  {i}. {a.get('title', '')}{age}")
+                        if a.get("description"):
+                            news_lines.append(f"     {a['description'][:150]}")
+
+            if news_lines:
+                news_section = "COMPANY NEWS:\n" + "\n".join(news_lines)
+            else:
+                news_section = "COMPANY NEWS: No company-specific articles found across all tiers."
+        else:
+            news_section = "COMPANY NEWS: No articles fetched."
+
+        # ── CaseMine section ──────────────────────────────────────────────────
+        if has_casemine:
+            cm = casemine_data
+            cm_lines = [f"  Total indexed judgments: {cm.get('total_hits', 0)}"]
+            if cm.get("high_risk_courts"):
+                cm_lines.append(f"  High-risk courts: {', '.join(cm['high_risk_courts'])}")
+            for c in cm.get("sample_cases", [])[:6]:
+                cm_lines.append(f"  [{c['court']}] {c['title']} ({c['date']})")
+            cm_section = "CASEMINE COURT RECORDS:\n" + "\n".join(cm_lines)
+        else:
+            cm_section = "CASEMINE COURT RECORDS: Not available."
+
+        # ── Macro / regulatory section ────────────────────────────────────────
+        if has_macro:
+            macro_by_type: Dict[str, List[str]] = {}
+            for a in (macro_articles or []):
+                qt = a.get("query_type", "general")
+                macro_by_type.setdefault(qt, []).append(a.get("title", ""))
+            macro_lines = []
+            type_labels = {
+                "company_regulatory": "Company Regulatory/Enforcement",
+                "industry_regulatory": "Industry Law & Policy",
+                "macro_political": "Macro/Political/Sector Risk",
             }
-            
-        max_risk = 0.0
-        case_types = set()
-        
-        for case in cases:
-            ctype_raw = case.get("case_type", "").strip()
-            # Extract abbreviation (e.g. "IBA/123/2023" -> "IBA")
-            ctype = ctype_raw.split("/")[0] if "/" in ctype_raw else ctype_raw
-            
-            score = NCLT_CASE_TYPE_SCORES.get(ctype, 0.40) # default 0.4 for unknown types
-            max_risk = max(max_risk, score)
-            case_types.add(ctype)
-            
+            for qt, titles in macro_by_type.items():
+                label = type_labels.get(qt, qt)
+                macro_lines.append(f"  [{label}]")
+                for t in titles[:5]:
+                    macro_lines.append(f"    - {t}")
+            macro_section = "MACRO & REGULATORY CONTEXT (web search):\n" + "\n".join(macro_lines)
+        else:
+            macro_section = "MACRO & REGULATORY CONTEXT: No additional signals found."
+
+        # ── LLM prompt ────────────────────────────────────────────────────────
+        prompt = (
+            f"You are a senior credit-risk analyst specialising in Indian corporate litigation "
+            f"and regulatory risk.\n\n"
+            f"Analyse ALL FOUR evidence sources below for {company_name} (industry: {industry}) "
+            f"and produce a single unified litigation + regulatory risk score.\n\n"
+            f"{nclt_section}\n\n"
+            f"{news_section}\n\n"
+            f"{cm_section}\n\n"
+            f"{macro_section}\n\n"
+            f"SCORING GUIDANCE:\n"
+            f"- Active NCLT/IBC insolvency cases (no resolution)  = very high risk (0.7-1.0)\n"
+            f"- NCLT/IBC case with stay granted or petition stayed = medium risk (0.3-0.5)\n"
+            f"- NCLT case dismissed / petition withdrawn           = low risk (0.0-0.2)\n"
+            f"- SEBI/CCI/RBI enforcement or criminal HC (active)   = high risk (0.5-0.8)\n"
+            f"- Enforcement action resolved / penalty paid         = low-medium risk (0.1-0.3)\n"
+            f"- New law/regulation creating sector headwind        = medium-high risk (0.4-0.6)\n"
+            f"- Consumer forum cases at scale                     = medium risk (0.3-0.5)\n"
+            f"- Routine tax/customs disputes                       = low risk (0.0-0.2)\n"
+            f"- No material issues                                 = 0.0\n\n"
+            f"CRITICAL RESOLUTION RULES:\n"
+            f"- The RESOLUTION TRACKING tier shows outcomes (stay orders, dismissals, settlements).\n"
+            f"- If a legal event was FILED (legal_events tier) but then STAYED or DISMISSED "
+            f"(resolution_tracking tier), the risk must reflect the CURRENT STATUS, not the filing.\n"
+            f"- A stay order means the issue is not resolved — medium risk remains.\n"
+            f"- A dismissed petition = risk substantially reduced.\n"
+            f"- Always check if NCLT cases listed in NCLT PENDING CASES are truly still active "
+            f"or have been stayed/dismissed per news evidence.\n\n"
+            f"INSTRUCTIONS:\n"
+            f"1. NCLT case count + type are the strongest signal — weigh heavily.\n"
+            f"2. Cross-check RESOLUTION TRACKING news to see if NCLT cases are stayed or resolved.\n"
+            f"3. Use Macro/Regulatory context to identify sector-wide headwinds.\n"
+            f"4. If a regulatory action was resolved or penalty paid, note it and reduce score.\n"
+            f"5. Ignore routine tax disputes for large public companies.\n"
+            f"6. Write a SINGLE 3-5 sentence explanation covering current status — "
+            f"specifically call out if major risks are ACTIVE, STAYED, or RESOLVED.\n\n"
+            f"OUTPUT — strict JSON only, no markdown:\n"
+            f'{{"risk_score": 0.0, "severity": "low|medium|high", "confidence": 0.0, '
+            f'"risk_types": ["insolvency", "regulatory", "macro", ...], '
+            f'"legal_status": "active|stayed|resolved|mixed", '
+            f'"explanation": "3-5 sentence summary with current legal status", '
+            f'"nclt_flag": true, "news_flag": false, "macro_flag": false}}'
+        )
+
+        response = self._call_llm(prompt)
+
+        if not response:
+            logger.warning(f"[ExternalScrapingAgent] LLM analysis failed for {company_name}")
+            # Fallback: keyword score if LLM is down
+            fallback_risk = 0.0
+            if has_nclt:
+                scores = [NCLT_CASE_TYPE_SCORES.get(c.get("case_type", "").split("/")[0], 0.40)
+                          for c in nclt_cases]
+                fallback_risk = round(min(1.0, max(scores)), 4) if scores else 0.0
+            empty.update({
+                "final_risk": fallback_risk,
+                "severity": "high" if fallback_risk >= 0.7 else "medium" if fallback_risk >= 0.4 else "low",
+                "confidence": 0.3,
+                "evidence": f"[LLM unavailable] Keyword fallback: {len(nclt_cases)} NCLT cases found.",
+                "analysis_status": "llm_failed_fallback",
+            })
+            return empty
+
+        risk_score  = round(min(1.0, max(0.0, float(response.get("risk_score", 0.0)))), 4)
+        severity    = response.get("severity", "low").lower()
+        confidence  = round(min(0.95, float(response.get("confidence", 0.7))), 4)
+        explanation  = response.get("explanation", "")
+        risk_types   = response.get("risk_types", [])
+        legal_status = response.get("legal_status", "unknown").lower()
+
+        if severity not in ("low", "medium", "high"):
+            severity = "high" if risk_score >= 0.5 else "medium" if risk_score >= 0.25 else "low"
+        if legal_status not in ("active", "stayed", "resolved", "mixed", "unknown"):
+            legal_status = "unknown"
+
+        logger.info(
+            f"[ExternalScrapingAgent] Unified LLM: company={company_name} "
+            f"risk={risk_score} severity={severity} status={legal_status} "
+            f"nclt={len(nclt_cases)} conf={confidence}"
+        )
+
         return {
-            "nclt_risk": round(min(1.0, max_risk), 4),
-            "nclt_case_count": len(cases),
-            "nclt_severity": "high" if max_risk >= 0.75 else "medium" if max_risk >= 0.5 else "low",
-            "nclt_cases": [c.get("case_no") for c in cases],
-            "nclt_case_types": list(case_types),
-            "nclt_evidence": f"Found {len(cases)} active NCLT cases, highest risk from {', '.join(list(case_types)[:3])}."
+            "final_risk": risk_score,
+            "severity": severity,
+            "confidence": confidence,
+            "evidence": explanation,
+            "legal_status": legal_status,
+            "analysis_status": "llm_unified",
+            "risk_types": risk_types,
+            "nclt_case_count": len(nclt_cases),
+            "nclt_cases": [c.get("case_no") for c in nclt_cases],
+            "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+            "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
         }
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -335,63 +521,267 @@ class ExternalScrapingAgent(BaseAgent):
 
 
     def _fetch_company_news_risk(self, company_name: str, aliases: List[str] = None) -> List[Dict]:
-        """Fetch targeted news for the specific company and aliases."""
-        query_parts = [f'"{company_name}"']
+        """
+        Tiered company news fetch — three separate search passes with different
+        time windows and query strategies:
+
+        Tier 1 — RECENT (7 days)
+          General company news: business updates, earnings, leadership changes.
+
+        Tier 2 — LEGAL EVENTS (60 days)
+          Targeted legal/regulatory queries: insolvency petitions, NCLT filings,
+          court orders, SEBI/CCI enforcement, fraud allegations, winding-up.
+          Longer window because legal events unfold slowly.
+
+        Tier 3 — RESOLUTION (60 days)
+          Explicitly searches for outcomes: stay orders, petition dismissals,
+          acquittals, out-of-court settlements, penalty reversals.
+          Crucial for cases like Dream11 where a petition was filed then stayed.
+
+        Each article is tagged with `news_tier` so the LLM knows the temporal
+        and semantic context of each result.
+        """
+        all_articles: List[Dict] = []
+        seen: set = set()
+
+        # Build name variants for queries
+        short_name = re.sub(
+            r'\b(limited|ltd|pvt|private|inc|corp|corporation|llp|llc)\b', '',
+            company_name, flags=re.IGNORECASE
+        ).strip().strip(".")
+
+        name_terms = [f'"{company_name}"']
+        if short_name and short_name.lower() != company_name.lower():
+            name_terms.append(f'"{short_name}"')
         if aliases:
-            for alias in aliases:
-                if alias and len(alias) >= 3:
-                    query_parts.append(f'"{alias}"')
-        search_query = " OR ".join(query_parts)
-        encoded_query = quote_plus(search_query)
-        articles = []
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
+            for a in aliases:
+                if a and len(a) >= 3 and a.lower() not in (company_name.lower(), short_name.lower()):
+                    name_terms.append(f'"{a}"')
+        name_or = " OR ".join(name_terms[:4])  # cap to avoid overly long query
 
-        # Google News
-        try:
-            url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
-            response = self._session.get(url, timeout=20)
-            if response.status_code == 200:
-                root = ET.fromstring(response.content)
-                for item in root.findall(".//item")[:15]:
-                    title = (item.findtext("title") or "").strip()
-                    pub_date_str = item.findtext("pubDate")
-                    description = (item.findtext("description") or "").strip()
-                    if not title: continue
-                    if pub_date_str:
-                        try:
-                            if parsedate_to_datetime(pub_date_str) < cutoff_date: continue
-                        except: pass
-                    articles.append({"title": title, "description": description, "pubDate": pub_date_str, "source": "google_news"})
-        except Exception as e:
-            logger.debug(f"[ExternalScrapingAgent] Google company news failed: {e}")
+        tiers = [
+            # Tier 1: Recent general news (30 days — broader recent context)
+            {
+                "query": name_or,
+                "days": 30,
+                "tier": "recent_general",
+                "max_items": 10,
+            },
+            # Tier 2: Legal events over past 365 days (1 year)
+            {
+                "query": (
+                    f"({name_or}) AND ("
+                    f"insolvency OR NCLT OR \"winding up\" OR \"court order\" OR lawsuit OR "
+                    f"\"petition filed\" OR SEBI OR RBI OR CCI OR MCA OR fraud OR "
+                    f"\"criminal case\" OR \"FIR\" OR penalty OR \"tax demand\" OR "
+                    f"\"enforcement\" OR \"show cause\" OR \"IBC\")"
+                ),
+                "days": 365,
+                "tier": "legal_events",
+                "max_items": 15,
+            },
+            # Tier 3: Resolution / outcome tracking (365 days — 1 year)
+            {
+                "query": (
+                    f"({name_or}) AND ("
+                    f"\"stay order\" OR \"stay granted\" OR dismissed OR acquitted OR "
+                    f"\"petition dismissed\" OR \"order quashed\" OR \"relief granted\" OR "
+                    f"settlement OR \"appeal allowed\" OR \"High Court\" OR \"Supreme Court\" OR "
+                    f"\"NCLAT\" OR \"order set aside\" OR resolved OR \"out of court\")"
+                ),
+                "days": 365,
+                "tier": "resolution_tracking",
+                "max_items": 15,
+            },
+        ]
 
-        # Bing News
-        try:
-            url = f"{self.BING_NEWS_RSS_URL}?q={encoded_query}&format=rss"
-            response = self._session.get(url, timeout=20)
-            if response.status_code == 200:
-                root = ET.fromstring(response.content)
-                for item in root.findall(".//item")[:15]:
-                    title = (item.findtext("title") or "").strip()
-                    pub_date_str = item.findtext("pubDate")
-                    description = (item.findtext("description") or "").strip()
-                    if not title: continue
-                    if pub_date_str:
-                        try:
-                            if parsedate_to_datetime(pub_date_str) < cutoff_date: continue
-                        except: pass
-                    articles.append({"title": title, "description": description, "pubDate": pub_date_str, "source": "bing_news"})
-        except Exception as e:
-            logger.debug(f"[ExternalScrapingAgent] Bing company news failed: {e}")
+        def _rss_fetch(encoded_q: str, days: int, tier: str, max_items: int) -> List[Dict]:
+            results = []
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-        # Deduplicate
-        merged = {}
-        for a in articles:
-            key = a["title"].lower()
-            if key not in merged:
-                merged[key] = a
+            # Google News
+            try:
+                url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_q}&hl=en-IN&gl=IN&ceid=IN:en"
+                resp = self._session.get(url, timeout=20)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    for item in root.findall(".//item")[:max_items]:
+                        title = (item.findtext("title") or "").strip()
+                        desc  = (item.findtext("description") or "").strip()
+                        pub   = item.findtext("pubDate")
+                        if not title or title.lower() in seen:
+                            continue
+                        if pub:
+                            try:
+                                if parsedate_to_datetime(pub) < cutoff:
+                                    continue
+                            except Exception:
+                                pass
+                        seen.add(title.lower())
+                        results.append({"title": title, "description": desc, "pubDate": pub,
+                                        "source": "google_news", "news_tier": tier})
+            except Exception as e:
+                logger.debug(f"[ExternalScrapingAgent] Google ({tier}) failed: {e}")
 
-        return list(merged.values())[:20]
+            # Bing News
+            try:
+                url = f"{self.BING_NEWS_RSS_URL}?q={encoded_q}&format=rss"
+                resp = self._session.get(url, timeout=20)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    for item in root.findall(".//item")[:max_items]:
+                        title = (item.findtext("title") or "").strip()
+                        desc  = (item.findtext("description") or "").strip()
+                        pub   = item.findtext("pubDate")
+                        if not title or title.lower() in seen:
+                            continue
+                        if pub:
+                            try:
+                                if parsedate_to_datetime(pub) < cutoff:
+                                    continue
+                            except Exception:
+                                pass
+                        seen.add(title.lower())
+                        results.append({"title": title, "description": desc, "pubDate": pub,
+                                        "source": "bing_news", "news_tier": tier})
+            except Exception as e:
+                logger.debug(f"[ExternalScrapingAgent] Bing ({tier}) failed: {e}")
+
+            return results
+
+        for t in tiers:
+            encoded = quote_plus(t["query"])
+            batch = _rss_fetch(encoded, t["days"], t["tier"], t["max_items"])
+            all_articles.extend(batch)
+            logger.debug(
+                f"[ExternalScrapingAgent] News tier={t['tier']} "
+                f"company={company_name} fetched={len(batch)}"
+            )
+
+        logger.info(
+            f"[ExternalScrapingAgent] News fetch complete: company={company_name} "
+            f"total={len(all_articles)} "
+            f"(general={sum(1 for a in all_articles if a['news_tier']=='recent_general')}, "
+            f"legal={sum(1 for a in all_articles if a['news_tier']=='legal_events')}, "
+            f"resolution={sum(1 for a in all_articles if a['news_tier']=='resolution_tracking')})"
+        )
+        return all_articles[:40]  # cap; LLM sees top-5 per tier anyway
+
+
+    def _fetch_macro_context(self, company_name: str, industry: str) -> List[Dict]:
+        """
+        Fetch industry-level macro signals: regulatory changes, new laws, political
+        risk, sector-wide enforcement actions, and government policy shifts.
+
+        Runs THREE targeted queries:
+          1. Company-specific regulatory/enforcement news
+          2. Industry-level regulatory & law changes
+          3. RBI / SEBI / MCA / CCI / government policy affecting the sector
+
+        Returns a flat list of article dicts (title, description, pubDate, source, query_type).
+        Cached for 3h (shorter than company news since macro events move faster).
+        """
+        results: List[Dict] = []
+        seen: set = set()
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=365)   # 1-year window for macro/regulatory news
+
+        # Derive a short sector label for queries
+        sector = industry.lower() if industry and industry != "unknown" else ""
+
+        # Company short name (strip "Ltd", "Pvt" etc)
+        short_name = re.sub(
+            r'\b(limited|ltd|pvt|private|inc|corp|corporation|llp|llc)\b', '',
+            company_name, flags=re.IGNORECASE
+        ).strip().strip(".")
+
+        queries = [
+            # 1. Company-level regulatory / enforcement
+            {
+                "q": f'"{short_name}" (SEBI OR RBI OR MCA OR CCI OR penalty OR notice OR ban OR enforcement OR regulation)',
+                "type": "company_regulatory",
+            },
+            # 2. Industry-level law / regulation changes
+            {
+                "q": (
+                    f'India {sector} (regulation OR law OR policy OR "government order" OR '
+                    f'"new rule" OR compliance OR reform OR enforcement OR ban OR penalty) 2024 OR 2025'
+                ),
+                "type": "industry_regulatory",
+            },
+            # 3. Macro / political / sector-wide risk
+            {
+                "q": (
+                    f'India {sector} (insolvency OR "IBC amendment" OR "SEBI circular" OR '
+                    f'"RBI directive" OR "ministry notification" OR "budget impact" OR '
+                    f'"court ruling" OR "Supreme Court" OR political) 2024 OR 2025'
+                ),
+                "type": "macro_political",
+            },
+        ]
+
+        for q_info in queries:
+            encoded = quote_plus(q_info["q"])
+            q_type  = q_info["type"]
+
+            # Google News RSS
+            try:
+                url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
+                resp = self._session.get(url, timeout=15)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    for item in root.findall(".//item")[:8]:
+                        title = (item.findtext("title") or "").strip()
+                        desc  = (item.findtext("description") or "").strip()
+                        pub   = item.findtext("pubDate")
+                        if not title or title.lower() in seen:
+                            continue
+                        if pub:
+                            try:
+                                if parsedate_to_datetime(pub) < cutoff_date:
+                                    continue
+                            except Exception:
+                                pass
+                        seen.add(title.lower())
+                        results.append({
+                            "title": title, "description": desc,
+                            "pubDate": pub, "source": "google_news",
+                            "query_type": q_type,
+                        })
+            except Exception as e:
+                logger.debug(f"[ExternalScrapingAgent] Macro Google fetch ({q_type}) failed: {e}")
+
+            # Bing News RSS (supplemental)
+            try:
+                url = f"{self.BING_NEWS_RSS_URL}?q={encoded}&format=rss"
+                resp = self._session.get(url, timeout=15)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    for item in root.findall(".//item")[:6]:
+                        title = (item.findtext("title") or "").strip()
+                        desc  = (item.findtext("description") or "").strip()
+                        pub   = item.findtext("pubDate")
+                        if not title or title.lower() in seen:
+                            continue
+                        if pub:
+                            try:
+                                if parsedate_to_datetime(pub) < cutoff_date:
+                                    continue
+                            except Exception:
+                                pass
+                        seen.add(title.lower())
+                        results.append({
+                            "title": title, "description": desc,
+                            "pubDate": pub, "source": "bing_news",
+                            "query_type": q_type,
+                        })
+            except Exception as e:
+                logger.debug(f"[ExternalScrapingAgent] Macro Bing fetch ({q_type}) failed: {e}")
+
+        logger.info(
+            f"[ExternalScrapingAgent] Macro context for '{company_name}' "
+            f"(industry={industry}): {len(results)} articles"
+        )
+        return results[:24]   # cap total to keep prompt manageable
 
     def _fetch_casemine(self, company_name: str) -> Dict:
         """
@@ -907,92 +1297,104 @@ OUTPUT (STRICT JSON):
             
         company_name = company_name.strip()[:100]
 
-        # 1. Fetch NCLT (Cached 12h)
+        # 1. Fetch NCLT raw cases (cached 12h)
         nclt_cache_key = company_name.lower()
         nclt_entry = self._nclt_cache.get(nclt_cache_key)
-        
         if nclt_entry and (datetime.utcnow() - nclt_entry["timestamp"]).total_seconds() < 43200:
-            nclt_data = nclt_entry["data"]
+            nclt_cases = nclt_entry["data"]
         else:
             logger.info(f"[ExternalScrapingAgent] Fetching NCLT for {company_name}...")
-            cases = self._fetch_nclt_all_benches(company_name)
-            nclt_data = self._score_nclt_cases(cases)
-            self._nclt_cache[nclt_cache_key] = {"data": nclt_data, "timestamp": datetime.utcnow()}
+            nclt_cases = self._fetch_nclt_all_benches(company_name)
+            self._nclt_cache[nclt_cache_key] = {"data": nclt_cases, "timestamp": datetime.utcnow()}
 
-        # 2. Fetch Targeted Company News (Cached 6h)
+        # 2. Fetch news (cached 6h)
         news_cache_key = company_name.lower()
-        news_cache_entry = self._news_cache.get(news_cache_key)
-
-        if news_cache_entry and (datetime.utcnow() - news_cache_entry["timestamp"]).total_seconds() < 21600:
-            industry_data = news_cache_entry["data"]
+        news_entry = self._news_cache.get(news_cache_key)
+        if news_entry and (datetime.utcnow() - news_entry["timestamp"]).total_seconds() < 43200:
+            articles = news_entry["data"]
         else:
-            logger.info(f"[ExternalScrapingAgent] Fetching targeted news for {company_name}...")
+            logger.info(f"[ExternalScrapingAgent] Fetching news for {company_name}...")
             articles = self._fetch_company_news_risk(company_name, aliases=aliases)
+            self._news_cache[news_cache_key] = {"data": articles, "timestamp": datetime.utcnow()}
 
-            # 2b. CaseMine — fetch case metadata (cached alongside news, 12h)
-            cm_cache_key = f"cm:{company_name.lower()}"
-            cm_entry = self._nclt_cache.get(cm_cache_key)
-            if cm_entry and (datetime.utcnow() - cm_entry["timestamp"]).total_seconds() < 43200:
-                casemine_data = cm_entry["data"]
-            else:
-                logger.info(f"[ExternalScrapingAgent] Fetching CaseMine for {company_name}...")
-                casemine_data = self._fetch_casemine(company_name)
-                self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.utcnow()}
+        # 3. Fetch CaseMine (cached 12h)
+        cm_cache_key = f"cm:{company_name.lower()}"
+        cm_entry = self._nclt_cache.get(cm_cache_key)
+        if cm_entry and (datetime.utcnow() - cm_entry["timestamp"]).total_seconds() < 43200:
+            casemine_data = cm_entry["data"]
+        else:
+            logger.info(f"[ExternalScrapingAgent] Fetching CaseMine for {company_name}...")
+            casemine_data = self._fetch_casemine(company_name)
+            self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.utcnow()}
 
-            industry_data = self._analyze_company_news(
-                articles,
+        # 4. Fetch macro/regulatory context (cached 3h)
+        macro_cache_key = f"macro:{company_name.lower()}:{industry.lower()}"
+        macro_entry = self._news_cache.get(macro_cache_key)
+        if macro_entry and (datetime.utcnow() - macro_entry["timestamp"]).total_seconds() < 21600:
+            macro_articles = macro_entry["data"]
+        else:
+            logger.info(f"[ExternalScrapingAgent] Fetching macro/regulatory context for {company_name}...")
+            macro_articles = self._fetch_macro_context(company_name, industry)
+            self._news_cache[macro_cache_key] = {"data": macro_articles, "timestamp": datetime.utcnow()}
+
+        # 5. Unified LLM analysis — single call sees NCLT + news + CaseMine + macro
+        analysis_cache_key = f"analysis:{company_name.lower()}"
+        analysis_entry = self._news_cache.get(analysis_cache_key)
+        if analysis_entry and (datetime.utcnow() - analysis_entry["timestamp"]).total_seconds() < 43200:
+            fusion = analysis_entry["data"]
+        else:
+            fusion = self._unified_llm_analysis(
                 company_name=company_name,
                 industry=industry,
-                aliases=aliases,
+                nclt_cases=nclt_cases,
+                articles=articles,
                 casemine_data=casemine_data,
+                macro_articles=macro_articles,
+                aliases=aliases,
             )
-            self._news_cache[news_cache_key] = {"data": industry_data, "timestamp": datetime.utcnow()}
+            self._news_cache[analysis_cache_key] = {"data": fusion, "timestamp": datetime.utcnow()}
 
-        # 3. Merge Signals
-        fusion = self._merge_signals(nclt_data, industry_data)
         base_risk = fusion["final_risk"]
-        
-        # 4. Temporal Adjustment
+
+        # 5. Temporal adjustment
         final_risk, historical_avg = self._temporal_adjustment(customer_id, base_risk)
-        
-        # Store History
+
+        # Store history
         history = self._risk_history.setdefault(customer_id, [])
         history.append({
             "timestamp": datetime.utcnow(),
             "base_risk": base_risk,
             "risk": final_risk,
-            "source": "nclt+news",
+            "source": "unified_llm",
         })
         if len(history) > self._MAX_HISTORY:
             history.pop(0)
 
-        # Deduplication check
+        # Deduplication
         last_risk = self._last_published_risk.get(customer_id)
         if last_risk is not None and last_risk == final_risk:
             return
 
         # Build payload
+        nclt_count = fusion.get("nclt_case_count", 0)
         payload = {
             "customer_id": customer_id,
             "company_name": company_name,
 
-            "litigation_flag": nclt_data["nclt_case_count"] > 0,
+            "litigation_flag": nclt_count > 0,
             "litigation_risk": final_risk,
             "severity": fusion["severity"],
             "evidence": fusion["evidence"],
+            "legal_status": fusion.get("legal_status", "unknown"),
+            "risk_types": fusion.get("risk_types", []),
 
-            "nclt_case_count": nclt_data["nclt_case_count"],
-            "nclt_cases": nclt_data["nclt_cases"],
-            "nclt_severity": nclt_data["nclt_severity"],
-            "nclt_risk": nclt_data["nclt_risk"],
+            "nclt_case_count": nclt_count,
+            "nclt_cases": fusion.get("nclt_cases", []),
 
-            "casemine_total": industry_data.get("casemine_total", 0),
-            "casemine_high_risk_courts": industry_data.get("casemine_high_risk_courts", []),
+            "casemine_total": fusion.get("casemine_total", 0),
+            "casemine_high_risk_courts": fusion.get("casemine_high_risk_courts", []),
 
-            "industry_tag": "targeted_web_search",
-            "industry_risk": industry_data["risk"],
-
-            "source": "nclt+casemine+industry_news",
+            "source": "nclt+casemine+news+llm_unified",
             "confidence": fusion["confidence"],
             "analysis_status": fusion["analysis_status"],
             "temporal_context": {
@@ -1017,6 +1419,6 @@ OUTPUT (STRICT JSON):
 
         logger.info(
             f"[ExternalScrapingAgent] company={company_name} "
-            f"final_risk={final_risk:.4f} nclt_cases={nclt_data['nclt_case_count']} "
-            f"industry={'targeted_web_search'} ind_risk={industry_data['risk']:.4f}"
+            f"final_risk={final_risk:.4f} nclt_cases={nclt_count} "
+            f"severity={fusion['severity']} status={fusion['analysis_status']}"
         )
