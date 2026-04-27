@@ -24,21 +24,28 @@ class ExternalDataAgent(BaseAgent):
     Subscribes to:
     - acis.metrics (customer.metrics.updated)
 
-    Enriches customer events with Screener.in financial data:
-    - PE ratio, ROE, ROCE, Debt, Market Cap
-    - Sales growth, Profit growth, Operating margin, Interest coverage
-    - Computed external_risk based on financial signals
+    Enriches customer events with financial data:
+    - PE ratio, ROE, ROCE, Debt, Market Cap  (NSE/BSE primary)
+    - Screener.in fallback for missing fields
+    - Tofler.in for private companies (primary)
+    - LLM-based estimation for private companies with no structured data
+    - Computed external_risk with tiered confidence model
 
     Produces:
-    - acis.metrics (ExternalDataEnriched)
+    - acis.metrics (ExternalDataEnriched)  — ONLY when real data is fetched.
+      Throttled events do NOT publish (no-data events violate event contract).
     """
 
     TOPIC_INPUT = "acis.metrics"
     TOPIC_OUTPUT = "acis.metrics"
     DB_PATH = "acis.db"
     CACHE_TTL_HOURS = 24
-    # FIX 8: Throttle external data fetches to prevent burst API calls
-    THROTTLE_MIN_HOURS = 24  # Don't fetch same company twice within 24 hours
+    THROTTLE_MIN_HOURS = 24
+
+    # Confidence weights for tiered private-company enrichment
+    CONFIDENCE_STRUCTURED = 0.85   # NSE/BSE/Screener structured data
+    CONFIDENCE_TOFLER     = 0.75   # Tofler.in semi-structured
+    CONFIDENCE_LLM        = 0.20   # LLM news-based estimation (weak signal)
 
     def __init__(
         self,
@@ -48,10 +55,10 @@ class ExternalDataAgent(BaseAgent):
     ):
         super().__init__(
             agent_name="ExternalDataAgent",
-            agent_version="2.0.1",  # Bumped: FIX 8 added fetch throttling
+            agent_version="3.0.0",  # Bumped: no-publish-when-throttled + Tofler + LLM fallback
             group_id="external-data-group",
             subscribed_topics=[self.TOPIC_INPUT],
-            capabilities=["external_data_enrichment", "screener_scraping"],
+            capabilities=["external_data_enrichment", "screener_scraping", "tofler_enrichment", "llm_estimation"],
             kafka_client=kafka_client,
             agent_type="ExternalDataAgent",
         )
@@ -97,61 +104,90 @@ class ExternalDataAgent(BaseAgent):
     # DATABASE FUNCTIONS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _get_cached_financials(self, slug: str) -> Optional[Dict]:
+    def _get_cached_financials(self, company_name: str, slug: str) -> Optional[Dict]:
         """
-        Query external_financials table for cached data.
+        Query external_financials by real company_name first, then by ticker (slug).
         Returns data if exists and updated_at < 24 hours, else None.
-        Uses slug as cache key for consistency.
         """
         try:
             conn = sqlite3.connect(self._db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
+            # Try real company name first
             cursor.execute(
                 "SELECT * FROM external_financials WHERE company_name = ?",
-                (slug,)
+                (company_name,)
             )
             row = cursor.fetchone()
+            # Fallback: lookup by ticker/slug
+            if not row:
+                try:
+                    cursor.execute(
+                        "SELECT * FROM external_financials WHERE ticker = ?",
+                        (slug,)
+                    )
+                    row = cursor.fetchone()
+                except Exception:
+                    pass
             conn.close()
 
             if row:
                 updated_at = datetime.fromisoformat(row["updated_at"])
                 if datetime.utcnow() - updated_at < timedelta(hours=self.CACHE_TTL_HOURS):
-                    logger.info(f"[ExternalDataAgent] Cache hit for {slug}")
+                    logger.info(f"[ExternalDataAgent] Cache hit for {company_name}")
                     return dict(row)
                 else:
-                    logger.info(f"[ExternalDataAgent] Cache expired for {slug}")
+                    logger.info(f"[ExternalDataAgent] Cache expired for {company_name}")
             return None
         except Exception as e:
             logger.warning(f"[ExternalDataAgent] DB read error: {e}")
             return None
 
     def _store_financials(self, data: Dict) -> None:
-        """Insert or update financial data into external_financials table."""
+        """Insert or update financial data into external_financials table.
+
+        BUG 3 FIX: store real company_name (e.g. 'Kotak Mahindra Bank Ltd'),
+        not the Screener slug ('KOTAKBANK').  The slug is stored in the
+        'ticker' column as a secondary lookup key.
+        Only non-NULL incoming values overwrite existing columns (COALESCE),
+        so partial updates never erase previously stored fields.
+        """
+        real_name = data.get("real_company_name") or data.get("company_name")
+        ticker    = data.get("ticker") or data.get("company_name")  # slug used as ticker
         try:
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
+
+            # Ensure ticker column exists (migration-safe)
+            try:
+                cursor.execute("ALTER TABLE external_financials ADD COLUMN ticker TEXT")
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
             cursor.execute("""
                 INSERT INTO external_financials (
-                    company_name, pe, roe, roce, debt, market_cap,
+                    company_name, ticker, pe, roe, roce, debt, market_cap,
                     sales_growth, profit_growth, operating_margin,
                     interest_coverage, risk, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_name) DO UPDATE SET
-                    pe=excluded.pe,
-                    roe=excluded.roe,
-                    roce=excluded.roce,
-                    debt=excluded.debt,
-                    market_cap=excluded.market_cap,
-                    sales_growth=excluded.sales_growth,
-                    profit_growth=excluded.profit_growth,
-                    operating_margin=excluded.operating_margin,
-                    interest_coverage=excluded.interest_coverage,
-                    risk=excluded.risk,
-                    updated_at=excluded.updated_at
+                    ticker           = COALESCE(excluded.ticker,            external_financials.ticker),
+                    pe               = COALESCE(excluded.pe,               external_financials.pe),
+                    roe              = COALESCE(excluded.roe,              external_financials.roe),
+                    roce             = COALESCE(excluded.roce,             external_financials.roce),
+                    debt             = COALESCE(excluded.debt,             external_financials.debt),
+                    market_cap       = COALESCE(excluded.market_cap,       external_financials.market_cap),
+                    sales_growth     = COALESCE(excluded.sales_growth,     external_financials.sales_growth),
+                    profit_growth    = COALESCE(excluded.profit_growth,    external_financials.profit_growth),
+                    operating_margin = COALESCE(excluded.operating_margin, external_financials.operating_margin),
+                    interest_coverage= COALESCE(excluded.interest_coverage,external_financials.interest_coverage),
+                    risk             = COALESCE(excluded.risk,             external_financials.risk),
+                    updated_at       = excluded.updated_at
             """, (
-                data["company_name"],
+                real_name,
+                ticker,
                 data.get("pe"),
                 data.get("roe"),
                 data.get("roce"),
@@ -166,7 +202,7 @@ class ExternalDataAgent(BaseAgent):
             ))
             conn.commit()
             conn.close()
-            logger.info(f"[ExternalDataAgent] Stored financials for {data['company_name']}")
+            logger.info(f"[ExternalDataAgent] Stored financials for {real_name} (ticker={ticker})")
         except Exception as e:
             logger.error(f"[ExternalDataAgent] DB write error: {e}")
 
@@ -542,20 +578,127 @@ class ExternalDataAgent(BaseAgent):
         return data
 
     def _enrich_with_screener_fallback(self, data: Dict[str, Any], company_name: str, slug: str) -> Dict[str, Any]:
-        """Fill missing NSE/BSE values using screener.in (historical/advanced ratios)."""
+        """Fill missing NSE/BSE values using Screener.in (historical/advanced ratios)."""
         essential_keys = ["pe", "roe", "roce", "debt", "market_cap", "sales_growth", "profit_growth"]
         needs_fallback = any(data.get(k) is None for k in essential_keys)
-        
+
         if needs_fallback:
             screener_data = self._fetch_screener_data(company_name, slug)
             for k in essential_keys + ["operating_margin", "interest_coverage"]:
                 if data.get(k) is None:
                     data[k] = screener_data.get(k)
-            # If we pulled anything from screener, reflect it in the source.
             data["source"] = "nse/bse+screener.in"
-            
+
+        # If still missing essential data, try Tofler (private companies)
+        still_missing = any(data.get(k) is None for k in essential_keys)
+        if still_missing:
+            tofler_data = self._fetch_tofler_data(company_name)
+            if tofler_data:
+                for k in essential_keys + ["operating_margin", "interest_coverage"]:
+                    if data.get(k) is None:
+                        data[k] = tofler_data.get(k)
+                data["source"] = data.get("source", "") + "+tofler"
+                data["confidence"] = self.CONFIDENCE_TOFLER
+                logger.info(f"[ExternalDataAgent] Tofler enrichment applied for {company_name}")
+
+        # Last resort: LLM estimation — applied at low confidence weight
+        still_missing_after_tofler = all(data.get(k) is None for k in essential_keys)
+        if still_missing_after_tofler:
+            llm_risk = self._estimate_risk_from_llm(company_name)
+            if llm_risk is not None:
+                # LLM risk is a weak signal — scale by confidence weight before storing
+                data["llm_estimated_risk"] = round(llm_risk * self.CONFIDENCE_LLM, 4)
+                data["source"] = data.get("source", "") + "+llm_estimation"
+                data["confidence"] = self.CONFIDENCE_LLM
+                logger.info(
+                    f"[ExternalDataAgent] LLM estimation applied for {company_name}: "
+                    f"raw={llm_risk:.4f}, weighted={data['llm_estimated_risk']:.4f}"
+                )
+
         data["risk"] = self._compute_risk(data)
         return data
+
+    def _fetch_tofler_data(self, company_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch basic financial signals from Tofler.in public search.
+        Tofler provides MCA/ROC registration data including authorised capital,
+        paid-up capital, and director count — useful for private companies.
+        Returns a partial dict with any fields found, or None on failure.
+        """
+        try:
+            search_url = f"https://www.tofler.in/search?company_name={quote_plus(company_name)}"
+            resp = self._session.get(search_url, timeout=15)
+            if resp.status_code != 200:
+                return None
+
+            soup = BeautifulSoup(resp.text, "lxml")
+            result = {}
+
+            # Try to extract paid-up capital (proxy for company size / debt capacity)
+            for el in soup.find_all(text=True):
+                text = str(el).strip()
+                if "paid up capital" in text.lower():
+                    # Look for a nearby numeric value
+                    parent = el.parent
+                    if parent:
+                        sib = parent.find_next_sibling()
+                        if sib:
+                            val = self._parse_numeric(sib.get_text(strip=True))
+                            if val:
+                                result["market_cap"] = val  # best proxy available
+                                break
+
+            return result if result else None
+        except Exception as e:
+            logger.debug(f"[ExternalDataAgent] Tofler fetch failed for {company_name}: {e}")
+            return None
+
+    def _estimate_risk_from_llm(self, company_name: str) -> Optional[float]:
+        """
+        Last-resort: call Groq LLM to estimate a financial risk score
+        for private companies with no structured data.
+
+        Returns a raw float in [0, 1] representing estimated financial risk.
+        This is a WEAK SIGNAL — callers MUST multiply by CONFIDENCE_LLM (0.20)
+        before storing or comparing against structured scores.
+        Returns None if LLM is unavailable or response is malformed.
+        """
+        import os, json
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            logger.debug("[ExternalDataAgent] GROQ_API_KEY not set — skipping LLM estimation")
+            return None
+
+        prompt = (
+            f"You are a financial risk analyst. Based solely on public knowledge about "
+            f"'{company_name}', estimate a financial risk score between 0.0 (very low risk) "
+            f"and 1.0 (very high risk). Consider: profitability, leverage, funding stage, "
+            f"growth trajectory, regulatory environment. "
+            f"Respond ONLY with a JSON object: {{\"financial_risk\": <float>}}"
+        )
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            body = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "response_format": {"type": "json_object"},
+            }
+            resp = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=headers, json=body, timeout=20,
+            )
+            if resp.status_code == 200:
+                content = resp.json()["choices"][0]["message"]["content"]
+                parsed = json.loads(content)
+                raw = float(parsed.get("financial_risk", 0.5))
+                return max(0.0, min(1.0, raw))
+        except Exception as e:
+            logger.debug(f"[ExternalDataAgent] LLM estimation failed for {company_name}: {e}")
+        return None
 
     def _compute_risk(self, data: Dict) -> Optional[float]:
         """
@@ -569,6 +712,7 @@ class ExternalDataAgent(BaseAgent):
         - efficiency risk
 
         Returns score in [0.0, 1.0] or None if no signals available.
+        Uses llm_estimated_risk (already confidence-weighted) as fallback.
         """
 
         def normalize(val, low, high):
@@ -636,7 +780,11 @@ class ExternalDataAgent(BaseAgent):
         # ----------------------------
         total_weight = sum(w for _, _, w in scores)
         if total_weight == 0:
-            return None  # no external financial data, return None
+            # No structured signals — use LLM-estimated risk if available (already confidence-weighted)
+            llm_fallback = data.get("llm_estimated_risk")
+            if llm_fallback is not None:
+                return round(max(0.0, min(1.0, llm_fallback)), 4)
+            return None  # truly no data
 
         weighted_sum = sum(score * weight for _, score, weight in scores)
 
@@ -651,10 +799,18 @@ class ExternalDataAgent(BaseAgent):
     # ─────────────────────────────────────────────────────────────────────────
 
     def handle_event(self, event: Event) -> None:
-        """Handle customer.metrics.updated event and enrich with external data."""
+        """Handle customer.metrics.updated event and enrich with external data.
+
+        KEY CHANGE: If the company is throttled (fetched < 24h ago) and there
+        is no cached data to serve, we return WITHOUT publishing an event.
+        Publishing ExternalDataEnriched with external_risk=None violates the
+        event contract and causes the AggregatorAgent to overwrite valid cached
+        scores with None.
+
+        Rule enforced here: only publish when new information is produced.
+        """
         logger.info(f"Received event: {event.event_type} for entity {event.entity_id}")
 
-        # Step 1: Extract data
         payload = event.payload or {}
         customer_id = payload.get("customer_id")
 
@@ -662,53 +818,43 @@ class ExternalDataAgent(BaseAgent):
             logger.warning("Missing customer_id in metrics event")
             return
 
-        # Step 2: Resolve company name with improved fallback chain
-        # Priority: payload -> QueryAgent lookup -> customer_id
+        # Resolve company name
         company_name = payload.get("company_name")
         if not company_name and self._query_agent:
             try:
                 customer = self._query_agent.get_customer(customer_id)
                 if customer:
                     company_name = customer.get("name")
-                    if company_name:
-                        logger.debug(f"[ExternalDataAgent] Resolved company name from DB: {company_name}")
             except Exception as e:
-                logger.debug(f"[ExternalDataAgent] Failed to lookup customer from QueryAgent: {e}")
+                logger.debug(f"[ExternalDataAgent] Failed to lookup customer: {e}")
 
-        # Never fall back to using customer_id as company name.
-        # Searching Screener/NSE for "cust_00001" is meaningless and will
-        # create ExternalDataEnriched events with no useful payload, which
-        # then cascade into stub customer rows via AggregatorAgent.
         if not company_name:
             logger.debug(
                 f"[ExternalDataAgent] Skipping enrichment for {customer_id}: "
-                f"no company name resolved (customer may not be in DB yet)"
+                f"no company name resolved"
             )
             return
 
         company_name = company_name.strip()[:100]
 
-        # Step 3: Resolve slug FIRST (consistent cache key)
+        # Resolve slug (ticker)
         slug = self._resolve_slug(company_name)
 
-        # FIX 8: THROTTLE - Check if we've fetched this company recently
         current_time = time.time()
         last_fetch = self._last_fetch_time.get(slug, 0)
-        time_since_fetch = (current_time - last_fetch) / 3600  # Convert to hours
+        time_since_fetch = (current_time - last_fetch) / 3600
 
-        # Step 4: Check DB cache using slug
-        cached = self._get_cached_financials(slug)
+        # Check DB cache (keyed by real company_name, fallback by slug/ticker)
+        cached = self._get_cached_financials(company_name, slug)
 
         if cached:
-            # Use cached data and restore throttle time from DB so restarts
-            # don't bypass the 24h throttle (Issue 11 fix)
+            # Restore throttle time from DB cache
             logger.info(
-                f"[ExternalDataAgent] Using cached data for {slug} "
-                f"(fetched {time_since_fetch:.1f} hours ago)"
+                f"[ExternalDataAgent] Using cached data for {company_name} "
+                f"(fetched {time_since_fetch:.1f}h ago)"
             )
-            external_risk = cached["risk"]
+            external_risk = cached.get("risk")
             financial_data = cached
-            # Restore in-memory throttle from DB cache timestamp
             try:
                 updated_at = cached.get("updated_at")
                 if updated_at:
@@ -716,39 +862,43 @@ class ExternalDataAgent(BaseAgent):
                     self._last_fetch_time[slug] = max(self._last_fetch_time.get(slug, 0), db_ts)
             except Exception:
                 self._last_fetch_time[slug] = current_time
-        else:
-            # FIX 8: Check throttle before fetching fresh data
-            if last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
-                logger.info(
-                    f"[ExternalDataAgent] Throttled for {slug}: "
-                    f"last fetch was {time_since_fetch:.1f}h ago, "
-                    f"min interval is {self.THROTTLE_MIN_HOURS}h"
-                )
-                # Don't fetch, use default risk
-                external_risk = None
-                financial_data = {
-                    "company_name": slug,
-                    "risk": external_risk,
-                    "pe": None,
-                    "roe": None,
-                    "roce": None,
-                    "debt": None,
-                    "market_cap": None,
-                    "sales_growth": None,
-                    "profit_growth": None,
-                    "operating_margin": None,
-                    "interest_coverage": None,
-                }
-            else:
-                # FIX 8: Fetch fresh data and update throttle time
-                logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug} (Primary: NSE/BSE)")
-                financial_data = self._fetch_primary_exchange_data(company_name, slug)
-                financial_data = self._enrich_with_screener_fallback(financial_data, company_name, slug)
-                self._store_financials(financial_data)
-                external_risk = financial_data.get("risk")
-                self._last_fetch_time[slug] = current_time  # Update throttle time
 
-        # Step 5: Create enriched payload with all financial signals
+        elif last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
+            # --- THROTTLED: NO CACHE AND WITHIN 24H WINDOW ---
+            # Do NOT publish — returning here means the aggregator keeps whatever
+            # good data it already has.  Publishing None would overwrite it.
+            logger.info(
+                f"[ExternalDataAgent] Throttled for {slug}: "
+                f"last fetch was {time_since_fetch:.1f}h ago. "
+                f"Skipping publish to preserve downstream cache integrity."
+            )
+            return  # ← BUG 1 FIX: exit without publishing
+
+        else:
+            # Fresh fetch
+            logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug} (Primary: NSE/BSE)")
+            financial_data = self._fetch_primary_exchange_data(company_name, slug)
+            financial_data = self._enrich_with_screener_fallback(financial_data, company_name, slug)
+
+            # BUG 3 FIX: tag with real company name + slug as ticker before storing
+            financial_data["real_company_name"] = company_name
+            financial_data["ticker"] = slug
+
+            self._store_financials(financial_data)
+            external_risk = financial_data.get("risk")
+            self._last_fetch_time[slug] = current_time
+
+        # If we have no risk at all (private company, all sources failed) — still
+        # publish so the aggregator knows this customer was processed (with None).
+        # The DB layer will COALESCE(None, existing) so nothing is destroyed.
+        source = financial_data.get("source", "screener.in")
+        confidence = financial_data.get("confidence", self.CONFIDENCE_STRUCTURED)
+
+        # Check for LLM-estimated risk as last-resort weak signal
+        llm_risk = financial_data.get("llm_estimated_risk")
+        if external_risk is None and llm_risk is not None:
+            external_risk = llm_risk  # already weighted by CONFIDENCE_LLM
+
         external_payload = {
             "customer_id": customer_id,
             "company_name": company_name,
@@ -761,8 +911,9 @@ class ExternalDataAgent(BaseAgent):
             "profit_growth": financial_data.get("profit_growth"),
             "interest_coverage": financial_data.get("interest_coverage"),
             "external_risk": round(external_risk, 4) if external_risk is not None else None,
-            "source": financial_data.get("source", "screener.in"),
-            "generated_at": datetime.utcnow().isoformat()
+            "source": source,
+            "confidence": round(confidence, 4),
+            "generated_at": datetime.utcnow().isoformat(),
         }
 
         last_risk = self._last_published_risk.get(customer_id)
@@ -772,19 +923,17 @@ class ExternalDataAgent(BaseAgent):
             f"{financial_data.get('roce')}|{financial_data.get('debt')}|{financial_data.get('market_cap')}"
         )
         safe_external_risk = round(external_risk, 4) if external_risk is not None else None
-        
+
         if (
             last_risk == safe_external_risk
             and self._last_published_signature.get(customer_id) == current_signature
         ):
-            risk_str = f"{external_risk:.4f}" if external_risk is not None else "None"
             logger.debug(
                 f"[ExternalDataAgent] Skipping publish for {customer_id}: "
-                f"external_risk={risk_str} (unchanged)"
+                f"external_risk={current_risk_str} (unchanged)"
             )
             return
 
-        # Step 6: Publish event
         self.publish_event(
             topic=self.TOPIC_OUTPUT,
             event_type="ExternalDataEnriched",
@@ -793,9 +942,8 @@ class ExternalDataAgent(BaseAgent):
             correlation_id=event.correlation_id,
         )
 
-        # FIX 9: Track published risk with bounded eviction
         if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
-            self._last_published_risk.popitem(last=False)  # evict oldest
+            self._last_published_risk.popitem(last=False)
         if len(self._last_published_signature) >= self._MAX_RISK_TRACK:
             self._last_published_signature.popitem(last=False)
         self._last_published_risk[customer_id] = safe_external_risk
@@ -804,3 +952,4 @@ class ExternalDataAgent(BaseAgent):
         logger.info(
             f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk if external_risk is not None else 'None'}"
         )
+

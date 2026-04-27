@@ -37,6 +37,9 @@ class DBAgent(BaseAgent):
     DB_PATH = "acis.db"
     UNIT_SUFFIX_PATTERN = re.compile(r"\s*-\s*Unit\s+\d+\b.*$", re.IGNORECASE)
 
+    # Idempotency: bounded in-memory set of processed risk profile event IDs
+    MAX_PROCESSED_IDS = 20000
+
     def __init__(
         self,
         kafka_client: Any,
@@ -45,7 +48,7 @@ class DBAgent(BaseAgent):
     ):
         super().__init__(
             agent_name="DBAgent",
-            agent_version="1.0.0",
+            agent_version="2.0.0",  # Bumped: null-safe UPSERT + idempotency
             group_id="db-agent-group",
             subscribed_topics=[
                 self.TOPIC_INVOICES,
@@ -66,6 +69,11 @@ class DBAgent(BaseAgent):
         self._db_path = db_path or self.DB_PATH
         self._db_lock = threading.Lock()
         self._query_agent = query_agent
+
+        # Idempotency: track processed risk profile event IDs (bounded OrderedDict)
+        from collections import OrderedDict
+        self._processed_risk_events: OrderedDict = OrderedDict()
+
         self._init_database()
 
     def set_query_agent(self, query_agent: Any) -> None:
@@ -1075,7 +1083,18 @@ class DBAgent(BaseAgent):
                 conn.close()
 
     def _handle_customer_risk_profile(self, event: Event) -> None:
-        """Handle CustomerRiskProfileUpdated event - insert aggregated risk data."""
+        """
+        Handle risk.profile.updated event — upsert aggregated risk data.
+
+        KEY FIXES:
+        1. IDEMPOTENCY: skip if this event_id was already processed.
+        2. NULL-SAFE UPSERT: financial_risk, financial_source and company_name
+           are only overwritten when the incoming value is NOT NULL, so a
+           throttled follow-up event (financial_risk=None) can never destroy
+           a previously stored valid score.
+        3. FRESHNESS CHECK: incoming event's generated_at must be >= the stored
+           updated_at, otherwise the write is silently skipped.
+        """
         import re as _re
         data = event.payload or {}
 
@@ -1085,6 +1104,12 @@ class DBAgent(BaseAgent):
 
         if not customer_id:
             logger.warning("CustomerRiskProfileUpdated missing customer_id, skipping")
+            return
+
+        # --- IDEMPOTENCY GUARD ---
+        event_id = event.event_id
+        if event_id and event_id in self._processed_risk_events:
+            logger.debug(f"[DBAgent] Skipping duplicate risk profile event_id={event_id}")
             return
 
         # Guard: if company_name looks like a customer_id fallback (e.g. "cust_00003"),
@@ -1105,24 +1130,52 @@ class DBAgent(BaseAgent):
             finally:
                 conn_check.close()
 
-        financial_risk = data.get("financial_risk", 0.0)
+        # financial_risk may be None (private company / failed fetch) — preserve existing in that case
+        financial_risk = data.get("financial_risk")   # intentionally NOT defaulting to 0.0
         litigation_risk = data.get("litigation_risk", 0.0)
         combined_risk = data.get("combined_risk", 0.0)
 
         severity = data.get("severity")
-        financial_source = data.get("financial_source")
+        financial_source = data.get("financial_source")  # may be None
         litigation_source = data.get("litigation_source")
 
         confidence = data.get("confidence", 0.0)
-        created_at = datetime.utcnow().isoformat()
+        now_iso = datetime.utcnow().isoformat()
+
+        # Parse the event's generated_at for the freshness guard
+        incoming_generated_at = data.get("generated_at")
 
         with self._db_lock:
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
+                # --- FRESHNESS GUARD ---
+                # Check the stored updated_at; if the incoming event is older, skip.
+                existing_row = cursor.execute(
+                    "SELECT updated_at FROM customer_risk_profile WHERE customer_id = ?",
+                    (customer_id,)
+                ).fetchone()
+                if existing_row and existing_row[0] and incoming_generated_at:
+                    try:
+                        if incoming_generated_at < existing_row[0]:
+                            logger.debug(
+                                f"[DBAgent] Discarding stale risk profile event for {customer_id}: "
+                                f"event generated_at={incoming_generated_at} < stored updated_at={existing_row[0]}"
+                            )
+                            return
+                    except Exception:
+                        pass  # If comparison fails, proceed
+
+                # --- NULL-SAFE UPSERT ---
+                # Use INSERT ... ON CONFLICT DO UPDATE with COALESCE so that:
+                #   - financial_risk: only overwritten if the new value is NOT NULL
+                #   - financial_source: same protection
+                #   - company_name: same protection
+                # This is the core fix for Bug 2 — an event with financial_risk=None
+                # (throttled ExternalDataAgent) can no longer wipe out a real score.
                 cursor.execute("""
-                    INSERT OR REPLACE INTO customer_risk_profile (
+                    INSERT INTO customer_risk_profile (
                         customer_id,
                         id,
                         company_name,
@@ -1136,12 +1189,21 @@ class DBAgent(BaseAgent):
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                            COALESCE((SELECT created_at FROM customer_risk_profile WHERE customer_id=?), ?),
-                            ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(customer_id) DO UPDATE SET
+                        id               = excluded.id,
+                        company_name     = COALESCE(excluded.company_name,    customer_risk_profile.company_name),
+                        financial_risk   = COALESCE(excluded.financial_risk,  customer_risk_profile.financial_risk),
+                        litigation_risk  = excluded.litigation_risk,
+                        combined_risk    = excluded.combined_risk,
+                        severity         = excluded.severity,
+                        financial_source = COALESCE(excluded.financial_source, customer_risk_profile.financial_source),
+                        litigation_source = excluded.litigation_source,
+                        confidence       = excluded.confidence,
+                        updated_at       = excluded.updated_at
                 """, (
                     customer_id,
-                    event.event_id,
+                    event_id,
                     company_name,
                     financial_risk,
                     litigation_risk,
@@ -1150,21 +1212,22 @@ class DBAgent(BaseAgent):
                     financial_source,
                     litigation_source,
                     confidence,
-                    customer_id,  # For COALESCE check
-                    created_at,
-                    datetime.utcnow().isoformat()  # updated_at
+                    now_iso,   # created_at (preserved by COALESCE for existing rows)
+                    now_iso,   # updated_at (always refreshed)
                 ))
 
                 conn.commit()
 
-                if cursor.rowcount > 0:
-                    logger.info(
-                        f"[DBAgent] Stored aggregated risk: customer={customer_id}, combined={combined_risk}"
-                    )
-                else:
-                    logger.debug(
-                        f"[DBAgent] Risk profile {event.event_id} already exists, skipped"
-                    )
+                logger.info(
+                    f"[DBAgent] Stored aggregated risk: customer={customer_id}, combined={combined_risk}, "
+                    f"financial={financial_risk if financial_risk is not None else '(preserved)'}"
+                )
+
+                # --- MARK EVENT AS PROCESSED (bounded eviction) ---
+                if event_id:
+                    if len(self._processed_risk_events) >= self.MAX_PROCESSED_IDS:
+                        self._processed_risk_events.popitem(last=False)
+                    self._processed_risk_events[event_id] = True
 
                 # Invalidate cache
                 if self._query_agent:

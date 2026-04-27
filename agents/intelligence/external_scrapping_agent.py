@@ -148,9 +148,15 @@ class ExternalScrapingAgent(BaseAgent):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _fetch_nclt_bench(self, company_name: str, bench_id: int) -> List[Dict]:
-        """Query a single NCLT bench for cases."""
+        """Query a single NCLT bench for cases.
+
+        BUG FIX: The NCLT API wraps results in a dict:
+          { "caseHheader": ..., "mainpanellist": [...], "errormsg": ... }
+        The old code checked `isinstance(data, list)` and returned [] for every
+        company because the top-level response is always a dict.
+        Now we unwrap mainpanellist first.
+        """
         try:
-            # Need fresh cookie sometimes, but usually session handles it. We'll rely on session.
             payload = {
                 "wayofselection": "partyname",
                 "i_bench_id": "0",
@@ -161,10 +167,10 @@ class ExternalScrapingAgent(BaseAgent):
                 "case_no": "",
                 "i_party_search": "E",
                 "i_bench_id_party": str(bench_id),
-                "party_type_party": "R",  # Respondent typically captures filed against
+                "party_type_party": "R",  # Respondent — cases filed against company
                 "party_name_party": company_name,
                 "i_case_year_party": "0",
-                "status_party": "P", # Pending cases only
+                "status_party": "P",  # Pending only
                 "i_adv_search": "E",
                 "i_bench_id_lawyer": "0",
                 "party_lawer_name": "",
@@ -173,90 +179,121 @@ class ExternalScrapingAgent(BaseAgent):
             }
 
             response = self._nclt_session.post(NCLT_QUERY_URL, json=payload, timeout=20)
-            
+
             if response.status_code != 200:
                 logger.debug(f"[ExternalScrapingAgent] NCLT returned {response.status_code} for bench {bench_id}")
                 return []
-                
-            data = response.json()
-            if not isinstance(data, list):
-                # Sometimes it returns a string or object on error
+
+            raw = response.json()
+
+            # --- FIX: Unwrap the dict envelope ---
+            # API always returns a dict with 'mainpanellist' containing the actual cases.
+            # A bare list response is also handled for forward-compatibility.
+            if isinstance(raw, list):
+                items = raw
+            elif isinstance(raw, dict):
+                items = raw.get("mainpanellist")
+                if not items or not isinstance(items, list):
+                    # errormsg = "No Details" means genuinely no cases, not an error
+                    err = raw.get("errormsg", "")
+                    if err:
+                        logger.debug(f"[ExternalScrapingAgent] NCLT bench {bench_id} ({NCLT_BENCH_IDS.get(bench_id)}): {err}")
+                    return []
+            else:
                 return []
-                
+
             cases = []
             cutoff_date = datetime.now() - timedelta(days=5 * 365)
-            
-            for item in data:
-                # NCLT response mapping
-                case_no = item.get("case_no", "")
-                case_type = item.get("case_type", "")
+
+            for item in items:
+                case_no      = item.get("case_no", "")
+                case_type    = item.get("case_type", "")
                 filing_date_str = item.get("filing_date", "")
-                status = item.get("status", "Pending")
-                
-                # We requested Pending, but double check
+                status       = item.get("status", "Pending")
+
                 if status.upper() != "PENDING":
                     continue
-                    
-                # Date check
+
                 if filing_date_str:
                     try:
-                        # Format usually dd-mm-yyyy or similar
-                        # A simple heuristic date parser
                         parts = re.split(r'[-/]', filing_date_str)
                         if len(parts) == 3:
-                            if len(parts[2]) == 4: # dd-mm-yyyy
+                            if len(parts[2]) == 4:  # dd-mm-yyyy
                                 f_date = datetime(int(parts[2]), int(parts[1]), int(parts[0]))
-                            else: # yyyy-mm-dd
+                            else:                    # yyyy-mm-dd
                                 f_date = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
                             if f_date < cutoff_date:
                                 continue
                     except Exception:
-                        pass # If we can't parse, include it safely
-                
+                        pass
+
                 cases.append({
                     "case_no": case_no,
                     "case_type": case_type,
                     "bench": NCLT_BENCH_IDS.get(bench_id, "Unknown"),
                     "filing_date": filing_date_str,
-                    "status": status
+                    "status": status,
                 })
-                
+
             return cases
-            
+
         except Exception as e:
             logger.debug(f"[ExternalScrapingAgent] NCLT fetch failed for bench {bench_id}: {e}")
             return []
 
     def _fetch_nclt_all_benches(self, company_name: str) -> List[Dict]:
-        """Query all NCLT benches and deduplicate results."""
+        """Query all NCLT benches and deduplicate results.
+
+        BUG 4 FIX: A failed session prime no longer aborts the entire fetch.
+        Many NCLT benches respond without a pre-session cookie; aborting on a
+        5-second prime timeout was silently returning 0 cases for every company.
+        """
         all_cases = []
         seen_case_nos = set()
-        
-        # Prime the session cookie first
-        try:
-            self._nclt_session.get(NCLT_SESSION_URL, timeout=5)
-        except Exception as e:
-            logger.warning(f"[ExternalScrapingAgent] Failed to prime NCLT session: {e}")
-            return []
 
-        # Fetch from all benches concurrently to speed up the process (max 5 workers to be polite)
+        # Prime the session cookie — best-effort only, do NOT abort on failure
+        prime_ok = False
+        try:
+            self._nclt_session.get(NCLT_SESSION_URL, timeout=10)
+            prime_ok = True
+        except Exception as e:
+            logger.warning(
+                f"[ExternalScrapingAgent] NCLT session prime failed: {e}. "
+                f"Proceeding to query benches without cookie."
+            )
+
+        # Fetch from all benches concurrently (max 5 workers to be polite)
         def fetch_bench(bench_id):
             return self._fetch_nclt_bench(company_name, bench_id)
+
+        benches_attempted = 0
+        benches_succeeded = 0
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_to_bench = {executor.submit(fetch_bench, bid): bid for bid in NCLT_BENCH_IDS.keys()}
             for future in concurrent.futures.as_completed(future_to_bench):
+                bench_id = future_to_bench[future]
+                benches_attempted += 1
                 try:
                     cases = future.result()
+                    benches_succeeded += 1
                     for c in cases:
                         cno = c.get("case_no")
                         if cno and cno not in seen_case_nos:
                             seen_case_nos.add(cno)
                             all_cases.append(c)
                 except Exception as e:
-                    logger.debug(f"[ExternalScrapingAgent] Concurrent fetch failed for a bench: {e}")
-            
+                    logger.debug(
+                        f"[ExternalScrapingAgent] Concurrent fetch failed for bench {bench_id}: {e}"
+                    )
+
+        logger.info(
+            f"[ExternalScrapingAgent] NCLT fetch complete for '{company_name}': "
+            f"prime_ok={prime_ok}, benches={benches_succeeded}/{benches_attempted}, "
+            f"cases_found={len(all_cases)}"
+        )
         return all_cases
+
 
     def _score_nclt_cases(self, cases: List[Dict]) -> Dict:
         """Score NCLT cases and return risk info."""
@@ -308,7 +345,7 @@ class ExternalScrapingAgent(BaseAgent):
         encoded_query = quote_plus(search_query)
         articles = []
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=3)
-        
+
         # Google News
         try:
             url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
@@ -319,7 +356,6 @@ class ExternalScrapingAgent(BaseAgent):
                     title = (item.findtext("title") or "").strip()
                     pub_date_str = item.findtext("pubDate")
                     description = (item.findtext("description") or "").strip()
-                    
                     if not title: continue
                     if pub_date_str:
                         try:
@@ -339,7 +375,6 @@ class ExternalScrapingAgent(BaseAgent):
                     title = (item.findtext("title") or "").strip()
                     pub_date_str = item.findtext("pubDate")
                     description = (item.findtext("description") or "").strip()
-                    
                     if not title: continue
                     if pub_date_str:
                         try:
@@ -355,8 +390,117 @@ class ExternalScrapingAgent(BaseAgent):
             key = a["title"].lower()
             if key not in merged:
                 merged[key] = a
-                
+
         return list(merged.values())[:20]
+
+    def _fetch_casemine(self, company_name: str) -> Dict:
+        """
+        Fetch litigation case metadata from CaseMine for a company.
+
+        Returns:
+          total_hits   : int   — total indexed judgments (volume signal)
+          high_risk_courts: list — courts that indicate serious litigation
+                            (NCLT, HC criminal, CCI, Consumer)
+          sample_cases : list — up to 8 case dicts {title, court, date}
+          court_breakdown: dict — {court_name: count}
+
+        High-risk courts used as a signal (tax disputes excluded as low-risk for
+        large corporates — they are routine).
+        """
+        try:
+            url = f"https://www.casemine.com/search/in/{quote_plus(company_name)}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+                "Referer": "https://www.casemine.com/",
+            }
+            r = self._session.get(url, headers=headers, timeout=20)
+            if r.status_code != 200:
+                return {"total_hits": 0, "court_breakdown": {}, "sample_cases": [], "high_risk_courts": []}
+
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(r.text, "lxml")
+
+            # --- Total hit count (JS variable srHits) ---
+            total_hits = 0
+            for script in soup.find_all("script"):
+                txt = script.string or ""
+                m = re.search(r"var\s+srHits\s*=\s*'(\d+)'", txt)
+                if m:
+                    total_hits = int(m.group(1))
+                    break
+
+            # --- Court breakdown from filter sidebar ---
+            # The sidebar renders lines like: "Income Tax Appellate Tribunal | 993"
+            # inside elements with class containing 'overlay_c2'
+            court_breakdown = {}
+            for el in soup.find_all(class_=re.compile(r"overlay_c2")):
+                raw_text = el.get_text(separator="\n", strip=True)
+                for line in raw_text.split("\n"):
+                    line = line.strip().lstrip("+ ").strip()
+                    # Match: "<Court Name>" followed by a standalone integer on the next line
+                    # or patterns like "Court Name 993"
+                    m2 = re.match(r"^(.+?)\s+(\d+)$", line)
+                    if m2:
+                        court_name = m2.group(1).strip()
+                        count = int(m2.group(2))
+                        if len(court_name) > 3 and count > 0:
+                            court_breakdown[court_name] = court_breakdown.get(court_name, 0) + count
+
+            # --- Sample case cards ---
+            sample_cases = []
+            seen_titles = set()
+            for a in soup.find_all("a", href=re.compile(r"/judgement/in/")):
+                title = a.get_text(strip=True)
+                if len(title) < 10 or title in seen_titles:
+                    continue
+                seen_titles.add(title)
+                # Walk up to find context block with Court + Date
+                block = a
+                for _ in range(6):
+                    block = block.parent
+                    txt = block.get_text(separator="|", strip=True)
+                    if len(txt) > 80:
+                        break
+                court = ""
+                date  = ""
+                cm = re.search(r"Court:\s*\|?\s*([^|]{5,60})", txt)
+                dm = re.search(r"Date:\s*\|?\s*([^|]{5,30})", txt)
+                if cm: court = cm.group(1).strip()
+                if dm: date  = dm.group(1).strip()
+                sample_cases.append({"title": title[:100], "court": court, "date": date})
+                if len(sample_cases) >= 8:
+                    break
+
+            # --- Classify high-risk courts ---
+            HIGH_RISK_COURT_KEYWORDS = [
+                "nclt", "national company law", "insolvency",
+                "competition commission", "cci",
+                "criminal", "consumer", "debt recovery",
+                "securities appellate", "sebi",
+            ]
+            LOW_RISK_COURT_KEYWORDS = [
+                "income tax", "itat", "customs", "cestat", "gst",
+            ]
+            high_risk_courts = [
+                court for court in court_breakdown
+                if any(kw in court.lower() for kw in HIGH_RISK_COURT_KEYWORDS)
+                and not any(kw in court.lower() for kw in LOW_RISK_COURT_KEYWORDS)
+            ]
+
+            logger.info(
+                f"[ExternalScrapingAgent] CaseMine: company={company_name}, "
+                f"total_hits={total_hits}, high_risk_courts={high_risk_courts}"
+            )
+            return {
+                "total_hits": total_hits,
+                "court_breakdown": court_breakdown,
+                "sample_cases": sample_cases,
+                "high_risk_courts": high_risk_courts,
+            }
+        except Exception as e:
+            logger.warning(f"[ExternalScrapingAgent] CaseMine fetch failed for {company_name}: {e}")
+            return {"total_hits": 0, "court_breakdown": {}, "sample_cases": [], "high_risk_courts": []}
 
     def _is_relevant(self, text: str, company: str, aliases: List[str] = None) -> bool:
         text = text.lower()
@@ -444,14 +588,25 @@ class ExternalScrapingAgent(BaseAgent):
             )
         return "\n\n".join(context_blocks)
 
-    def _analyze_company_news(self, articles: List[Dict], company_name: str, industry: str = "unknown", aliases: List[str] = None) -> Dict:
-        if not articles:
+    def _analyze_company_news(self, articles: List[Dict], company_name: str,
+                              industry: str = "unknown", aliases: List[str] = None,
+                              casemine_data: Dict = None) -> Dict:
+        """Analyze news articles + CaseMine case context via LLM.
+
+        casemine_data (optional): output of _fetch_casemine().
+        When provided, case titles and courts are appended to the LLM prompt
+        as additional structured evidence so it can classify case severity
+        without needing a raw case_type field.
+        """
+        if not articles and (not casemine_data or not casemine_data.get("sample_cases")):
             return {
                 "litigation_risk_score": 0.0,
                 "articles_analyzed": 0,
                 "risk": 0.0,
                 "evidence": "No relevant news found.",
-                "analysis_status": "skipped_no_articles"
+                "analysis_status": "skipped_no_articles",
+                "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+                "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
             }
 
         # Pre-filter
@@ -466,19 +621,39 @@ class ExternalScrapingAgent(BaseAgent):
                 "articles_analyzed": 0,
                 "risk": 0.0,
                 "evidence": "No relevant articles after filtering.",
-                "analysis_status": "skipped_filtered"
+                "analysis_status": "skipped_filtered",
+                "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+                "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
             }
 
         context = self._build_multi_article_context(relevant_articles)
 
+        # Build CaseMine context block if available
+        casemine_context = ""
+        if casemine_data and casemine_data.get("sample_cases"):
+            cm_lines = []
+            for c in casemine_data["sample_cases"][:6]:
+                cm_lines.append(f"  - [{c['court']}] {c['title']} ({c['date']})")
+            if casemine_data.get("high_risk_courts"):
+                cm_lines.insert(0, f"High-risk courts: {', '.join(casemine_data['high_risk_courts'])}")
+            cm_lines.insert(0, f"Total indexed judgments: {casemine_data.get('total_hits', 0)}")
+            casemine_context = "\n".join(cm_lines)
+
+        # Pre-compute the CaseMine section outside the outer f-string to avoid
+        # Python <3.12 restriction on backslashes inside f-string expressions.
+        casemine_section = (
+            "\nCOURT CASE RECORDS (CaseMine):\n" + casemine_context
+        ) if casemine_context else ""
+
         prompt = f"""You are an advanced financial risk intelligence system.
 
-You are given MULTIPLE news articles about a company.
+You are given MULTIPLE news articles and court case records about a company.
 
 Your job is to:
-- Analyze all articles together
-- Identify consistent risk signals
-- Ignore isolated or weak signals
+- Analyze all evidence together
+- Identify consistent and material risk signals
+- Classify the type of legal/regulatory risk
+- Ignore routine tax disputes and isolated weak signals
 - Avoid false positives
 
 ---
@@ -489,21 +664,23 @@ COMPANY:
 INDUSTRY:
 {industry}
 
-ARTICLES:
-{context}
+NEWS ARTICLES:
+{context}{casemine_section}
 
 ---
 
 TASK:
 
-1. Determine if there is a CONSISTENT and MATERIAL risk signal across the articles.
+1. Determine if there is a CONSISTENT and MATERIAL risk signal.
 
 2. Consider:
    - Are multiple sources reporting the same issue?
-   - Is the issue serious (fraud, legal, regulatory, insolvency)?
-   - Is the company clearly the subject?
+   - Is the issue serious (fraud, insolvency, criminal, regulatory ban, consumer fraud)?
+   - Court type matters: NCLT/IBC > HC Criminal > CCI/SEBI > Consumer > ITAT/Tax
+   - Is the company clearly the primary subject?
 
 3. Ignore:
+   - Routine income tax / customs disputes (normal for large companies)
    - Single weak mentions
    - Unrelated companies
    - Generic industry news
@@ -517,7 +694,7 @@ OUTPUT (STRICT JSON):
   "risk_types": [],
   "severity": "low/medium/high",
   "confidence": 0.0,
-  "summary": "2–3 line explanation combining all evidence",
+  "summary": "2-3 line explanation combining all evidence",
   "evidence_articles": [],
   "signal_count": 0
 }}"""
@@ -530,7 +707,9 @@ OUTPUT (STRICT JSON):
                 "articles_analyzed": len(relevant_articles),
                 "risk": 0.0,
                 "evidence": "LLM analysis failed. Defaulting to safe score.",
-                "analysis_status": "failed"
+                "analysis_status": "failed",
+                "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+                "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
             }
 
         if not response.get("risk_detected"):
@@ -539,7 +718,9 @@ OUTPUT (STRICT JSON):
                 "articles_analyzed": len(relevant_articles),
                 "risk": 0.0,
                 "evidence": "No consistent risk signals.",
-                "analysis_status": "success_no_risk"
+                "analysis_status": "success_no_risk",
+                "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+                "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
             }
 
         severity_map = {"low": 0.3, "medium": 0.6, "high": 1.0}
@@ -594,7 +775,9 @@ OUTPUT (STRICT JSON):
             "articles_analyzed": len(relevant_articles),
             "risk": round(score, 4),
             "evidence": response.get("summary", ""),
-            "analysis_status": "success_risk_found"
+            "analysis_status": "success_risk_found",
+            "casemine_total": casemine_data.get("total_hits", 0) if casemine_data else 0,
+            "casemine_high_risk_courts": casemine_data.get("high_risk_courts", []) if casemine_data else [],
         }
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -739,13 +922,30 @@ OUTPUT (STRICT JSON):
         # 2. Fetch Targeted Company News (Cached 6h)
         news_cache_key = company_name.lower()
         news_cache_entry = self._news_cache.get(news_cache_key)
-        
+
         if news_cache_entry and (datetime.utcnow() - news_cache_entry["timestamp"]).total_seconds() < 21600:
             industry_data = news_cache_entry["data"]
         else:
             logger.info(f"[ExternalScrapingAgent] Fetching targeted news for {company_name}...")
             articles = self._fetch_company_news_risk(company_name, aliases=aliases)
-            industry_data = self._analyze_company_news(articles, company_name=company_name, industry=industry, aliases=aliases)
+
+            # 2b. CaseMine — fetch case metadata (cached alongside news, 12h)
+            cm_cache_key = f"cm:{company_name.lower()}"
+            cm_entry = self._nclt_cache.get(cm_cache_key)
+            if cm_entry and (datetime.utcnow() - cm_entry["timestamp"]).total_seconds() < 43200:
+                casemine_data = cm_entry["data"]
+            else:
+                logger.info(f"[ExternalScrapingAgent] Fetching CaseMine for {company_name}...")
+                casemine_data = self._fetch_casemine(company_name)
+                self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.utcnow()}
+
+            industry_data = self._analyze_company_news(
+                articles,
+                company_name=company_name,
+                industry=industry,
+                aliases=aliases,
+                casemine_data=casemine_data,
+            )
             self._news_cache[news_cache_key] = {"data": industry_data, "timestamp": datetime.utcnow()}
 
         # 3. Merge Signals
@@ -780,16 +980,19 @@ OUTPUT (STRICT JSON):
             "litigation_risk": final_risk,
             "severity": fusion["severity"],
             "evidence": fusion["evidence"],
-            
+
             "nclt_case_count": nclt_data["nclt_case_count"],
             "nclt_cases": nclt_data["nclt_cases"],
             "nclt_severity": nclt_data["nclt_severity"],
             "nclt_risk": nclt_data["nclt_risk"],
-            
+
+            "casemine_total": industry_data.get("casemine_total", 0),
+            "casemine_high_risk_courts": industry_data.get("casemine_high_risk_courts", []),
+
             "industry_tag": "targeted_web_search",
             "industry_risk": industry_data["risk"],
 
-            "source": "nclt+industry_news",
+            "source": "nclt+casemine+industry_news",
             "confidence": fusion["confidence"],
             "analysis_status": fusion["analysis_status"],
             "temporal_context": {

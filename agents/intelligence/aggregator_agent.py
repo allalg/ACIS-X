@@ -12,8 +12,9 @@ Produces:
 """
 
 import logging
-from typing import List, Any, Dict, Optional
+from typing import List, Any, Dict, Optional, Set
 from datetime import datetime, timedelta
+from collections import OrderedDict
 import time
 
 from agents.base.base_agent import BaseAgent
@@ -42,14 +43,18 @@ class AggregatorAgent(BaseAgent):
     # Risk aggregation weights
     FINANCIAL_WEIGHT = 0.6
     LITIGATION_WEIGHT = 0.4
+
     # FIX 7: Cache TTL and cleanup settings
     CACHE_TTL_SECONDS = 24 * 3600  # 24 hours
-    MAX_CACHE_SIZE = 50000  # Maximum customers to cache
+    MAX_CACHE_SIZE = 50000          # Maximum customers to cache
+
+    # Idempotency: keep last N processed event IDs to prevent re-processing
+    MAX_PROCESSED_IDS = 10000
 
     def __init__(self, kafka_client: Any):
         super().__init__(
             agent_name="AggregatorAgent",
-            agent_version="1.0.1",  # Bumped: FIX 7 added cache cleanup
+            agent_version="2.0.0",  # Bumped: freshness guard + idempotency + null-safe cache
             group_id="aggregator-agent-group",
             subscribed_topics=[self.TOPIC_INPUT],
             capabilities=[
@@ -61,12 +66,18 @@ class AggregatorAgent(BaseAgent):
             agent_type="AggregatorAgent",
         )
         self._cache: Dict[str, Dict[str, Any]] = {}
+
         # FIX 7: Track last cleanup time
         self._last_cleanup = time.time()
+
         # FIX 9: Track published risk values to prevent duplicate events
         self._last_published: Dict[str, Dict[str, float]] = {}
+
         # FIX 12: QueryAgent reference for company name resolution
         self._query_agent = None
+
+        # Idempotency — bounded ordered dict (separate from base class set to avoid shadowing)
+        self._agg_processed_ids: OrderedDict = OrderedDict()
 
         logger.info("[AggregatorAgent] Initialized - aggregating financial + litigation risk")
 
@@ -81,17 +92,36 @@ class AggregatorAgent(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
+        # --- IDEMPOTENCY GUARD ---
+        event_id = getattr(event, "event_id", None)
+        if event_id and event_id in self._agg_processed_ids:
+            logger.debug(f"[AggregatorAgent] Skipping duplicate event_id={event_id}")
+            return
+
         if event.event_type == "ExternalDataEnriched":
             self._handle_financial_event(event)
-        elif event.event_type == "external.litigation.updated":  # FIX: standardized name
+        elif event.event_type == "external.litigation.updated":
             self._handle_litigation_event(event)
+
+        # Mark as processed (bounded eviction)
+        if event_id:
+            if len(self._agg_processed_ids) >= self.MAX_PROCESSED_IDS:
+                self._agg_processed_ids.popitem(last=False)
+            self._agg_processed_ids[event_id] = True
 
     # ─────────────────────────────────────────────────────────────────────────
     # EVENT HANDLERS
     # ─────────────────────────────────────────────────────────────────────────
 
     def _handle_financial_event(self, event: Event) -> None:
-        """Handle ExternalDataEnriched event - update financial data in cache."""
+        """Handle ExternalDataEnriched event - update financial data in cache.
+
+        FIX: Only overwrite cached financial data when the incoming event carries
+        a real (non-None) external_risk.  Throttled events carry external_risk=None;
+        accepting them used to destroy previously computed risk scores.
+
+        Also guards against stale events (event timestamp older than cache entry).
+        """
         data = event.payload or {}
         customer_id = data.get("customer_id")
 
@@ -100,8 +130,17 @@ class AggregatorAgent(BaseAgent):
             return
 
         company_name = data.get("company_name") or customer_id
-        financial_risk = data.get("external_risk", 0.0)
+        financial_risk = data.get("external_risk")  # may be None for throttled events
         source = data.get("source", "unknown")
+
+        # Parse incoming event timestamp for freshness guard
+        incoming_ts_str = data.get("generated_at")
+        incoming_ts: Optional[datetime] = None
+        if incoming_ts_str:
+            try:
+                incoming_ts = datetime.fromisoformat(incoming_ts_str)
+            except Exception:
+                pass
 
         # Initialize cache entry if needed
         if customer_id not in self._cache:
@@ -111,26 +150,63 @@ class AggregatorAgent(BaseAgent):
                 "timestamp": datetime.utcnow(),
             }
 
-        # Update financial data
-        self._cache[customer_id]["financial"] = {
-            "risk": financial_risk,
-            "source": source,
-            "company_name": company_name,
-            "payload": data,
-            "updated_at": datetime.utcnow(),
-        }
-        self._cache[customer_id]["timestamp"] = datetime.utcnow()
+        existing_fin: Dict[str, Any] = self._cache[customer_id].get("financial") or {}
 
-        logger.info(
-            f"[AggregatorAgent] Updated financial data: customer={customer_id}, "
-            f"risk={financial_risk if financial_risk is not None else 'None'}, source={source}"
-        )
+        # --- EVENT FRESHNESS GUARD ---
+        # If the cached entry has a timestamp and the incoming event is older, discard.
+        existing_fin_updated: Optional[datetime] = existing_fin.get("updated_at")
+        if incoming_ts and existing_fin_updated:
+            try:
+                if incoming_ts < existing_fin_updated:
+                    logger.debug(
+                        f"[AggregatorAgent] Discarding stale financial event for {customer_id}: "
+                        f"incoming={incoming_ts.isoformat()} < cached={existing_fin_updated.isoformat()}"
+                    )
+                    return
+            except Exception:
+                pass  # If comparison fails, proceed normally
+
+        # --- NULL-SAFE CACHE UPDATE ---
+        # If this is a throttled event (financial_risk=None), preserve the existing
+        # risk score and the detailed payload that was set by the last real fetch.
+        # Only replace when we actually have new real data.
+        if financial_risk is not None:
+            effective_risk = float(financial_risk)
+            effective_payload = data
+            logger.info(
+                f"[AggregatorAgent] Updated financial data: customer={customer_id}, "
+                f"risk={effective_risk:.4f}, source={source}"
+            )
+        else:
+            # Throttled / no-data event — carry forward whatever we already have
+            effective_risk = existing_fin.get("risk")
+            effective_payload = existing_fin.get("payload") or data
+            logger.debug(
+                f"[AggregatorAgent] Preserving cached financial data for {customer_id} "
+                f"(incoming risk=None, keeping existing={effective_risk})"
+            )
+            # If there's nothing cached either, nothing changed — no point re-aggregating
+            if effective_risk is None and not existing_fin:
+                return
+
+        now = datetime.utcnow()
+        self._cache[customer_id]["financial"] = {
+            "risk": effective_risk,
+            "source": source if financial_risk is not None else existing_fin.get("source", source),
+            "company_name": company_name,
+            "payload": effective_payload,
+            "updated_at": now,
+        }
+        self._cache[customer_id]["timestamp"] = now
 
         # Try to aggregate
         self._try_aggregate(customer_id, event.correlation_id)
 
     def _handle_litigation_event(self, event: Event) -> None:
-        """Handle LitigationRiskUpdated event - update litigation data in cache."""
+        """Handle LitigationRiskUpdated event - update litigation data in cache.
+
+        Includes event freshness guard (discard stale events).
+        """
         data = event.payload or {}
         customer_id = data.get("customer_id")
 
@@ -142,6 +218,15 @@ class AggregatorAgent(BaseAgent):
         litigation_risk = data.get("litigation_risk", 0.0)
         source = data.get("source", "unknown")
 
+        # Parse incoming event timestamp for freshness guard
+        incoming_ts_str = data.get("generated_at")
+        incoming_ts: Optional[datetime] = None
+        if incoming_ts_str:
+            try:
+                incoming_ts = datetime.fromisoformat(incoming_ts_str)
+            except Exception:
+                pass
+
         # Initialize cache entry if needed
         if customer_id not in self._cache:
             self._cache[customer_id] = {
@@ -150,15 +235,31 @@ class AggregatorAgent(BaseAgent):
                 "timestamp": datetime.utcnow(),
             }
 
+        existing_lit: Dict[str, Any] = self._cache[customer_id].get("litigation") or {}
+
+        # --- EVENT FRESHNESS GUARD ---
+        existing_lit_updated: Optional[datetime] = existing_lit.get("updated_at")
+        if incoming_ts and existing_lit_updated:
+            try:
+                if incoming_ts < existing_lit_updated:
+                    logger.debug(
+                        f"[AggregatorAgent] Discarding stale litigation event for {customer_id}: "
+                        f"incoming={incoming_ts.isoformat()} < cached={existing_lit_updated.isoformat()}"
+                    )
+                    return
+            except Exception:
+                pass
+
+        now = datetime.utcnow()
         # Update litigation data
         self._cache[customer_id]["litigation"] = {
             "risk": litigation_risk,
             "source": source,
             "company_name": company_name,
             "payload": data,
-            "updated_at": datetime.utcnow(),
+            "updated_at": now,
         }
-        self._cache[customer_id]["timestamp"] = datetime.utcnow()
+        self._cache[customer_id]["timestamp"] = now
 
         logger.info(
             f"[AggregatorAgent] Updated litigation data: customer={customer_id}, "
@@ -249,7 +350,8 @@ class AggregatorAgent(BaseAgent):
 
         # Extract risk values — financial_risk can be None if absent/private company
         financial_risk = financial_data.get("risk") if financial_data else None
-        if financial_risk is not None: financial_risk = float(financial_risk)
+        if financial_risk is not None:
+            financial_risk = float(financial_risk)
         litigation_risk = litigation_data.get("risk") if litigation_data else None
         litigation_risk = float(litigation_risk) if litigation_risk is not None else 0.0
 
@@ -305,23 +407,24 @@ class AggregatorAgent(BaseAgent):
                 logger.debug(f"[AggregatorAgent] Failed to fetch company_name from DB: {e}")
 
         # If still unresolved, leave as None — DBAgent will handle the fallback
-        # Do NOT use customer_id as a company name (it's meaningless in the output)
         if _is_id_fallback(company_name):
             company_name = None
 
-        # Compute confidence (average of available confidences)
-        # Only include financial confidence if we actually have a financial risk score
+        # Compute confidence:
+        # Pull from the detailed financial payload (contains the original confidence field).
+        fin_payload = (financial_data.get("payload") or {}) if financial_data else {}
         if financial_data and financial_risk is not None:
-            fin_confidence = financial_data.get("payload", {}).get("confidence", 0.8)
+            fin_confidence = fin_payload.get("confidence", 0.8)
         else:
             fin_confidence = 0.0
-            
+
         lit_confidence = litigation_data.get("payload", {}).get("confidence", 0.7) if litigation_data else 0.0
-        
+
         valid_confidences = [c for c in [fin_confidence, lit_confidence] if c > 0]
         confidence = sum(valid_confidences) / len(valid_confidences) if valid_confidences else 0.5
 
-        # Build payload
+        # Build payload — include financial_confidence for DB-layer transparency
+        now_iso = datetime.utcnow().isoformat()
         payload = {
             "customer_id": customer_id,
             "company_name": company_name,
@@ -335,7 +438,7 @@ class AggregatorAgent(BaseAgent):
             "litigation_source": litigation_data.get("source", "unknown") if litigation_data else "none",
 
             "confidence": round(confidence, 4),
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": now_iso,
         }
 
         # Publish aggregated risk event (standardized naming)
