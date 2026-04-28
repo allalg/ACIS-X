@@ -147,6 +147,13 @@ class MonitoringAgent(BaseAgent):
         self._evaluation_thread: Optional[threading.Thread] = None
         self._last_metrics_event_at: Optional[datetime] = None
 
+        # Deferred evaluation queue: event handlers add agent_ids here instead
+        # of calling _evaluate_agent() inline, which prevents the handlers from
+        # blocking on potentially slow health-publish logic while holding
+        # _agents_lock.  The evaluation loop drains the batch on each tick.
+        self._agents_needing_eval: set = set()
+        self._eval_lock = threading.Lock()
+
     def subscribe(self) -> List[str]:
         """Return topics to subscribe to."""
         return ["acis.agent.health", "acis.system", "acis.registry"]
@@ -206,6 +213,17 @@ class MonitoringAgent(BaseAgent):
 
         while self._running:
             try:
+                # Atomically drain the pending evaluation set so handlers can
+                # keep adding to it while we evaluate this batch outside the lock.
+                with self._eval_lock:
+                    batch = set(self._agents_needing_eval)
+                    self._agents_needing_eval.clear()
+
+                for agent_id in batch:
+                    self._evaluate_agent(agent_id, "evaluation_loop")
+
+                # Also periodically scan ALL agents (catches timeout conditions
+                # for agents that have gone silent and sent no events).
                 self._evaluate_all_agents()
                 self._publish_system_metrics_if_due()
             except Exception as exc:
@@ -232,7 +250,8 @@ class MonitoringAgent(BaseAgent):
             if details:
                 agent.consumer_group = details.get("group_id", agent.consumer_group)
 
-        self._evaluate_agent(agent.agent_id, reason="heartbeat")
+        with self._eval_lock:
+            self._agents_needing_eval.add(agent.agent_id)
 
     def _handle_metrics_updated(self, event: Event) -> None:
         payload = event.payload
@@ -244,7 +263,8 @@ class MonitoringAgent(BaseAgent):
             agent.update_identity(payload)
             self._update_metrics_from_payload(agent, payload)
 
-        self._evaluate_agent(agent.agent_id, reason="metrics_updated")
+        with self._eval_lock:
+            self._agents_needing_eval.add(agent.agent_id)
         self._publish_throughput_update_if_needed(agent.agent_id)
 
     def _handle_agent_overloaded(self, event: Event) -> None:
@@ -273,7 +293,8 @@ class MonitoringAgent(BaseAgent):
             agent.error_timestamps.append(now)
             agent.prune_error_window(now, self.ERROR_WINDOW_SECONDS)
 
-        self._evaluate_agent(agent.agent_id, reason="agent_error")
+        with self._eval_lock:
+            self._agents_needing_eval.add(agent.agent_id)
 
     def _handle_agent_timeout(self, event: Event) -> None:
         payload = event.payload

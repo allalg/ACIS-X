@@ -26,9 +26,13 @@ class SupervisorClient:
         return True
 
 class AgentSupervisor:
-    def __init__(self, kafka_client=None):
+    def __init__(self, kafka_client=None, launch_fn=None):
         self._registry: Dict[str, AgentEntry] = {}
         self.kafka_client = kafka_client
+        # Callable used to spawn a fresh agent process on restart.
+        # Injected at construction to avoid a circular import on run_acis.
+        # Must accept (agent_class, kwargs) positional arguments.
+        self._launch_fn = launch_fn
 
     def register(self, agent_name: str, process: multiprocessing.Process, agent_class: type, kwargs: dict) -> None:
         self._registry[agent_name] = AgentEntry(
@@ -107,17 +111,24 @@ class AgentSupervisor:
             
         entry.restart_count += 1
         entry.last_restart_time = now
-        
+
+        if self._launch_fn is None:
+            logger.error(
+                "[AgentSupervisor] No launch_fn provided — cannot restart %s. "
+                "Pass launch_fn=launch_agent when constructing AgentSupervisor.",
+                agent_name,
+            )
+            return False
+
         logger.info(f"Spawning fresh Process for {agent_name} (attempt {entry.restart_count})")
-        from run_acis import launch_agent  # Import here to avoid circular imports
-        
+
         new_process = multiprocessing.Process(
-            target=launch_agent,
+            target=self._launch_fn,
             args=(entry.agent_class, entry.kwargs),
             name=agent_name
         )
         new_process.start()
-        
+
         entry.process = new_process
         entry.status = "running"
         return True

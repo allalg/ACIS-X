@@ -62,9 +62,25 @@ class PlacementEngine(BaseAgent):
         self._last_assigned = {}
         self._routing_lock = threading.Lock()
         self._registry_port = os.getenv("ACIS_REGISTRY_PORT", "5000")
-        
-        self._polling_thread = threading.Thread(target=self._poll_registry, daemon=True)
+        self._polling_thread: Optional[threading.Thread] = None
+        self._stop_polling: bool = False
+
+    def start(self) -> None:
+        """Start the placement engine and its registry polling thread."""
+        super().start()
+        self._stop_polling = False
+        self._polling_thread = threading.Thread(
+            target=self._poll_registry, daemon=True, name="placement-poll"
+        )
         self._polling_thread.start()
+        logger.info("[PlacementEngine] Registry polling thread started")
+
+    def stop(self) -> None:
+        """Stop polling then delegate to base-class stop."""
+        self._stop_polling = True
+        if self._polling_thread and self._polling_thread.is_alive():
+            self._polling_thread.join(timeout=5)
+        super().stop()
 
     def subscribe(self) -> List[str]:
         """Consume placement requests from the system topic."""
@@ -260,9 +276,12 @@ class PlacementEngine(BaseAgent):
         return f"{agent_token}-group"
 
     def _poll_registry(self) -> None:
-        while True:
+        while not self._stop_polling:
             try:
-                resp = requests.get(f"http://localhost:{self._registry_port}/api/agents?status=RUNNING", timeout=5)
+                resp = requests.get(
+                    f"http://localhost:{self._registry_port}/api/agents?status=RUNNING",
+                    timeout=5,
+                )
                 if resp.status_code == 200:
                     agents = resp.json()
                     new_table = {}
@@ -276,4 +295,8 @@ class PlacementEngine(BaseAgent):
                         self._routing_table = new_table
             except Exception as e:
                 logger.debug(f"[PlacementEngine] Registry poll failed: {e}")
-            time.sleep(30)
+            # Sleep in 1-second increments so _stop_polling is checked promptly
+            for _ in range(30):
+                if self._stop_polling:
+                    return
+                time.sleep(1)

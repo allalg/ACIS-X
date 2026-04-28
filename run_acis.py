@@ -117,6 +117,10 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
             "customer-profile-group",
             "aggregator-agent-group",
             "payment-prediction-group",
+            # acis.agent.health consumers — must be reset together so stale
+            # degraded/critical events from a previous run are not replayed.
+            "monitoring-group",
+            "self-healing-group",
         ]
 
         reset_count = 0
@@ -206,12 +210,24 @@ def launch_agent(agent_class: type, kwargs: Dict[str, Any]) -> None:
     Initializes Kafka clients inside the child process and runs the agent.
     """
     try:
-        # Create Kafka client inside the child process to avoid sharing across processes
-        kafka_client = _build_kafka_client(auto_offset_reset="latest")
+        # Each agent class may declare an OFFSET_RESET class attribute to control
+        # consumer replay behaviour.  Stateful agents (DBAgent, MemoryAgent,
+        # QueryAgent) use "earliest" so they fully replay on restart.  All other
+        # agents default to "latest" to avoid reprocessing old events.
+        offset_reset = getattr(agent_class, "OFFSET_RESET", "latest")
+        kafka_client = _build_kafka_client(auto_offset_reset=offset_reset)
         kwargs["kafka_client"] = kafka_client
 
         agent = agent_class(**kwargs)
         agent_name = getattr(agent, "agent_name", agent_class.__name__)
+
+        # Wire QueryAgent → MemoryAgent in the multi-process case.
+        # A real object reference cannot cross OS-process boundaries, so we set
+        # a sentinel (True) to activate the QueryClient-based Kafka lookup path.
+        # In a single-process deployment, replace True with the actual MemoryAgent
+        # instance via query_agent.set_memory_agent(memory_agent).
+        if isinstance(agent, QueryAgent) and hasattr(agent, "set_memory_agent"):
+            agent.set_memory_agent(True)  # sentinel: enables QueryClient path
 
         # Handle graceful shutdown in child
         def _handle_sigterm(signum: int, frame: Any) -> None:
@@ -238,31 +254,104 @@ def launch_agent(agent_class: type, kwargs: Dict[str, Any]) -> None:
 def _build_components(supervisor_client=None) -> List[Tuple[type, Dict[str, Any]]]:
     """
     Returns the specifications for each agent to be launched in a separate process.
-    All tight coupling (e.g., query_agent passing) has been removed.
+
+    NOTE — QueryAgent.set_memory_agent() wiring:
+        In a single-process deployment you would wire the agents like this:
+
+            kafka_client = _build_kafka_client()
+            query_agent  = QueryAgent(kafka_client=kafka_client)
+            memory_agent = MemoryAgent(kafka_client=kafka_client)
+            query_agent.set_memory_agent(memory_agent)
+
+        In this multi-process deployment each agent runs in its own OS process,
+        so Python object references cannot cross process boundaries.
+        QueryAgent already reaches MemoryAgent state via QueryClient (Kafka) when
+        self._memory_agent is not None.  The _memory_agent flag is set to a
+        non-None sentinel inside launch_agent() for QueryAgent so that the
+        QueryClient-based path is always attempted; see launch_agent() below.
+
+    NOTE — Agent kwargs convention:
+        Each tuple is (AgentClass, kwargs).  kafka_client is injected by
+        launch_agent() and must NOT appear here.  All other constructor
+        parameters that have non-default values are listed explicitly so that:
+          * required params  → documented and always present
+          * optional params  → documented with their default for transparency
     """
+    # ── Tunable environment variables ─────────────────────────────────────────
+    # How often ScenarioGeneratorAgent creates new customers/invoices (seconds).
+    # Lower values increase event throughput for stress-testing; higher values
+    # reduce load in production-like deployments.
+    # Default: 20.0 s  |  Env var: ACIS_GENERATION_INTERVAL
+    # Raised from 5 s: at 5 s the generator outpaced DBAgent's SQLite write
+    # throughput, causing consumer lag of 15k+ and systematic query timeouts.
+    generation_interval = float(os.getenv("ACIS_GENERATION_INTERVAL", "20.0"))
+
     specs = [
+        # ── Control-plane services ────────────────────────────────────────────
+        # RegistryService: no extra kwargs; kafka_client injected by launch_agent
         (RegistryService, {}),
+
+        # ── Storage agents ────────────────────────────────────────────────────
+        # QueryAgent: no extra kwargs; memory_agent sentinel set inside launch_agent
         (QueryAgent, {}),
+        # MemoryAgent: no extra kwargs; subscribes to acis.customers + acis.invoices
         (MemoryAgent, {}),
-        (CustomerStateAgent, {}),
-        (OverdueDetectionAgent, {}),
-        (CollectionsAgent, {}),
+        # DBAgent: no extra kwargs; db_path defaults to DBAgent.DB_PATH ("acis.db")
         (DBAgent, {}),
+
+        # ── Intelligence / analytical agents ──────────────────────────────────
+        # CustomerStateAgent: no extra kwargs; per-customer lock granularity
+        #   is configured internally via MAX_CONCURRENT_REBUILDS
+        (CustomerStateAgent, {}),
+        # OverdueDetectionAgent: no extra kwargs
+        (OverdueDetectionAgent, {}),
+        # CollectionsAgent: no extra kwargs
+        (CollectionsAgent, {}),
+        # AggregatorAgent: no extra kwargs; merges internal + external risk signals
         (AggregatorAgent, {}),
+
+        # ── Monitoring / self-healing ─────────────────────────────────────────
+        # MonitoringAgent: no extra kwargs; evaluation interval set via HEARTBEAT_TIMEOUT
         (MonitoringAgent, {}),
+        # SelfHealingAgent: optional supervisor handle for cross-process restarts.
+        #   supervisor (AgentSupervisorClient | None): enables restart requests
         (SelfHealingAgent, {"supervisor": supervisor_client} if supervisor_client else {}),
+
+        # ── Runtime infrastructure ────────────────────────────────────────────
+        # RuntimeManager: no extra kwargs
         (RuntimeManager, {}),
+        # PlacementEngine: no extra kwargs; polling thread started in .start()
         (PlacementEngine, {}),
+
+        # ── System utility agents ─────────────────────────────────────────────
+        # TimeTickAgent: no extra kwargs; tick interval is hardcoded (60 s)
         (TimeTickAgent, {}),
+        # DLQMonitorAgent: no extra kwargs; polls acis.dlq at a fixed interval
         (DLQMonitorAgent, {}),
+
+        # ── External data enrichment ──────────────────────────────────────────
+        # ExternalDataAgent: no extra kwargs; thread-pool size = 4 workers
         (ExternalDataAgent, {}),
+        # ExternalScrapingAgent: no extra kwargs; thread-pool size = 2 workers
         (ExternalScrapingAgent, {}),
+
+        # ── Analytical / prediction agents ────────────────────────────────────
+        # PaymentPredictionAgent: no extra kwargs
         (PaymentPredictionAgent, {}),
+        # RiskScoringAgent: no extra kwargs; context enrichment via QueryClient
         (RiskScoringAgent, {}),
+        # CustomerProfileAgent: no extra kwargs
         (CustomerProfileAgent, {}),
-        (ScenarioGeneratorAgent, {"generation_interval_seconds": 5.0}),
+
+        # ── Simulation / load generation ─────────────────────────────────────
+        # ScenarioGeneratorAgent:
+        #   generation_interval_seconds (float, required): seconds between
+        #     customer/invoice creation cycles.
+        #     Controlled by env var ACIS_GENERATION_INTERVAL (default 5.0 s).
+        (ScenarioGeneratorAgent, {"generation_interval_seconds": generation_interval}),
     ]
     return specs
+
 
 
 MAX_RESTART_ATTEMPTS = 5
@@ -279,7 +368,7 @@ def main() -> None:
     
     from runtime.agent_supervisor import AgentSupervisor, SupervisorClient
     supervisor_client = SupervisorClient(shared_dict)
-    supervisor = AgentSupervisor()
+    supervisor = AgentSupervisor(launch_fn=launch_agent)
 
     agent_specs = _build_components(supervisor_client)
     shutdown_requested = False

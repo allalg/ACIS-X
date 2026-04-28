@@ -5,7 +5,7 @@ Combines financial risk (from ExternalDataAgent) and litigation risk
 (from ExternalScrapingAgent) into a unified customer risk profile.
 
 Subscribes to:
-- acis.metrics (ExternalDataEnriched, external.litigation.updated)
+- acis.metrics (external.data.enriched, external.litigation.updated)
 
 Produces:
 - acis.risk (risk.profile.updated)
@@ -29,7 +29,7 @@ class AggregatorAgent(BaseAgent):
     Aggregator Agent for ACIS-X.
 
     Subscribes to:
-    - acis.metrics (ExternalDataEnriched, external.litigation.updated)
+    - acis.metrics (external.data.enriched, external.litigation.updated)
 
     Produces:
     - acis.risk (risk.profile.updated)
@@ -94,7 +94,7 @@ class AggregatorAgent(BaseAgent):
             logger.debug(f"[AggregatorAgent] Skipping duplicate event_id={event_id}")
             return
 
-        if event.event_type == "ExternalDataEnriched":
+        if event.event_type == "external.data.enriched":
             self._handle_financial_event(event)
         elif event.event_type == "external.litigation.updated":
             self._handle_litigation_event(event)
@@ -110,7 +110,7 @@ class AggregatorAgent(BaseAgent):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _handle_financial_event(self, event: Event) -> None:
-        """Handle ExternalDataEnriched event - update financial data in cache.
+        """Handle external.data.enriched event - update financial data in cache.
 
         FIX: Only overwrite cached financial data when the incoming event carries
         a real (non-None) external_risk.  Throttled events carry external_risk=None;
@@ -122,7 +122,7 @@ class AggregatorAgent(BaseAgent):
         customer_id = data.get("customer_id")
 
         if not customer_id:
-            logger.warning("[AggregatorAgent] ExternalDataEnriched missing customer_id, skipping")
+            logger.warning("[AggregatorAgent] external.data.enriched missing customer_id, skipping")
             return
 
         company_name = data.get("company_name") or customer_id

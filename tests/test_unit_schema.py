@@ -102,9 +102,9 @@ def test_invoice_queries(db_agent):
     assert invoice is not None
     assert invoice["total_amount"] == 1000.0
 
-    # Get invoices by customer (non-paid only)
+    # Get invoices by customer — now falls back to DB on cold cache
     invoices = query_agent.get_invoices_by_customer("cust-inv")
-    assert len(invoices) >= 2, "Should return at least non-paid invoices"
+    assert len(invoices["invoices"]) >= 2, "Should return at least 2 non-paid invoices via DB fallback"
 
     # Get all invoices for customer
     all_invoices = query_agent.get_all_invoices_by_customer("cust-inv")

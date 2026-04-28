@@ -21,6 +21,9 @@ class QueryAgent(BaseAgent):
     """
 
     DB_PATH = "acis.db"
+    # Replay from earliest so the invoice cache is correctly populated after
+    # a restart without requiring a manual cache warm-up step.
+    OFFSET_RESET = "earliest"
 
     def __init__(
         self,
@@ -48,7 +51,29 @@ class QueryAgent(BaseAgent):
         self._invoice_cache: Dict[str, Dict[str, Any]] = {}
         self._cache_lock = threading.Lock()
 
-        # Reference to MemoryAgent for state queries (optional)
+        # Tracks which customer IDs have had ALL their invoices loaded from the DB
+        # so that a partial cache warm (from individual get_invoice() calls) does
+        # not suppress the full bulk-load in get_invoices_by_customer().
+        self._loaded_customer_ids: set = set()
+
+        # Reference to MemoryAgent for state queries (optional, set via set_memory_agent())
+        self._memory_agent = None
+
+    def set_memory_agent(self, agent: Any) -> None:
+        """
+        Wire a MemoryAgent instance for in-process state lookups.
+
+        Must be called after both QueryAgent and MemoryAgent are constructed
+        (only effective when both run in the same process).
+
+        Args:
+            agent: A MemoryAgent instance, or None to clear the reference.
+        """
+        self._memory_agent = agent
+        logger.info(
+            "[QueryAgent] MemoryAgent reference %s",
+            "set" if agent is not None else "cleared",
+        )
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -192,7 +217,7 @@ class QueryAgent(BaseAgent):
             return None
 
         # ISSUE 1 FIX: Try MemoryAgent FIRST (real-time cache)
-        if self._memory_agent:
+        if self._memory_agent is not None:
             try:
                 memory_state = QueryClient.query("get_customer_state", {"customer_id": customer_id})
                 if memory_state:
@@ -364,13 +389,18 @@ class QueryAgent(BaseAgent):
 
     def get_invoices_by_customer(self, customer_id: str) -> Dict[str, Any]:
         """
-        Get all invoices for a customer from in-memory cache.
+        Get all invoices for a customer.
+
+        Checks the in-memory cache first.  If the cache holds no invoices for
+        this customer (e.g. on cold start or after a cache invalidation) the
+        method falls back to the database via _load_customer_invoices_from_db(),
+        which also warms the cache for subsequent calls.
 
         Args:
             customer_id: The customer ID to look up.
 
         Returns:
-            Dict containing list of invoice dicts.
+            Dict with key ``invoices`` containing a list of invoice dicts.
         """
         if not customer_id:
             return {"invoices": []}
@@ -381,8 +411,91 @@ class QueryAgent(BaseAgent):
                 if inv_data.get("customer_id") == customer_id
             ]
 
-        logger.debug(f"Fetched {len(invoices)} invoices from cache for customer {customer_id}")
+        if not invoices:
+            # Cache empty for this customer — could be cold start or a full
+            # cache invalidation.  Load all invoices from DB.
+            needs_db_load = True
+        else:
+            # Cache may be partially warm (e.g. from individual get_invoice()
+            # calls) but we haven't yet done a full bulk-load for this customer.
+            with self._cache_lock:
+                needs_db_load = customer_id not in self._loaded_customer_ids
+
+        if needs_db_load:
+            logger.debug(
+                f"[QueryAgent] Bulk-loading invoices from DB for customer {customer_id}"
+            )
+            self._load_customer_invoices_from_db(customer_id)
+            with self._cache_lock:
+                invoices = [
+                    inv_data for inv_data in self._invoice_cache.values()
+                    if inv_data.get("customer_id") == customer_id
+                ]
+
+        logger.debug(f"Fetched {len(invoices)} invoices for customer {customer_id}")
         return {"invoices": invoices}
+
+    def _load_customer_invoices_from_db(self, customer_id: str) -> None:
+        """
+        Load all invoices for *customer_id* from the database into _invoice_cache.
+
+        Uses the same SQL projection as get_all_invoices_by_customer() so that
+        every entry in the cache carries the computed ``remaining_amount`` column.
+        Existing cache entries for other customers are preserved.
+
+        This method is intentionally side-effect-only; callers read the cache
+        themselves after calling it.
+
+        Args:
+            customer_id: The customer whose invoices should be fetched and cached.
+        """
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT
+                        invoice_id,
+                        customer_id,
+                        COALESCE(total_amount, 0.0) AS total_amount,
+                        COALESCE(paid_amount, 0.0) AS paid_amount,
+                        CASE
+                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
+                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
+                            ELSE 0.0
+                        END AS remaining_amount,
+                        due_date,
+                        status
+                    FROM invoices
+                    WHERE customer_id = ?
+                    ORDER BY due_date DESC
+                """, (customer_id,))
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                if rows:
+                    with self._cache_lock:
+                        for row in rows:
+                            record = dict(row)
+                            self._invoice_cache[record["invoice_id"]] = record
+
+                # Mark this customer as fully loaded regardless of row count
+                # (a customer with zero invoices should not be re-queried).
+                with self._cache_lock:
+                    self._loaded_customer_ids.add(customer_id)
+
+                logger.debug(
+                    f"[QueryAgent] Loaded {len(rows)} invoices from DB into cache "
+                    f"for customer {customer_id}"
+                )
+
+            except sqlite3.Error as e:
+                logger.error(
+                    f"[QueryAgent] DB error loading invoices for customer {customer_id}: {e}"
+                )
 
     def get_all_invoices_by_customer(self, customer_id: str) -> List[Dict[str, Any]]:
         """

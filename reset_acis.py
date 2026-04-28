@@ -39,16 +39,25 @@ try:
     from runtime.topic_manager import DEFAULT_TOPICS
     ACIS_TOPICS = list(DEFAULT_TOPICS.keys())
 except ImportError:
-    # Fallback if PYTHONPATH is not set
+    # Fallback if PYTHONPATH is not set.  Must mirror the keys in
+    # runtime/topic_manager.py::ACIS_TOPIC_CONFIGS exactly so that reset_acis
+    # purges the same set of topics as the running system creates.
     ACIS_TOPICS = [
-        "acis.customers", "acis.invoices", "acis.payments", "acis.metrics",
-        "acis.risk", "acis.commands", "acis.events", "acis.alerts",
-        "acis.system", "acis.heartbeat", "acis.registry", "acis.audit",
-        "acis.external.data", "acis.external.scraping",
-        "acis.customers.dlq", "acis.invoices.dlq", "acis.payments.dlq",
-        "acis.metrics.dlq", "acis.risk.dlq", "acis.system.dlq", "acis.dlq",
+        # Business event topics
+        "acis.invoices", "acis.payments", "acis.customers",
+        "acis.risk", "acis.policy", "acis.commands",
+        "acis.metrics", "acis.collections", "acis.predictions",
+        # System topics
+        "acis.system", "acis.time", "acis.agent.health", "acis.registry",
+        # Monitoring / alerts
+        "acis.alerts",
+        # Placement
         "acis.placement.requests", "acis.placement.assignments",
-        "acis.query.request", "acis.query.response"
+        # Query bus
+        "acis.query.request", "acis.query.response",
+        # DLQ topics
+        "acis.invoices.dlq", "acis.payments.dlq", "acis.risk.dlq",
+        "acis.system.dlq", "acis.dlq",
     ]
 
 def step0_kill_zombie_processes():
@@ -67,15 +76,18 @@ def step0_kill_zombie_processes():
                 if 'python' in name.lower() and p.pid != current_pid:
                     cmdline = p.info.get('cmdline') or []
                     cmd_str = ' '.join(cmdline).lower()
+                    
+                    # Kill anything running run_acis, reset_acis, or any ACIS multiprocessing child
                     if "acis" in cmd_str or "multiprocessing" in cmd_str:
-                        p.terminate()
+                        # Use kill() for forceful termination on Windows instead of terminate()
+                        p.kill()
                         killed += 1
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
                 
         if killed > 0:
-            logger.info(f"  [OK] Terminated {killed} orphaned ACIS-X background processes.")
-            time.sleep(2)  # Give OS time to release file locks
+            logger.info(f"  [OK] Force-killed {killed} orphaned ACIS-X background processes.")
+            time.sleep(3)  # Give OS time to release file locks and clean up PIDs
         else:
             logger.info("  [OK] No orphaned processes found.")
     except ImportError:
@@ -93,6 +105,8 @@ def step1_delete_local_files():
 
     files_to_delete = [
         "acis.db",
+        "acis.db-wal",
+        "acis.db-shm",
         "acis.log",
         "acis.log.1",
         ".acis_consumer_groups_initialized",
@@ -133,7 +147,7 @@ def step2_purge_kafka_topics():
         existing_topics = []
         try:
             cluster_topics = admin.list_topics()
-            existing_topics = [t for t in ACIS_TOPICS if t in cluster_topics]
+            existing_topics = [t for t in cluster_topics if t.startswith("acis.")]
             logger.info(f"  Found {len(existing_topics)} existing ACIS topics to delete.")
         except Exception as e:
             logger.warning(f"  Could not list topics: {e}")
@@ -225,6 +239,8 @@ def step3_verify():
 
     checks = {
         "acis.db": not pathlib.Path("acis.db").exists(),
+        "acis.db-wal": not pathlib.Path("acis.db-wal").exists(),
+        "acis.db-shm": not pathlib.Path("acis.db-shm").exists(),
         ".acis_consumer_groups_initialized": not pathlib.Path(".acis_consumer_groups_initialized").exists(),
     }
 

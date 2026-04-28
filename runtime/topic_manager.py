@@ -208,6 +208,10 @@ ACIS_TOPIC_CONFIGS = {
     ),
 }
 
+# Alias for backwards-compatibility with reset_acis.py and any other
+# scripts that import DEFAULT_TOPICS.  ACIS_TOPIC_CONFIGS is the primary export.
+DEFAULT_TOPICS = ACIS_TOPIC_CONFIGS
+
 
 # =============================================================================
 # Topic Admin Operations

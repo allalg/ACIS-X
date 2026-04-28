@@ -1,12 +1,3 @@
-"""
-Pytest configuration and fixtures for ACIS-X tests.
-
-This file provides:
-- Kafka mocks for unit testing without a broker
-- Database fixtures for local testing
-- Common test utilities
-"""
-
 import pytest
 from unittest.mock import MagicMock, patch
 from typing import Generator, Dict, Any
@@ -35,9 +26,14 @@ def mock_kafka_client(mock_kafka_config):
     """Mock KafkaClient that doesn't require a running Kafka broker.
 
     Returns a KafkaClient with mocked producer and consumer.
+    Each event published through mock_publish is validated against
+    EventEnvelope before being stored.  Invalid events go to
+    client.dlq_events instead of client.published_events so tests
+    can assert_no_dlq_events() to catch schema violations early.
     """
     from unittest.mock import MagicMock
     from runtime.kafka_client import KafkaClient
+    from schemas.event_envelope import EventEnvelope
 
     # Create real client but patch the internal producer/consumer
     client = KafkaClient(config=mock_kafka_config, backend="kafka-python")
@@ -46,21 +42,55 @@ def mock_kafka_client(mock_kafka_config):
     client._producer = MagicMock()
     client._consumer = MagicMock()
 
-    # Mock publish to just store events locally
-    published_events = []
+    # Mock publish: validate against EventEnvelope before accepting
+    published_events: list = []
+    dlq_events: list = []
+
     def mock_publish(topic, event, key=None, partition=None, headers=None):
-        published_events.append({
-            "topic": topic,
-            "event": event,
-            "key": key,
-            "partition": partition,
-        })
+        try:
+            EventEnvelope(**event)
+            published_events.append({
+                "topic": topic,
+                "event": event,
+                "key": key,
+                "partition": partition,
+            })
+        except Exception as e:
+            dlq_events.append({
+                "topic": topic,
+                "event": event,
+                "error": str(e),
+            })
         return True
 
     client.publish = mock_publish
     client.published_events = published_events
+    client.dlq_events = dlq_events
 
     return client
+
+
+# =====================================================================
+# Test Helpers
+# =====================================================================
+
+def assert_no_dlq_events(client) -> None:
+    """Assert that no events failed schema validation during the test.
+
+    Call this at the end of any test that publishes events to verify
+    the pipeline never produced a malformed EventEnvelope.
+
+    Args:
+        client: A mock_kafka_client fixture instance.
+
+    Raises:
+        AssertionError: If any DLQ events are present.
+    """
+    assert len(client.dlq_events) == 0, (
+        f"Unexpected DLQ events ({len(client.dlq_events)} total): "
+        f"{client.dlq_events}"
+    )
+
 
 
 # =====================================================================

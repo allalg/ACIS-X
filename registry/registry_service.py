@@ -164,6 +164,16 @@ class RegistryService:
         self._topology_changes = 0
         self._start_time: Optional[datetime] = None
 
+        # Outbound publish queue: _handle_message() and its _publish_* helpers
+        # append (topic, event_dict, key) tuples here instead of calling
+        # kafka_client.publish() directly.  The consumer loop drains the queue
+        # after committing the inbound offset so that:
+        #   1. A publish failure cannot leave the in-memory registry in an
+        #      inconsistent state (state mutation has already completed).
+        #   2. The inbound offset is committed before any outbound I/O, so a
+        #      crash mid-publish doesn't cause double-processing on restart.
+        self._publish_queue: list = []
+
         logger.info(f"RegistryService initialized (id: {self.service_id})")
 
     # -------------------------------------------------------------------------
@@ -242,6 +252,18 @@ class RegistryService:
                     self._handle_message(msg)
                     self.kafka_client.commit(msg)
 
+                    # Drain outbound publish queue AFTER committing the inbound
+                    # offset so the registry state and Kafka log stay consistent.
+                    for _topic, _event, _key in self._publish_queue:
+                        try:
+                            self.kafka_client.publish(_topic, _event, key=_key)
+                        except Exception as pub_exc:
+                            logger.error(
+                                "RegistryService: publish to %s failed: %s",
+                                _topic, pub_exc,
+                            )
+                    self._publish_queue.clear()
+
             except Exception as e:
                 logger.error(f"Error in consumer loop: {e}")
                 if self._running:
@@ -318,31 +340,31 @@ class RegistryService:
 
         with self._registry_lock:
             if agent_id not in self._registry:
-                # Auto-register with minimal fields only - real registration will fill details
-                self._registry[agent_id] = RegisteredAgent(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                    status=payload.get("status", AgentStatus.HEALTHY.value),
-                    registered_at=datetime.utcnow(),
-                    last_heartbeat=datetime.utcnow(),
-                    last_updated=datetime.utcnow(),
+                # Discard heartbeats from agents that have not yet sent a
+                # registry.agent.registered event.  Auto-registering here
+                # produces an entry with empty capabilities, which poisons
+                # capability-based discovery until the real registration arrives.
+                logger.debug(
+                    "Heartbeat from unregistered agent %s, ignoring until "
+                    "registry.agent.registered arrives",
+                    agent_id,
                 )
-                logger.info(f"Auto-registered agent from heartbeat: {agent_id}")
-            else:
-                # Update existing entry
-                agent = self._registry[agent_id]
-                agent.last_heartbeat = datetime.utcnow()
-                agent.status = payload.get("status", agent.status)
-                agent.metrics = payload.get("metrics", agent.metrics)
-                agent.last_updated = datetime.utcnow()
+                return
 
-                # Update replica info if present
-                if payload.get("replica_count") is not None:
-                    agent.replica_count = payload.get("replica_count")
-                if payload.get("max_replicas") is not None:
-                    agent.max_replicas = payload.get("max_replicas")
-                if payload.get("replica_index") is not None:
-                    agent.replica_index = payload.get("replica_index")
+            # Update existing entry only -- no auto-registration
+            agent = self._registry[agent_id]
+            agent.last_heartbeat = datetime.utcnow()
+            agent.status = payload.get("status", agent.status)
+            agent.metrics = payload.get("metrics", agent.metrics)
+            agent.last_updated = datetime.utcnow()
+
+            # Update replica info if present
+            if payload.get("replica_count") is not None:
+                agent.replica_count = payload.get("replica_count")
+            if payload.get("max_replicas") is not None:
+                agent.max_replicas = payload.get("max_replicas")
+            if payload.get("replica_index") is not None:
+                agent.replica_index = payload.get("replica_index")
 
         logger.debug(f"Heartbeat processed for {agent_id}")
 
@@ -1137,11 +1159,11 @@ class RegistryService:
             "metadata": {"environment": "production"},
         }
 
-        self.kafka_client.publish(
-            topic="acis.registry",
-            event=event_dict,
-            key=agent.agent_id,
-        )
+        self._publish_queue.append((
+            "acis.registry",
+            event_dict,
+            agent.agent_id,
+        ))
 
     def _publish_agent_updated(self, agent: RegisteredAgent, reason: str) -> None:
         """Publish registry.agent.updated event."""
@@ -1170,11 +1192,11 @@ class RegistryService:
             "metadata": {"environment": "production"},
         }
 
-        self.kafka_client.publish(
-            topic="acis.registry",
-            event=event_dict,
-            key=agent.agent_id,
-        )
+        self._publish_queue.append((
+            "acis.registry",
+            event_dict,
+            agent.agent_id,
+        ))
 
     def _publish_agent_deregistered(self, agent: RegisteredAgent) -> None:
         """Publish registry.agent.deregistered event."""
@@ -1204,11 +1226,11 @@ class RegistryService:
             "metadata": {"environment": "production"},
         }
 
-        self.kafka_client.publish(
-            topic="acis.registry",
-            event=event_dict,
-            key=agent.agent_id,
-        )
+        self._publish_queue.append((
+            "acis.registry",
+            event_dict,
+            agent.agent_id,
+        ))
 
     def _publish_topology_changed(self) -> None:
         """Publish registry.topology.changed event."""
@@ -1236,13 +1258,13 @@ class RegistryService:
             "metadata": {"environment": "production"},
         }
 
-        self.kafka_client.publish(
-            topic="acis.registry",
-            event=event_dict,
-            key="topology",
-        )
+        self._publish_queue.append((
+            "acis.registry",
+            event_dict,
+            "topology",
+        ))
 
-        logger.info(f"Topology changed event published (version: {self._topology_version})")
+        logger.info(f"Topology changed event queued (version: {self._topology_version})")
 
     def _publish_discovery_response(
         self,
@@ -1272,11 +1294,11 @@ class RegistryService:
             "metadata": {"environment": "production"},
         }
 
-        self.kafka_client.publish(
-            topic="acis.registry",
-            event=event_dict,
-            key=requester,
-        )
+        self._publish_queue.append((
+            "acis.registry",
+            event_dict,
+            requester,
+        ))
 
     # -------------------------------------------------------------------------
     # Statistics

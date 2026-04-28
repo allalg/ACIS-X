@@ -6,8 +6,9 @@ import threading
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Set
+from datetime import datetime, timezone
+import collections
+from typing import Dict, List, Any, Optional
 from pydantic import ValidationError
 
 from schemas.event_schema import Event, DLQEvent
@@ -86,8 +87,12 @@ class BaseAgent(ABC):
         # State management
         self._running = False
         self._shutdown_event = threading.Event()
-        self._processed_event_ids: Set[str] = set()
-        self._processed_event_ids_lock = threading.Lock()
+        # OrderedDict used as an insertion-ordered set for O(1) duplicate detection
+        # and O(1) FIFO eviction once the cap is reached (popitem(last=False)).
+        # A plain set() has no eviction order, requiring an O(N) list conversion
+        # and a loop to remove 50k items — holding the lock the entire time.
+        self._processed_event_ids: collections.OrderedDict = collections.OrderedDict()
+        self._processed_event_ids_lock = threading.Lock()  # guards the OrderedDict only
         self._heartbeat_thread: Optional[threading.Thread] = None
         self._consumer_thread: Optional[threading.Thread] = None
 
@@ -433,21 +438,22 @@ class BaseAgent(ABC):
     # -------------------------------------------------------------------------
 
     def _is_duplicate(self, event_id: str) -> bool:
-        """Check if event has already been processed."""
+        """Check if event has already been processed (O(1) OrderedDict lookup)."""
         with self._processed_event_ids_lock:
             return event_id in self._processed_event_ids
 
     def _mark_processed(self, event_id: str) -> None:
-        """Mark event as processed."""
-        with self._processed_event_ids_lock:
-            self._processed_event_ids.add(event_id)
+        """Mark event as processed with O(1) FIFO eviction once the 10 000-entry cap is reached.
 
-            # Limit set size to prevent memory growth
-            if len(self._processed_event_ids) > 100000:
-                # Remove oldest entries (simplified - in production use LRU cache)
-                to_remove = list(self._processed_event_ids)[:50000]
-                for eid in to_remove:
-                    self._processed_event_ids.discard(eid)
+        Uses an OrderedDict so insertion order is preserved and the oldest entry
+        can be evicted in O(1) time via popitem(last=False), instead of the
+        previous approach which required converting the entire set to a list
+        and discarding 50 000 items in a loop (holding the lock throughout).
+        """
+        with self._processed_event_ids_lock:
+            self._processed_event_ids[event_id] = None
+            if len(self._processed_event_ids) > 10000:
+                self._processed_event_ids.popitem(last=False)  # evict oldest
 
     # -------------------------------------------------------------------------
     # Dead Letter Queue
@@ -531,7 +537,9 @@ class BaseAgent(ABC):
             event_id=f"evt_{uuid.uuid4()}",
             event_type=event_type,
             event_source=self.agent_name,
-            event_time=datetime.utcnow(),
+            # Use timezone.utc for correctness, then strip tzinfo so the Event
+            # model (which stores a naive UTC datetime) stays consistent.
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             correlation_id=correlation_id,
             entity_id=entity_id,
             schema_version=self.SCHEMA_VERSION,
@@ -1012,6 +1020,14 @@ class BaseAgent(ABC):
                 metadata={"environment": "production"},
             )
             logger.info(f"Agent {self.agent_name} deregistered from registry")
+        except RuntimeError as e:
+            # KafkaClient.publish() raises RuntimeError when the client is already
+            # closed (i.e. close() was called before deregister completed during
+            # shutdown).  This is a normal race condition — log at DEBUG, not WARNING.
+            logger.debug(
+                "[%s] Skipping deregistration publish — Kafka client already closed: %s",
+                self.agent_name, e,
+            )
         except Exception as e:
             logger.warning(f"Failed to deregister from registry: {e}")
 

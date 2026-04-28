@@ -53,6 +53,9 @@ class TimeTickAgent(BaseAgent):
         )
         self._running = False
         self._tick_thread = None
+        # Event used to (a) interrupt the startup delay and (b) wake the
+        # inter-tick sleep early when stop() is called.
+        self._shutdown_event = threading.Event()
 
     def subscribe(self) -> List[str]:
         """TimeTickAgent produces only, does not consume."""
@@ -80,13 +83,28 @@ class TimeTickAgent(BaseAgent):
         """Stop the time tick agent gracefully."""
         logger.info("[TimeTickAgent] Stopping time tick agent")
         self._running = False
+        # Wake the tick loop immediately (startup wait or inter-tick sleep).
+        self._shutdown_event.set()
         if self._tick_thread:
             self._tick_thread.join(timeout=2)
         # Deregister, stop heartbeat (from BaseAgent)
         super().stop()
 
     def _tick_loop(self) -> None:
-        """Main loop: publish time ticks every 5 seconds."""
+        """Main loop: publish time ticks every 5 seconds.
+
+        A 1-second startup delay is applied before the first tick so that the
+        Kafka producer's lazy initialisation (connection setup, metadata fetch)
+        can complete before ``publish_event`` is called for the first time.
+        If ``stop()`` is called during this wait the loop exits immediately.
+        """
+        # --- startup delay ---------------------------------------------------
+        self._shutdown_event.wait(timeout=1.0)
+        if not self._running:
+            logger.info("[TimeTickAgent] Shutdown requested during startup delay, exiting tick loop")
+            return
+        # ---------------------------------------------------------------------
+
         tick_count = 0
         while self._running:
             try:
@@ -109,9 +127,9 @@ class TimeTickAgent(BaseAgent):
                     f"[TimeTickAgent] Published tick #{tick_count}: {current_time.isoformat()}"
                 )
 
-                # Sleep for tick interval
-                time.sleep(self.TICK_INTERVAL_SECONDS)
+                # Sleep for tick interval, but wake immediately on shutdown.
+                self._shutdown_event.wait(timeout=self.TICK_INTERVAL_SECONDS)
 
             except Exception as e:
                 logger.error(f"[TimeTickAgent] Error in tick loop: {e}")
-                time.sleep(1)  # Back off on error
+                self._shutdown_event.wait(timeout=1)  # Back off on error

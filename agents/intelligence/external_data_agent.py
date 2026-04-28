@@ -3,6 +3,8 @@ import re
 import sqlite3
 import time
 import requests
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Any, Optional, Dict
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
@@ -94,6 +96,14 @@ class ExternalDataAgent(BaseAgent):
         self._MAX_RISK_TRACK = 5000  # evict oldest when exceeded
         _screener_breaker.on_state_change = self._on_screener_breaker_change
 
+        # ThreadPoolExecutor for non-blocking enrichment.
+        # handle_event() submits work here and returns immediately so the Kafka
+        # consumer thread is never blocked by network I/O.
+        self._executor = ThreadPoolExecutor(
+            max_workers=4,
+            thread_name_prefix="ext-data",
+        )
+
     def _on_screener_breaker_change(self, old_state: str, new_state: str) -> None:
         if new_state == "OPEN":
             logger.warning("screener.in circuit OPEN — returning null enrichment")
@@ -111,6 +121,12 @@ class ExternalDataAgent(BaseAgent):
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
         return [self.TOPIC_INPUT]
+
+    def stop(self) -> None:
+        """Stop agent and shut down the enrichment thread pool."""
+        super().stop()
+        # wait=False: don't block agent teardown waiting for in-flight fetches
+        self._executor.shutdown(wait=False)
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
@@ -822,15 +838,11 @@ class ExternalDataAgent(BaseAgent):
     # ─────────────────────────────────────────────────────────────────────────
 
     def handle_event(self, event: Event) -> None:
-        """Handle customer.metrics.updated event and enrich with external data.
+        """Submit enrichment work to the thread pool and return immediately.
 
-        KEY CHANGE: If the company is throttled (fetched < 24h ago) and there
-        is no cached data to serve, we return WITHOUT publishing an event.
-        Publishing ExternalDataEnriched with external_risk=None violates the
-        event contract and causes the AggregatorAgent to overwrite valid cached
-        scores with None.
-
-        Rule enforced here: only publish when new information is produced.
+        The Kafka consumer thread is freed as soon as the task is queued.
+        All blocking I/O (NSE/BSE/Screener fetches) runs inside
+        _enrich_and_publish() on an executor thread.
         """
         logger.info(f"Received event: {event.event_type} for entity {event.entity_id}")
 
@@ -841,138 +853,151 @@ class ExternalDataAgent(BaseAgent):
             logger.warning("Missing customer_id in metrics event")
             return
 
-        # Resolve company name
         company_name = payload.get("company_name")
-        if not company_name:
-            try:
-                customer = QueryClient.query("get_customer", {"customer_id": customer_id})
-                if customer:
-                    company_name = customer.get("name")
-            except Exception as e:
-                logger.debug(f"[ExternalDataAgent] Failed to lookup customer: {e}")
 
-        if not company_name:
-            logger.debug(
-                f"[ExternalDataAgent] Skipping enrichment for {customer_id}: "
-                f"no company name resolved"
-            )
-            return
+        # Submit — returns immediately
+        self._executor.submit(
+            self._enrich_and_publish,
+            customer_id,
+            company_name,
+            event.correlation_id,
+        )
 
-        company_name = company_name.strip()[:100]
+    def _enrich_and_publish(self, customer_id: str, company_name: Optional[str], correlation_id: Optional[str]) -> None:
+        """Full enrichment pipeline executed on an executor thread.
 
-        # Resolve slug (ticker)
-        slug = self._resolve_slug(company_name)
+        Previously the body of handle_event().  Resolves company name, fetches
+        exchange/Screener data, stores to DB, and publishes the enriched event.
+        """
+        try:
+            # Resolve company name if not provided in payload
+            if not company_name:
+                try:
+                    customer = QueryClient.query("get_customer", {"customer_id": customer_id})
+                    if customer:
+                        company_name = customer.get("name")
+                except Exception as e:
+                    logger.debug(f"[ExternalDataAgent] Failed to lookup customer: {e}")
 
-        current_time = time.time()
-        last_fetch = self._last_fetch_time.get(slug, 0)
-        time_since_fetch = (current_time - last_fetch) / 3600
+            if not company_name:
+                logger.debug(
+                    f"[ExternalDataAgent] Skipping enrichment for {customer_id}: "
+                    f"no company name resolved"
+                )
+                return
 
-        # Check DB cache (keyed by real company_name, fallback by slug/ticker)
-        cached = self._get_cached_financials(company_name, slug)
+            company_name = company_name.strip()[:100]
 
-        if cached:
-            # Restore throttle time from DB cache
-            logger.info(
-                f"[ExternalDataAgent] Using cached data for {company_name} "
-                f"(fetched {time_since_fetch:.1f}h ago)"
-            )
-            external_risk = cached.get("risk")
-            financial_data = cached
-            try:
-                updated_at = cached.get("updated_at")
-                if updated_at:
-                    db_ts = datetime.fromisoformat(updated_at).timestamp()
-                    self._last_fetch_time[slug] = max(self._last_fetch_time.get(slug, 0), db_ts)
-            except Exception:
+            # Resolve slug (ticker)
+            slug = self._resolve_slug(company_name)
+
+            current_time = time.time()
+            last_fetch = self._last_fetch_time.get(slug, 0)
+            time_since_fetch = (current_time - last_fetch) / 3600
+
+            # Check DB cache (keyed by real company_name, fallback by slug/ticker)
+            cached = self._get_cached_financials(company_name, slug)
+
+            if cached:
+                logger.info(
+                    f"[ExternalDataAgent] Using cached data for {company_name} "
+                    f"(fetched {time_since_fetch:.1f}h ago)"
+                )
+                external_risk = cached.get("risk")
+                financial_data = cached
+                try:
+                    updated_at = cached.get("updated_at")
+                    if updated_at:
+                        db_ts = datetime.fromisoformat(updated_at).timestamp()
+                        self._last_fetch_time[slug] = max(self._last_fetch_time.get(slug, 0), db_ts)
+                except Exception:
+                    self._last_fetch_time[slug] = current_time
+
+            elif last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
+                logger.info(
+                    f"[ExternalDataAgent] Throttled for {slug}: "
+                    f"last fetch was {time_since_fetch:.1f}h ago. "
+                    f"Skipping publish to preserve downstream cache integrity."
+                )
+                return
+
+            else:
+                logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug} (Primary: NSE/BSE)")
+                financial_data = self._fetch_primary_exchange_data(company_name, slug)
+                financial_data = self._enrich_with_screener_fallback(financial_data, company_name, slug)
+
+                financial_data["real_company_name"] = company_name
+                financial_data["ticker"] = slug
+
+                self._store_financials(financial_data)
+                external_risk = financial_data.get("risk")
                 self._last_fetch_time[slug] = current_time
 
-        elif last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
-            # --- THROTTLED: NO CACHE AND WITHIN 24H WINDOW ---
-            # Do NOT publish — returning here means the aggregator keeps whatever
-            # good data it already has.  Publishing None would overwrite it.
+            source = financial_data.get("source", "screener.in")
+            confidence = financial_data.get("confidence", self.CONFIDENCE_STRUCTURED)
+
+            llm_risk = financial_data.get("llm_estimated_risk")
+            if external_risk is None and llm_risk is not None:
+                external_risk = llm_risk
+
+            external_payload = {
+                "customer_id": customer_id,
+                "company_name": company_name,
+                "pe": financial_data.get("pe"),
+                "roe": financial_data.get("roe"),
+                "roce": financial_data.get("roce"),
+                "debt": financial_data.get("debt"),
+                "market_cap": financial_data.get("market_cap"),
+                "sales_growth": financial_data.get("sales_growth"),
+                "profit_growth": financial_data.get("profit_growth"),
+                "interest_coverage": financial_data.get("interest_coverage"),
+                "external_risk": round(external_risk, 4) if external_risk is not None else None,
+                "source": source,
+                "confidence": round(confidence, 4),
+                "generated_at": datetime.utcnow().isoformat(),
+            }
+
+            last_risk = self._last_published_risk.get(customer_id)
+            current_risk_str = f"{round(external_risk, 4)}" if external_risk is not None else "None"
+            current_signature = (
+                f"{current_risk_str}|{financial_data.get('pe')}|{financial_data.get('roe')}|"
+                f"{financial_data.get('roce')}|{financial_data.get('debt')}|{financial_data.get('market_cap')}"
+            )
+            safe_external_risk = round(external_risk, 4) if external_risk is not None else None
+
+            if (
+                last_risk == safe_external_risk
+                and self._last_published_signature.get(customer_id) == current_signature
+            ):
+                logger.debug(
+                    f"[ExternalDataAgent] Skipping publish for {customer_id}: "
+                    f"external_risk={current_risk_str} (unchanged)"
+                )
+                return
+
+            self.publish_event(
+                topic=self.TOPIC_OUTPUT,
+                event_type="external.data.enriched",
+                entity_id=customer_id,
+                payload=external_payload,
+                correlation_id=correlation_id,
+            )
+
+            if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
+                self._last_published_risk.popitem(last=False)
+            if len(self._last_published_signature) >= self._MAX_RISK_TRACK:
+                self._last_published_signature.popitem(last=False)
+            self._last_published_risk[customer_id] = safe_external_risk
+            self._last_published_signature[customer_id] = current_signature
+
             logger.info(
-                f"[ExternalDataAgent] Throttled for {slug}: "
-                f"last fetch was {time_since_fetch:.1f}h ago. "
-                f"Skipping publish to preserve downstream cache integrity."
+                f"[ExternalDataAgent] customer={customer_id}, "
+                f"external_risk={external_risk if external_risk is not None else 'None'}"
             )
-            return  # ← BUG 1 FIX: exit without publishing
 
-        else:
-            # Fresh fetch
-            logger.info(f"[ExternalDataAgent] Fetching fresh data for {slug} (Primary: NSE/BSE)")
-            financial_data = self._fetch_primary_exchange_data(company_name, slug)
-            financial_data = self._enrich_with_screener_fallback(financial_data, company_name, slug)
-
-            # BUG 3 FIX: tag with real company name + slug as ticker before storing
-            financial_data["real_company_name"] = company_name
-            financial_data["ticker"] = slug
-
-            self._store_financials(financial_data)
-            external_risk = financial_data.get("risk")
-            self._last_fetch_time[slug] = current_time
-
-        # If we have no risk at all (private company, all sources failed) — still
-        # publish so the aggregator knows this customer was processed (with None).
-        # The DB layer will COALESCE(None, existing) so nothing is destroyed.
-        source = financial_data.get("source", "screener.in")
-        confidence = financial_data.get("confidence", self.CONFIDENCE_STRUCTURED)
-
-        # Check for LLM-estimated risk as last-resort weak signal
-        llm_risk = financial_data.get("llm_estimated_risk")
-        if external_risk is None and llm_risk is not None:
-            external_risk = llm_risk  # already weighted by CONFIDENCE_LLM
-
-        external_payload = {
-            "customer_id": customer_id,
-            "company_name": company_name,
-            "pe": financial_data.get("pe"),
-            "roe": financial_data.get("roe"),
-            "roce": financial_data.get("roce"),
-            "debt": financial_data.get("debt"),
-            "market_cap": financial_data.get("market_cap"),
-            "sales_growth": financial_data.get("sales_growth"),
-            "profit_growth": financial_data.get("profit_growth"),
-            "interest_coverage": financial_data.get("interest_coverage"),
-            "external_risk": round(external_risk, 4) if external_risk is not None else None,
-            "source": source,
-            "confidence": round(confidence, 4),
-            "generated_at": datetime.utcnow().isoformat(),
-        }
-
-        last_risk = self._last_published_risk.get(customer_id)
-        current_risk_str = f"{round(external_risk, 4)}" if external_risk is not None else "None"
-        current_signature = (
-            f"{current_risk_str}|{financial_data.get('pe')}|{financial_data.get('roe')}|"
-            f"{financial_data.get('roce')}|{financial_data.get('debt')}|{financial_data.get('market_cap')}"
-        )
-        safe_external_risk = round(external_risk, 4) if external_risk is not None else None
-
-        if (
-            last_risk == safe_external_risk
-            and self._last_published_signature.get(customer_id) == current_signature
-        ):
-            logger.debug(
-                f"[ExternalDataAgent] Skipping publish for {customer_id}: "
-                f"external_risk={current_risk_str} (unchanged)"
+        except Exception as exc:
+            logger.error(
+                "[ExternalDataAgent] _enrich_and_publish failed for %s: %s",
+                customer_id, exc, exc_info=True,
             )
-            return
-
-        self.publish_event(
-            topic=self.TOPIC_OUTPUT,
-            event_type="ExternalDataEnriched",
-            entity_id=customer_id,
-            payload=external_payload,
-            correlation_id=event.correlation_id,
-        )
-
-        if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
-            self._last_published_risk.popitem(last=False)
-        if len(self._last_published_signature) >= self._MAX_RISK_TRACK:
-            self._last_published_signature.popitem(last=False)
-        self._last_published_risk[customer_id] = safe_external_risk
-        self._last_published_signature[customer_id] = current_signature
-
-        logger.info(
-            f"[ExternalDataAgent] customer={customer_id}, external_risk={external_risk if external_risk is not None else 'None'}"
-        )
 

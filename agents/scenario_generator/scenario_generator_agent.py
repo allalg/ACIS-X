@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
-from utils.query_client import QueryClient
+from utils.query_client import QueryClient, QueryTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class ScenarioGeneratorAgent(BaseAgent):
     def __init__(
         self,
         kafka_client: Any,
-        generation_interval_seconds: float = 5.0,
+        generation_interval_seconds: float = 20.0,
         customers_per_batch: int = 1,
         invoices_per_batch: int = 2,
         payments_per_batch: int = 1,
@@ -236,9 +236,11 @@ class ScenarioGeneratorAgent(BaseAgent):
            NULL-named rows are orphans we do not own — skip tracking them.
         3. Sync _company_names_used from ALL non-null names in DB so the
            uniqueness guard is complete even after a partial previous run.
+
+        If QueryClient is unreachable (e.g. QueryAgent not yet started) the
+        seed is skipped silently; the in-memory state starts empty and will
+        be populated as customers are created during the generation loop.
         """
-        if False  :
-            return
         try:
             db_customers = QueryClient.query("get_all_customers", {})
             if not db_customers:
@@ -283,43 +285,44 @@ class ScenarioGeneratorAgent(BaseAgent):
                 f"(counter at {self._customer_counter}, "
                 f"company pool used: {len(self._company_names_used)})"
             )
+        except QueryTimeoutError:
+            logger.warning(
+                "[ScenarioGenerator] QueryClient unavailable at startup, skipping DB seed "
+                "(will start from empty in-memory state)"
+            )
         except Exception as e:
             logger.warning(f"[ScenarioGenerator] Failed to seed customers from DB: {e}")
 
     def _get_db_customer_count(self) -> int:
-        """Get actual customer count from database via QueryAgent."""
-        if False  :
-            # Fallback to memory count if QueryAgent not available
-            return len(self._customers)
+        """Get actual customer count from database via QueryAgent.
 
+        Falls back to len(self._customers) when QueryClient is unreachable.
+        """
         try:
             customers = QueryClient.query("get_all_customers", {})
             count = len(customers) if customers else 0
             logger.debug(f"DB customer count: {count}")
             return count
+        except QueryTimeoutError:
+            logger.warning("[ScenarioGenerator] QueryClient timeout getting customer count, using memory count")
+            return len(self._customers)
         except Exception as e:
             logger.warning(f"Failed to get DB customer count: {e}, using memory count")
             return len(self._customers)
 
     def _get_db_invoice_count(self) -> int:
-        """Get actual invoice count from database via QueryAgent (aggregate query)."""
-        if False  :
-            # Fallback to memory count if QueryAgent not available
-            return len(self._invoices)
+        """Get actual invoice count from database via QueryAgent (aggregate query).
 
+        Falls back to len(self._invoices) when QueryClient is unreachable.
+        """
         try:
-            # Use a single query to get invoice count directly (avoid N+1)
-            # This assumes QueryAgent has access to a count method or we query directly
-            # For now, batch the lookup into one operation
+            # Batch: fetch all customer IDs in one query, then sum per-customer invoices.
             all_customers = QueryClient.query("get_all_customers", {})
             if not all_customers:
                 return 0
 
-            # Collect all customer IDs first (1 query)
             customer_ids = [c.get("customer_id") for c in all_customers if c.get("customer_id")]
 
-            # Get total invoices via aggregate (ideally single query)
-            # For now, we still loop but at least we batch the customer lists
             total = 0
             for customer_id in customer_ids:
                 try:
@@ -327,10 +330,13 @@ class ScenarioGeneratorAgent(BaseAgent):
                     if invoices:
                         total += len(invoices)
                 except Exception:
-                    pass  # Skip if customer lookup fails
+                    pass  # Skip individual customer if its lookup fails
 
             logger.debug(f"DB invoice count: {total}")
             return total
+        except QueryTimeoutError:
+            logger.warning("[ScenarioGenerator] QueryClient timeout getting invoice count, using memory count")
+            return len(self._invoices)
         except Exception as e:
             logger.warning(f"Failed to get DB invoice count: {e}, using memory count")
             return len(self._invoices)
@@ -341,13 +347,11 @@ class ScenarioGeneratorAgent(BaseAgent):
         This is the ONLY safe source for invoice generation because:
         - self._customers is updated immediately after publish (before DB write)
         - DB is the ground truth; only DB-confirmed customers avoid FK + NULL races
+
+        When QueryClient is unreachable, falls back to the in-memory
+        self._customers dict (seeded from DB at startup) to avoid stalling
+        the generation loop entirely during a transient outage.
         """
-        if False  :
-            # No QueryAgent: fall back to in-memory named customers only
-            return [
-                cid for cid, data in self._customers.items()
-                if data.get("customer_name")
-            ]
         try:
             db_custs = QueryClient.query("get_all_customers", {})
             # Only customers with a real, non-placeholder name are invoiceable
@@ -357,9 +361,24 @@ class ScenarioGeneratorAgent(BaseAgent):
                 if c.get("customer_id") and c.get("name")
                 and not c["name"].startswith("cust_")
             ]
+        except QueryTimeoutError:
+            logger.warning(
+                "[ScenarioGenerator] QueryClient timeout fetching invoiceable customers, "
+                "falling back to in-memory customer list"
+            )
+            return [
+                cid for cid, data in self._customers.items()
+                if data.get("customer_name")
+            ]
         except Exception as e:
-            logger.warning(f"[ScenarioGenerator] Could not fetch invoiceable customers: {e}")
-            return []
+            logger.warning(
+                f"[ScenarioGenerator] Could not fetch invoiceable customers: {e}, "
+                "falling back to in-memory customer list"
+            )
+            return [
+                cid for cid, data in self._customers.items()
+                if data.get("customer_name")
+            ]
 
     def _generate_batch(self) -> None:
         """Generate a batch of synthetic events in a phase-controlled fashion.
@@ -406,8 +425,17 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     def _generate_customer(self, correlation_id: str) -> str:
         """Generate a new customer or update existing one."""
-        # If the customer pool is at capacity, only do updates — never create duplicates
-        if len(self._customers) >= self.MAX_CUSTOMERS:
+        # Use the DB-authoritative count as the cap guard.
+        # self._customers only contains customers that were successfully seeded
+        # from DB at startup (named rows only), so on a fresh run it starts at 0
+        # and the old `len(self._customers) >= MAX_CUSTOMERS` check was always
+        # False — the generator never stopped creating new customers.
+        # _get_db_customer_count() falls back to len(self._customers) if
+        # QueryClient is unreachable, which is safe: in that case we may
+        # temporarily over-create, but the uniqueness guard (available pool)
+        # will gate further creation once all company names are used.
+        db_count = self._get_db_customer_count()
+        if db_count >= self.MAX_CUSTOMERS:
             return self._update_customer(correlation_id)
 
         # Decide: new customer or update existing
@@ -416,18 +444,20 @@ class ScenarioGeneratorAgent(BaseAgent):
 
         return self._create_customer(correlation_id)
 
+
     def _create_customer(self, correlation_id: str) -> str:
         """Create a new customer with real Indian company."""
         # Sync _company_names_used with DB to catch names from any previous run
         # that were written to DB but not tracked in this process's memory.
-        if True:
-            try:
-                db_custs = QueryClient.query("get_all_customers", {})
-                for c in db_custs:
-                    if c.get("name"):
-                        self._company_names_used.add(c["name"])
-            except Exception as e:
-                logger.debug(f"[ScenarioGenerator] DB name sync failed (non-fatal): {e}")
+        try:
+            db_custs = QueryClient.query("get_all_customers", {})
+            for c in db_custs:
+                if c.get("name"):
+                    self._company_names_used.add(c["name"])
+        except QueryTimeoutError:
+            logger.debug("[ScenarioGenerator] DB name sync timed out (non-fatal)")
+        except Exception as e:
+            logger.debug(f"[ScenarioGenerator] DB name sync failed (non-fatal): {e}")
 
         # Pick a company that hasn't been used yet
         all_companies = [

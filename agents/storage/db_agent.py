@@ -38,6 +38,11 @@ class DBAgent(BaseAgent):
     DB_PATH = "acis.db"
     UNIT_SUFFIX_PATTERN = re.compile(r"\s*-\s*Unit\s+\d+\b.*$", re.IGNORECASE)
 
+    # Consumer auto_offset_reset for this agent type.
+    # "earliest" ensures DBAgent replays all events after a restart so no
+    # invoices, payments, or risk profiles are silently dropped.
+    OFFSET_RESET = "earliest"
+
     # Idempotency: bounded in-memory set of processed risk profile event IDs
     MAX_PROCESSED_IDS = 20000
 
@@ -72,6 +77,9 @@ class DBAgent(BaseAgent):
         # Idempotency: track processed risk profile event IDs (bounded OrderedDict)
         from collections import OrderedDict
         self._processed_risk_events: OrderedDict = OrderedDict()
+
+        # Housekeeping: prune old event_log rows periodically (at most once/hour)
+        self._last_event_log_cleanup = datetime.utcnow()
 
         self._init_database()
         logger.info("QueryAgent reference set for cache invalidation")
@@ -156,10 +164,16 @@ class DBAgent(BaseAgent):
                     )
                 """)
 
+                # Index used by the hourly pruning DELETE to avoid a full-table scan.
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_event_log_time
+                    ON event_log (processed_at)
+                """)
+
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS customers (
                         customer_id TEXT PRIMARY KEY,
-                        name TEXT,
+                        name TEXT NOT NULL,
                         credit_limit REAL DEFAULT 0,
                         risk_score REAL DEFAULT 0,
                         status TEXT DEFAULT 'active',
@@ -300,9 +314,11 @@ class DBAgent(BaseAgent):
                     )
                 """)
 
-                conn.commit()
                 self._cleanup_legacy_company_names(conn)
                 self._repair_payment_integrity(conn)
+                # Single authoritative commit — covers schema DDL, legacy name
+                # cleanup, and payment integrity repair in one atomic transaction.
+                conn.commit()
                 logger.info(f"Database initialized at {self._db_path}")
                 logger.info("Upgraded database schema to v5 (customer risk profile ready)")
             finally:
@@ -312,9 +328,19 @@ class DBAgent(BaseAgent):
         """
         Repair legacy payment/invoice integrity issues.
 
+        **Transaction contract**: this method MUST only be called within a
+        transaction that is managed (opened and committed/rolled-back) by the
+        caller.  It purposely contains no ``conn.commit()`` calls so that all
+        SQL it accumulates is either committed atomically alongside the caller's
+        other work, or rolled back as a whole on failure.
+        Callers are responsible for issuing exactly one ``conn.commit()`` after
+        this method returns.
+
+        Repairs performed:
         - Backfill placeholder invoices for orphan payments.
         - Recompute invoice paid_amount/status from payment records.
-        - Clamp paid_amount to total_amount to avoid negative remaining balance drift.
+        - Clamp paid_amount to total_amount to avoid negative remaining balance
+          drift.
         """
         cursor = conn.cursor()
         now = datetime.utcnow().isoformat()
@@ -432,11 +458,11 @@ class DBAgent(BaseAgent):
 
             # Attempt to resolve from customer_risk_profile
             profile_row = conn.execute(
-                """
+                r"""
                 SELECT company_name FROM customer_risk_profile
                 WHERE customer_id = ?
                   AND company_name IS NOT NULL
-                  AND company_name NOT LIKE 'cust\_%' ESCAPE '\\'
+                  AND company_name NOT LIKE 'cust\_%' ESCAPE '\'
                 LIMIT 1
                 """,
                 (customer_id,),
@@ -500,7 +526,8 @@ class DBAgent(BaseAgent):
                 cleaned_risk_profiles += 1
 
         if cleaned_customers or cleaned_risk_profiles:
-            conn.commit()
+            # No conn.commit() here — transaction is owned by the caller
+            # (_init_database commits once after _repair_payment_integrity returns).
             logger.info(
                 "[DBAgent] Cleaned legacy company names: customers=%s, customer_risk_profile=%s",
                 cleaned_customers,
@@ -582,16 +609,6 @@ class DBAgent(BaseAgent):
                     logger.debug(f"Skipping duplicate event_id={event.event_id}")
                     return
 
-                if customer_id:
-                    cursor.execute(
-                        """
-                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                        VALUES (?, ?, ?)
-                        """,
-                        (customer_id, now, now),
-                    )
-                    self._backfill_customer_name(conn, customer_id)
-
                 cursor.execute("""
                     INSERT INTO invoices (
                         invoice_id,
@@ -623,14 +640,6 @@ class DBAgent(BaseAgent):
                     now,
                     total_amount,
                 ))
-
-                # Ensure customer exists (second guard after invoice insert)
-                if customer_id:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                        VALUES (?, ?, ?)
-                    """, (customer_id, now, now))
-                    self._backfill_customer_name(conn, customer_id)
 
                 cursor.execute(
                     """
@@ -675,6 +684,7 @@ class DBAgent(BaseAgent):
                     if customer_id:
                         QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
+                self._maybe_prune_event_log(conn)
                 conn.close()
 
     def _handle_payment_received(self, event: Event) -> None:
@@ -741,14 +751,6 @@ class DBAgent(BaseAgent):
 
                 # Ensure parent rows exist before inserting payment
                 # (payments can arrive before invoice.created due to Kafka ordering)
-
-                # 1) Ensure customer exists
-                if customer_id:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                        VALUES (?, ?, ?)
-                    """, (customer_id, now, now))
-                    self._backfill_customer_name(conn, customer_id)
 
                 # 2) Ensure invoice exists — create placeholder if not yet
                 if invoice_id:
@@ -832,6 +834,7 @@ class DBAgent(BaseAgent):
                     if customer_id:
                         QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
+                self._maybe_prune_event_log(conn)
                 conn.close()
 
     def _handle_collection_action(self, event: Event) -> None:
@@ -864,15 +867,6 @@ class DBAgent(BaseAgent):
                 if cursor.fetchone():
                     logger.debug(f"Skipping duplicate event_id={event.event_id}")
                     return
-                if customer_id:
-                    cursor.execute(
-                        """
-                        INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                        VALUES (?, ?, ?)
-                        """,
-                        (customer_id, timestamp, timestamp),
-                    )
-                    self._backfill_customer_name(conn, customer_id)
                 cursor.execute("""
                     INSERT OR IGNORE INTO collections_log (
                         id,
@@ -904,6 +898,7 @@ class DBAgent(BaseAgent):
                 if customer_id:
                     QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
+                self._maybe_prune_event_log(conn)
                 conn.close()
 
     def _handle_customer_profile(self, event: Event) -> None:
@@ -1026,6 +1021,7 @@ class DBAgent(BaseAgent):
                     if has_limit:                cache_patch["credit_limit"] = credit_limit
                     QueryClient.query("update_customer_cache", {"customer_id": customer_id})
             finally:
+                self._maybe_prune_event_log(conn)
                 conn.close()
 
     def _handle_litigation_event(self, event: Event) -> None:
@@ -1057,13 +1053,6 @@ class DBAgent(BaseAgent):
                     logger.debug(f"Skipping duplicate event_id={event.event_id}")
                     return
 
-                # Ensure customer exists
-                cursor.execute("""
-                    INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                    VALUES (?, ?, ?)
-                """, (customer_id, created_at, created_at))
-                # Attempt name backfill in case profile event hasn't arrived yet
-                self._backfill_customer_name(conn, customer_id)
                 # Also try the company_name from this litigation event directly
                 if company_name:
                     conn.execute(
@@ -1120,6 +1109,7 @@ class DBAgent(BaseAgent):
                 if True:
                     QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
+                self._maybe_prune_event_log(conn)
                 conn.close()
 
     def _handle_customer_risk_profile(self, event: Event) -> None:
@@ -1281,4 +1271,28 @@ class DBAgent(BaseAgent):
                     QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
 
             finally:
+                self._maybe_prune_event_log(conn)
                 conn.close()
+
+    def _maybe_prune_event_log(self, conn: "sqlite3.Connection") -> None:
+        """Delete event_log rows older than 7 days, at most once per hour.
+
+        Called at the end of each handler's finally block so cleanup is
+        amortised across normal write operations.  The check is fast (one
+        datetime comparison) on the common path.
+        """
+        now = datetime.utcnow()
+        if (now - self._last_event_log_cleanup).total_seconds() < 3600:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM event_log WHERE processed_at < datetime('now', '-7 days')"
+            )
+            deleted = cursor.rowcount
+            conn.commit()
+            self._last_event_log_cleanup = now
+            if deleted:
+                logger.info("[DBAgent] Pruned %d stale event_log rows", deleted)
+        except Exception as exc:
+            logger.warning("[DBAgent] event_log prune failed: %s", exc)

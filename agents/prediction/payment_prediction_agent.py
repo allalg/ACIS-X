@@ -20,7 +20,7 @@ class PaymentPredictionAgent(BaseAgent):
     credit metrics and payment history.
 
     Produces:
-    - acis.predictions (PaymentRiskPredicted)
+    - acis.predictions (payment.risk.predicted)
     """
 
     TOPIC_METRICS = "acis.metrics"
@@ -53,7 +53,7 @@ class PaymentPredictionAgent(BaseAgent):
         """Process incoming events."""
         if event.event_type == "customer.metrics.updated":
             self.handle_event(event)
-        elif event.event_type == "ExternalDataEnriched":
+        elif event.event_type == "external.data.enriched":
             self.handle_external_event(event)
 
     def handle_event(self, event: Event) -> None:
@@ -250,7 +250,7 @@ class PaymentPredictionAgent(BaseAgent):
             )
 
     def handle_external_event(self, event: Event) -> None:
-        """Handle ExternalDataEnriched event and cache external data."""
+        """Handle external.data.enriched event and cache external data."""
         data = event.payload or {}
         customer_id = data.get("customer_id")
 

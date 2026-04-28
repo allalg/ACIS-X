@@ -10,9 +10,22 @@ from schemas.event_schema import Event
 
 logger = logging.getLogger(__name__)
 
+
 class DLQMonitorAgent(BaseAgent):
     """
     Monitors acis.dlq for failed events and publishes statistics.
+
+    BaseAgent._handle_message() validates the raw Kafka message, parses it
+    into an Event object, and then calls process_event().  DLQMonitorAgent
+    uses process_event() to access the already-parsed Event rather than
+    overriding _handle_message() to touch message.value directly.  This
+    keeps the agent resilient to any future changes in BaseAgent's internal
+    message-handling pipeline.
+
+    DLQ event structure (via Event.payload and Event.metadata):
+      metadata.dlq_reason        — why the event was dead-lettered
+      metadata.original_topic    — the topic it failed on
+      event_id                   — original event identifier
     """
 
     def __init__(self, kafka_client: Any):
@@ -26,73 +39,80 @@ class DLQMonitorAgent(BaseAgent):
         )
         self.total_dlq_count = 0
         self.last_60s_count = 0
-        self.top_reasons = defaultdict(int)
-        
-        # We need a separate lock for stats as they are accessed by consumer thread and stats thread
+        self.top_reasons: Dict[str, int] = defaultdict(int)
+
+        # Separate lock for stats: accessed by consumer thread and stats thread.
         self.stats_lock = threading.Lock()
         self.stats_thread = None
 
     def subscribe(self) -> List[str]:
         return ["acis.dlq"]
 
-    def start(self):
+    def start(self) -> None:
         super().start()
         self.stats_thread = threading.Thread(
             target=self._stats_loop,
             daemon=True,
-            name="dlq-stats-publisher"
+            name="dlq-stats-publisher",
         )
         self.stats_thread.start()
 
-    def _stats_loop(self):
-        # We wait to allow agent to fully initialize
+    def _stats_loop(self) -> None:
+        # Brief wait so the agent fully initialises before the first publish.
         self._shutdown_event.wait(timeout=5)
         while self._running:
             try:
                 self._publish_stats()
             except Exception as e:
-                logger.error(f"Failed to publish dlq stats: {e}")
-            
+                logger.error("Failed to publish dlq stats: %s", e)
             self._shutdown_event.wait(timeout=60)
 
-    def _publish_stats(self):
+    def _publish_stats(self) -> None:
         with self.stats_lock:
             payload = {
                 "total_dlq_count": self.total_dlq_count,
                 "last_60s_count": self.last_60s_count,
-                "top_reasons": dict(self.top_reasons)
+                "top_reasons": dict(self.top_reasons),
             }
-            # Reset rolling window stats
+            # Reset rolling-window counters for the next interval.
             self.last_60s_count = 0
             self.top_reasons.clear()
-            
+
         self.publish_event(
             topic="acis.monitoring",
             event_type="dlq.stats",
             entity_id="system.dlq",
-            payload=payload
+            payload=payload,
         )
 
-    def _handle_message(self, message: Any) -> None:
-        raw = message.value
-        if not isinstance(raw, dict):
-            return
+    def process_event(self, event: Event) -> None:
+        """Process a DLQ event that BaseAgent has already validated and parsed.
 
-        dlq_reason = "unknown"
-        original_topic = "unknown"
-        event_id = raw.get("event_id", "unknown")
+        BaseAgent._handle_message() is responsible for deserialising the raw
+        Kafka message and calling this method with a fully validated Event
+        object.  We extract DLQ metadata from event.metadata (where
+        dead-letter context is stored) and payload fields as needed.
 
-        metadata = raw.get("metadata", {})
-        if isinstance(metadata, dict):
-            dlq_reason = metadata.get("dlq_reason", "unknown")
-            original_topic = metadata.get("original_topic", "unknown")
+        DLQ convention:
+          event.metadata["dlq_reason"]     — why the event was rejected
+          event.metadata["original_topic"] — the topic it originally failed on
+          event.event_id                   — the original event's ID
+        """
+        metadata = event.metadata or {}
+        payload = event.payload or {}
 
-        logger.warning(f"DLQ Event Received: reason={dlq_reason}, original_topic={original_topic}, event_id={event_id}")
+        dlq_reason = metadata.get("dlq_reason", "unknown")
+        original_topic = metadata.get("original_topic", "unknown")
+        # Prefer the event_id embedded in the payload (the *original* event's
+        # ID) if available; fall back to the DLQ wrapper event's own ID.
+        event_id = payload.get("event_id", event.event_id)
+
+        logger.warning(
+            "DLQ Event: reason=%s  original_topic=%s  event_id=%s",
+            dlq_reason, original_topic, event_id,
+        )
 
         with self.stats_lock:
             self.total_dlq_count += 1
             self.last_60s_count += 1
             self.top_reasons[dlq_reason] += 1
-
-    def process_event(self, event: Event) -> None:
-        pass

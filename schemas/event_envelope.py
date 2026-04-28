@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 class EventEnvelope(BaseModel):
     event_id: constr(min_length=1)
-    event_type: constr(pattern=r"^[a-z]+(\.[a-z_]+)+$")
+    event_type: constr(pattern=r"^([a-z][a-z0-9_]*(\.[a-z0-9_]+)+|[A-Z][A-Za-z0-9]+)$")
     event_source: str
     event_time: datetime
     entity_id: str

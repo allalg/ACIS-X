@@ -38,6 +38,8 @@ class MemoryAgent(BaseAgent):
     TOPIC_METRICS = "acis.metrics"
     TOPIC_MEMORY = "acis.memory"
     IGNORE_STALE_EVENTS_ON_STARTUP = True
+    # Replay from earliest on restart so in-memory state is fully rebuilt.
+    OFFSET_RESET = "earliest"
 
     def __init__(
         self,
@@ -113,15 +115,18 @@ class MemoryAgent(BaseAgent):
         - RiskScoringAgent has correct input from the start
         - No stale empty state during startup
         - System is consistent after restart
+
+        QueryClient reachability is probed first with a 10 s timeout.  If
+        QueryClient is not yet available (e.g. QueryAgent process has not
+        started yet) the rebuild is skipped gracefully so that MemoryAgent
+        can still come up and process live events.
         """
-        if False  :
-            logger.error("[MemoryAgent] QueryAgent not available, cannot rebuild state")
-            return
+        from utils.query_client import QueryTimeoutError
 
         try:
             logger.info("[MemoryAgent] Starting state rebuild from database...")
 
-            customers = QueryClient.query("get_all_customers", {})
+            customers = QueryClient.query("get_all_customers", {}, timeout=10)
             logger.info(f"[MemoryAgent] Found {len(customers)} customers to rebuild")
 
             with self._state_lock:
@@ -155,10 +160,14 @@ class MemoryAgent(BaseAgent):
 
             logger.info(f"[MemoryAgent] State rebuild complete: {len(self.customer_state)} customers loaded")
 
+        except QueryTimeoutError:
+            logger.warning(
+                "[MemoryAgent] QueryClient unavailable at startup, skipping rebuild"
+            )
         except Exception as e:
-            logger.error(f"[MemoryAgent] Error rebuilding state from DB: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(
+                "[MemoryAgent] QueryClient unavailable at startup, skipping rebuild: %s", e
+            )
 
     def process_event(self, event: Event) -> None:
         """
@@ -240,9 +249,6 @@ class MemoryAgent(BaseAgent):
         - Out-of-order events (DB is authoritative)
         - System restarts (DB survives)
         """
-        if False  :
-            logger.error("[MemoryAgent] QueryAgent not available, cannot recompute state")
-            return {}
 
         try:
             # Get all invoices
@@ -538,35 +544,9 @@ class MemoryAgent(BaseAgent):
             cursor = conn.cursor()
 
             now = datetime.utcnow().isoformat()
-
-            # Ensure parent customer row exists before touching customer_metrics.
-            # This prevents FK violations when metrics arrive before profile creation.
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                VALUES (?, ?, ?)
-                """,
-                (customer_id, now, now),
-            )
-            # Immediate name backfill: if the profile event hasn't arrived yet,
-            # try to resolve the company name from customer_risk_profile so we
-            # don't leave a permanently NULL-named row.
-            profile_row = cursor.execute(
-                """
-                SELECT company_name FROM customer_risk_profile
-                WHERE customer_id = ?
-                  AND company_name IS NOT NULL
-                  AND company_name NOT LIKE 'cust_%'
-                LIMIT 1
-                """,
-                (customer_id,),
-            ).fetchone()
-            if profile_row and profile_row[0]:
-                cursor.execute(
-                    "UPDATE customers SET name = ?, updated_at = ? "
-                    "WHERE customer_id = ? AND name IS NULL",
-                    (profile_row[0], now, customer_id),
-                )
+            # We no longer insert placeholder rows for customers.
+            # If the customer doesn't exist, the FK constraint will correctly reject the metric update.
+            # (Note: SQLite won't enforce FK unless explicitly PRAGMA foreign_keys = ON) )
 
             # IMPROVEMENT: Only update last_payment_date on actual payment events
             # For other events, the existing last_payment_date is preserved

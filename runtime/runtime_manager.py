@@ -323,11 +323,13 @@ class RuntimeManager(BaseAgent):
                 )
                 try:
                     live_agent.stop()
-                    import time as _time
-                    _time.sleep(0.5)   # Brief pause to let consumer thread flush
-                    live_agent.start()
+                    # Schedule start() asynchronously so the Kafka consumer
+                    # loop is not blocked during the 500 ms flush window.
+                    # threading is already imported at the top of this module.
+                    threading.Timer(0.5, live_agent.start).start()
                     logger.info(
-                        f"[RuntimeManager] Phase 2: Real restart complete for {agent_name}"
+                        f"[RuntimeManager] Phase 2: Real restart initiated for {agent_name} "
+                        f"(instance={instance_id}) - start() scheduled in 500 ms"
                     )
                 except Exception as exc:
                     logger.warning(

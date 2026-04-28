@@ -157,6 +157,10 @@ class KafkaClient:
         self.config = config
         self.backend = backend
 
+        # Lifecycle flag — set to True by close(); checked by publish() to
+        # raise an explicit error instead of silently dropping messages.
+        self._closed: bool = False
+
         # Producer and consumer instances (lazily initialized)
         self._producer: Optional[Any] = None
         self._consumer: Optional[Any] = None
@@ -355,6 +359,15 @@ class KafkaClient:
             headers: Optional headers (merged with correlation_id)
             partition: Optional specific partition (otherwise uses key hash)
         """
+        # Raise immediately if the client has been closed.
+        # This prevents silent data loss and surfaces shutdown ordering bugs
+        # (e.g. deregister publish racing with close()).
+        if self._closed:
+            raise RuntimeError(
+                f"KafkaClient has been closed and cannot publish to '{topic}'. "
+                "Ensure publish_event() is not called after close()."
+            )
+
         # Lazy initialize producer on first publish
         if self._producer is None:
             self._init_producer()
@@ -697,10 +710,20 @@ class KafkaClient:
                     self._consumer.commit(offsets=[topic_partition], asynchronous=False)
 
             elif self.backend == "kafka-python":
-                # kafka-python has incompatible OffsetAndMetadata signatures across versions.
-                # Commit current processed offsets tracked by the consumer to avoid runtime
-                # failures under mixed client versions.
-                self._consumer.commit()
+                if message is not None:
+                    # Commit only the single processed message's offset + 1 so that
+                    # unprocessed messages on other partitions (or ahead in this
+                    # partition) are never accidentally skipped.
+                    from kafka import TopicPartition, OffsetAndMetadata
+                    tp = TopicPartition(message.topic, message.partition)
+                    # leader_epoch=-1 is the conventional sentinel meaning
+                    # "not provided" (matches kafka-python ≥ 2.0 signature).
+                    offsets = {tp: OffsetAndMetadata(message.offset + 1, None, -1)}
+                    self._consumer.commit(offsets=offsets)
+                else:
+                    # message is None → caller wants to commit all current positions
+                    # (e.g. graceful shutdown or periodic full-sync commit).
+                    self._consumer.commit()
 
             logger.debug("Offsets committed")
 
@@ -931,6 +954,11 @@ class KafkaClient:
     def close(self) -> None:
         """Close Kafka connections."""
         logger.info("Closing KafkaClient")
+
+        # Mark as closed first so that any publish() racing with shutdown
+        # gets a clean RuntimeError rather than a "KafkaConsumer is closed"
+        # crash from the underlying library.
+        self._closed = True
 
         # Flush producer
         if self._producer:

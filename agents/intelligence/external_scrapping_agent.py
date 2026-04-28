@@ -17,6 +17,7 @@ import logging
 import json
 import os
 import re
+import threading
 import time
 import requests
 import xml.etree.ElementTree as ET
@@ -118,6 +119,19 @@ class ExternalScrapingAgent(BaseAgent):
 
         _news_breaker.on_state_change = self._on_news_breaker_change
 
+        # ThreadPoolExecutor for non-blocking scraping.
+        # 2 workers: NCLT + LLM calls are heavy; more workers would overwhelm
+        # external APIs and the Groq rate limit.
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="ext-scrape",
+        )
+
+        # Per-customer in-flight guard: prevents duplicate concurrent submissions
+        # for the same customer when events arrive faster than scraping completes.
+        self._in_flight: dict = {}   # customer_id -> True
+        self._in_flight_lock = threading.Lock()
+
         logger.info("[ExternalScrapingAgent] Initialized with NCLT + Industry News fusion")
 
     def _on_news_breaker_change(self, old_state: str, new_state: str) -> None:
@@ -153,6 +167,11 @@ class ExternalScrapingAgent(BaseAgent):
 
     def subscribe(self) -> List[str]:
         return [self.TOPIC_INPUT, self.TOPIC_CUSTOMERS]
+
+    def stop(self) -> None:
+        """Stop agent and shut down the scraping thread pool."""
+        super().stop()
+        self._executor.shutdown(wait=False)
 
     def process_event(self, event: Event) -> None:
         # Ignore our own output to prevent self-triggering loops
@@ -1285,26 +1304,56 @@ OUTPUT (STRICT JSON):
         }
 
     def handle_event(self, event: Event) -> None:
-        """Handle customer events and generate litigation risk."""
+        """Submit scraping work to the thread pool and return immediately.
+
+        A per-customer in-flight guard (_in_flight) prevents duplicate concurrent
+        submissions when multiple events for the same customer arrive before a
+        prior scrape has finished.
+        """
         data = event.payload or {}
         customer_id = data.get("customer_id")
 
         if not customer_id:
             return
 
-        # Resolve company name and industry
+        with self._in_flight_lock:
+            if customer_id in self._in_flight:
+                logger.debug(
+                    "[ExternalScrapingAgent] Skipping %s — scrape already in flight",
+                    customer_id,
+                )
+                return
+            self._in_flight[customer_id] = True
+
         company_name = data.get("company_name")
-        industry = "unknown"
-        aliases = []
-        if True:
+        self._executor.submit(
+            self._scrape_and_publish,
+            customer_id,
+            company_name,
+            event.correlation_id,
+        )
+
+    def _scrape_and_publish(
+        self,
+        customer_id: str,
+        company_name: Optional[str],
+        correlation_id: Optional[str],
+    ) -> None:
+        """Full NCLT/news/CaseMine/LLM pipeline executed on an executor thread.
+
+        Previously the body of handle_event().  Clears the in-flight guard when
+        done (whether it succeeded or raised an exception).
+        """
+        try:
+            # Resolve company name and industry
+            industry = "unknown"
+            aliases = []
             try:
                 customer = QueryClient.query("get_customer", {"customer_id": customer_id})
                 if customer:
                     if customer.get("name"):
                         company_name = customer.get("name")
-                    # Try harder to extract real industry/sector
                     industry = customer.get("industry", customer.get("sector", "unknown"))
-                    
                     if customer.get("aliases"):
                         aliases.extend(customer.get("aliases", []))
                     if customer.get("ticker"):
@@ -1314,134 +1363,144 @@ OUTPUT (STRICT JSON):
             except Exception:
                 pass
 
-        if not company_name or bool(re.match(r'^cust_\d+$', company_name)):
-            logger.debug(f"[ExternalScrapingAgent] Skipping {customer_id}: no real company name")
-            return
-            
-        company_name = company_name.strip()[:100]
+            if not company_name or bool(re.match(r'^cust_\d+$', company_name)):
+                logger.debug(f"[ExternalScrapingAgent] Skipping {customer_id}: no real company name")
+                return
 
-        # 1. Fetch NCLT raw cases (cached 12h)
-        nclt_cache_key = company_name.lower()
-        nclt_entry = self._nclt_cache.get(nclt_cache_key)
-        if nclt_entry and (datetime.utcnow() - nclt_entry["timestamp"]).total_seconds() < 43200:
-            nclt_cases = nclt_entry["data"]
-        else:
-            logger.info(f"[ExternalScrapingAgent] Fetching NCLT for {company_name}...")
-            nclt_cases = self._fetch_nclt_all_benches(company_name)
-            self._nclt_cache[nclt_cache_key] = {"data": nclt_cases, "timestamp": datetime.utcnow()}
+            company_name = company_name.strip()[:100]
 
-        # 2. Fetch news (cached 6h)
-        news_cache_key = company_name.lower()
-        news_entry = self._news_cache.get(news_cache_key)
-        if news_entry and (datetime.utcnow() - news_entry["timestamp"]).total_seconds() < 43200:
-            articles = news_entry["data"]
-        else:
-            logger.info(f"[ExternalScrapingAgent] Fetching news for {company_name}...")
-            articles = self._fetch_company_news_risk(company_name, aliases=aliases)
-            self._news_cache[news_cache_key] = {"data": articles, "timestamp": datetime.utcnow()}
+            # 1. Fetch NCLT raw cases (cached 12h)
+            nclt_cache_key = company_name.lower()
+            nclt_entry = self._nclt_cache.get(nclt_cache_key)
+            if nclt_entry and (datetime.utcnow() - nclt_entry["timestamp"]).total_seconds() < 43200:
+                nclt_cases = nclt_entry["data"]
+            else:
+                logger.info(f"[ExternalScrapingAgent] Fetching NCLT for {company_name}...")
+                nclt_cases = self._fetch_nclt_all_benches(company_name)
+                self._nclt_cache[nclt_cache_key] = {"data": nclt_cases, "timestamp": datetime.utcnow()}
 
-        # 3. Fetch CaseMine (cached 12h)
-        cm_cache_key = f"cm:{company_name.lower()}"
-        cm_entry = self._nclt_cache.get(cm_cache_key)
-        if cm_entry and (datetime.utcnow() - cm_entry["timestamp"]).total_seconds() < 43200:
-            casemine_data = cm_entry["data"]
-        else:
-            logger.info(f"[ExternalScrapingAgent] Fetching CaseMine for {company_name}...")
-            casemine_data = self._fetch_casemine(company_name)
-            self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.utcnow()}
+            # 2. Fetch news (cached 6h)
+            news_cache_key = company_name.lower()
+            news_entry = self._news_cache.get(news_cache_key)
+            if news_entry and (datetime.utcnow() - news_entry["timestamp"]).total_seconds() < 43200:
+                articles = news_entry["data"]
+            else:
+                logger.info(f"[ExternalScrapingAgent] Fetching news for {company_name}...")
+                articles = self._fetch_company_news_risk(company_name, aliases=aliases)
+                self._news_cache[news_cache_key] = {"data": articles, "timestamp": datetime.utcnow()}
 
-        # 4. Fetch macro/regulatory context (cached 3h)
-        macro_cache_key = f"macro:{company_name.lower()}:{industry.lower()}"
-        macro_entry = self._news_cache.get(macro_cache_key)
-        if macro_entry and (datetime.utcnow() - macro_entry["timestamp"]).total_seconds() < 21600:
-            macro_articles = macro_entry["data"]
-        else:
-            logger.info(f"[ExternalScrapingAgent] Fetching macro/regulatory context for {company_name}...")
-            macro_articles = self._fetch_macro_context(company_name, industry)
-            self._news_cache[macro_cache_key] = {"data": macro_articles, "timestamp": datetime.utcnow()}
+            # 3. Fetch CaseMine (cached 12h)
+            cm_cache_key = f"cm:{company_name.lower()}"
+            cm_entry = self._nclt_cache.get(cm_cache_key)
+            if cm_entry and (datetime.utcnow() - cm_entry["timestamp"]).total_seconds() < 43200:
+                casemine_data = cm_entry["data"]
+            else:
+                logger.info(f"[ExternalScrapingAgent] Fetching CaseMine for {company_name}...")
+                casemine_data = self._fetch_casemine(company_name)
+                self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.utcnow()}
 
-        # 5. Unified LLM analysis — single call sees NCLT + news + CaseMine + macro
-        analysis_cache_key = f"analysis:{company_name.lower()}"
-        analysis_entry = self._news_cache.get(analysis_cache_key)
-        if analysis_entry and (datetime.utcnow() - analysis_entry["timestamp"]).total_seconds() < 43200:
-            fusion = analysis_entry["data"]
-        else:
-            fusion = self._unified_llm_analysis(
-                company_name=company_name,
-                industry=industry,
-                nclt_cases=nclt_cases,
-                articles=articles,
-                casemine_data=casemine_data,
-                macro_articles=macro_articles,
-                aliases=aliases,
+            # 4. Fetch macro/regulatory context (cached 3h)
+            macro_cache_key = f"macro:{company_name.lower()}:{industry.lower()}"
+            macro_entry = self._news_cache.get(macro_cache_key)
+            if macro_entry and (datetime.utcnow() - macro_entry["timestamp"]).total_seconds() < 21600:
+                macro_articles = macro_entry["data"]
+            else:
+                logger.info(f"[ExternalScrapingAgent] Fetching macro/regulatory context for {company_name}...")
+                macro_articles = self._fetch_macro_context(company_name, industry)
+                self._news_cache[macro_cache_key] = {"data": macro_articles, "timestamp": datetime.utcnow()}
+
+            # 5. Unified LLM analysis
+            analysis_cache_key = f"analysis:{company_name.lower()}"
+            analysis_entry = self._news_cache.get(analysis_cache_key)
+            if analysis_entry and (datetime.utcnow() - analysis_entry["timestamp"]).total_seconds() < 43200:
+                fusion = analysis_entry["data"]
+            else:
+                fusion = self._unified_llm_analysis(
+                    company_name=company_name,
+                    industry=industry,
+                    nclt_cases=nclt_cases,
+                    articles=articles,
+                    casemine_data=casemine_data,
+                    macro_articles=macro_articles,
+                    aliases=aliases,
+                )
+                self._news_cache[analysis_cache_key] = {"data": fusion, "timestamp": datetime.utcnow()}
+
+            base_risk = fusion["final_risk"]
+
+            # Temporal adjustment
+            final_risk, historical_avg = self._temporal_adjustment(customer_id, base_risk)
+
+            # Store history
+            history = self._risk_history.setdefault(customer_id, [])
+            history.append({
+                "timestamp": datetime.utcnow(),
+                "base_risk": base_risk,
+                "risk": final_risk,
+                "source": "unified_llm",
+            })
+            if len(history) > self._MAX_HISTORY:
+                history.pop(0)
+
+            # Deduplication
+            last_risk = self._last_published_risk.get(customer_id)
+            if last_risk is not None and last_risk == final_risk:
+                return
+
+            # Build payload
+            nclt_count = fusion.get("nclt_case_count", 0)
+            payload = {
+                "customer_id": customer_id,
+                "company_name": company_name,
+
+                "litigation_flag": nclt_count > 0,
+                "litigation_risk": final_risk,
+                "severity": fusion["severity"],
+                "evidence": fusion["evidence"],
+                "legal_status": fusion.get("legal_status", "unknown"),
+                "risk_types": fusion.get("risk_types", []),
+
+                "nclt_case_count": nclt_count,
+                "nclt_cases": fusion.get("nclt_cases", []),
+
+                "casemine_total": fusion.get("casemine_total", 0),
+                "casemine_high_risk_courts": fusion.get("casemine_high_risk_courts", []),
+
+                "source": "nclt+casemine+news+llm_unified",
+                "confidence": fusion["confidence"],
+                "analysis_status": fusion["analysis_status"],
+                "temporal_context": {
+                    "history_length": len(self._risk_history.get(customer_id, [])),
+                    "recent_avg": round(historical_avg, 4) if history else 0.0,
+                },
+                "generated_at": datetime.utcnow().isoformat()
+            }
+
+            self.publish_event(
+                topic=self.TOPIC_OUTPUT,
+                event_type="external.litigation.updated",
+                entity_id=customer_id,
+                payload=payload,
+                correlation_id=correlation_id,
             )
-            self._news_cache[analysis_cache_key] = {"data": fusion, "timestamp": datetime.utcnow()}
 
-        base_risk = fusion["final_risk"]
+            if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
+                self._last_published_risk.popitem(last=False)
+            self._last_published_risk[customer_id] = final_risk
 
-        # 5. Temporal adjustment
-        final_risk, historical_avg = self._temporal_adjustment(customer_id, base_risk)
+            logger.info(
+                f"[ExternalScrapingAgent] company={company_name} "
+                f"final_risk={final_risk:.4f} nclt_cases={nclt_count} "
+                f"severity={fusion['severity']} status={fusion['analysis_status']}"
+            )
 
-        # Store history
-        history = self._risk_history.setdefault(customer_id, [])
-        history.append({
-            "timestamp": datetime.utcnow(),
-            "base_risk": base_risk,
-            "risk": final_risk,
-            "source": "unified_llm",
-        })
-        if len(history) > self._MAX_HISTORY:
-            history.pop(0)
-
-        # Deduplication
-        last_risk = self._last_published_risk.get(customer_id)
-        if last_risk is not None and last_risk == final_risk:
-            return
-
-        # Build payload
-        nclt_count = fusion.get("nclt_case_count", 0)
-        payload = {
-            "customer_id": customer_id,
-            "company_name": company_name,
-
-            "litigation_flag": nclt_count > 0,
-            "litigation_risk": final_risk,
-            "severity": fusion["severity"],
-            "evidence": fusion["evidence"],
-            "legal_status": fusion.get("legal_status", "unknown"),
-            "risk_types": fusion.get("risk_types", []),
-
-            "nclt_case_count": nclt_count,
-            "nclt_cases": fusion.get("nclt_cases", []),
-
-            "casemine_total": fusion.get("casemine_total", 0),
-            "casemine_high_risk_courts": fusion.get("casemine_high_risk_courts", []),
-
-            "source": "nclt+casemine+news+llm_unified",
-            "confidence": fusion["confidence"],
-            "analysis_status": fusion["analysis_status"],
-            "temporal_context": {
-                "history_length": len(self._risk_history.get(customer_id, [])),
-                "recent_avg": round(historical_avg, 4) if history else 0.0,
-            },
-            "generated_at": datetime.utcnow().isoformat()
-        }
-
-        # Publish
-        self.publish_event(
-            topic=self.TOPIC_OUTPUT,
-            event_type="external.litigation.updated",
-            entity_id=customer_id,
-            payload=payload,
-            correlation_id=event.correlation_id,
-        )
-
-        if len(self._last_published_risk) >= self._MAX_RISK_TRACK:
-            self._last_published_risk.popitem(last=False)
-        self._last_published_risk[customer_id] = final_risk
-
-        logger.info(
-            f"[ExternalScrapingAgent] company={company_name} "
-            f"final_risk={final_risk:.4f} nclt_cases={nclt_count} "
-            f"severity={fusion['severity']} status={fusion['analysis_status']}"
-        )
+        except Exception as exc:
+            logger.error(
+                "[ExternalScrapingAgent] _scrape_and_publish failed for %s: %s",
+                customer_id, exc, exc_info=True,
+            )
+        finally:
+            # Always clear the in-flight guard so subsequent events for this
+            # customer can be queued once the current scrape has completed.
+            with self._in_flight_lock:
+                self._in_flight.pop(customer_id, None)

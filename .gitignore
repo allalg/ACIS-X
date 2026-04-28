@@ -24,3 +24,13 @@ acis.db-shm
 .github
 
 test_venv/
+
+# -- Diagnostic / analysis outputs --
+# Outputs produced by scripts/diagnostics/ tools (CSV exports, JSON snapshots).
+scripts/diagnostics/*.csv
+scripts/diagnostics/*.json
+scripts/diagnostics/*.txt
+
+# -- Ad-hoc root-level scratch notes --
+# Plain-text scratch files should not be committed -- use README.md instead.
+/*.txt

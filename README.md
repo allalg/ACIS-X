@@ -37,6 +37,78 @@ python -m pytest tests/ -m unit -v
 
 ---
 
+## Running Locally
+
+ACIS-X uses Kafka as its event bus. The quickest way to get a local broker
+is via Docker Desktop and the bundled `docker-compose.yml`.
+
+### 1. Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and **running**
+- Python 3.9+ with a virtual environment activated
+- All dependencies: `pip install -r requirements.txt`
+
+### 2. Start Kafka
+
+```bash
+# Launch Kafka + ZooKeeper in the background
+docker-compose up -d
+
+# To stop Kafka later:
+docker-compose down
+```
+
+### 3. Run ACIS-X
+
+```bash
+# Option A — foreground (recommended for development)
+python run_acis.py
+
+# Option B — background via control script
+python scripts/acis_control.py start
+python scripts/acis_control.py status
+python scripts/acis_control.py stop
+```
+
+### 4. Reset to a clean state
+
+```bash
+# Purges Kafka topics, deletes acis.db, resets consumer-group offsets
+python reset_acis.py
+
+# Then start fresh
+python run_acis.py
+```
+
+### 5. Run the test suite
+
+Tests are fully offline — no Kafka or running system required:
+
+```bash
+# All unit tests
+python -m pytest tests/ -m unit -v
+
+# With coverage
+python -m pytest tests/ -m unit --cov=agents --cov=runtime -v
+
+# Single module
+python -m pytest tests/test_unit_architecture_fixes.py -v
+```
+
+### 6. Diagnostic tools
+
+Read-only DB inspection scripts live in `scripts/diagnostics/`.
+**Only run these when the system is stopped** to avoid stale reads.
+
+```bash
+python scripts/acis_control.py stop
+python scripts/diagnostics/analyze_db.py
+```
+
+See [`scripts/diagnostics/README.md`](scripts/diagnostics/README.md) for details.
+
+---
+
 ## Commands
 
 ```bash

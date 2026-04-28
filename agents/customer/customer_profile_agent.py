@@ -85,7 +85,7 @@ class CustomerProfileAgent(BaseAgent):
             self._handle_metrics(event)
         elif event.event_type == "risk.scored":  # FIX: standardized name
             self._handle_risk(event)
-        elif event.event_type == "ExternalDataEnriched":
+        elif event.event_type == "external.data.enriched":
             self._handle_external(event)
         elif event.event_type == "external.litigation.updated":  # FIX: standardized name
             self._handle_scraped(event)

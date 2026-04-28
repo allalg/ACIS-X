@@ -275,7 +275,7 @@ class RiskScoringAgent(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
-        if event.event_type == "PaymentRiskPredicted":
+        if event.event_type == "payment.risk.predicted":
             self.handle_event(event)
         elif event.event_type == "customer.profile.updated":  # BUG FIX #5: Match emitted event name from CustomerProfileAgent
             self._handle_customer_risk_profile(event)
@@ -283,7 +283,7 @@ class RiskScoringAgent(BaseAgent):
             self._handle_customer_metrics(event)
 
     def handle_event(self, event: Event) -> None:
-        """Handle PaymentRiskPredicted event and refine risk score."""
+        """Handle payment.risk.predicted event and refine risk score."""
         logger.info(f"Received event: {event.event_type} for entity {event.entity_id}")
 
         # Step 1: Extract data from prediction
@@ -424,14 +424,22 @@ class RiskScoringAgent(BaseAgent):
         adjusted_risk = base_risk
 
         try:
-            if False  :
-                logger.debug("[RiskAgent] QueryAgent not available, using base risk")
-                return adjusted_risk
+            # Fetch enriched customer metrics from the QueryAgent.  Includes
+            # computed fields (overdue_count, on_time_ratio, avg_delay) that
+            # are not present in the raw customers table.
+            customer = QueryClient.query(
+                "get_customer_metrics",
+                {"customer_id": customer_id},
+                timeout=5,
+            ) if customer_id else None
+        except Exception as e:
+            logger.debug(
+                "RiskScoringAgent: could not fetch metrics for %s: %s",
+                customer_id, e,
+            )
+            return base_risk
 
-            # CRITICAL FIX: Use get_customer_metrics() which returns ENRICHED metrics
-            # This includes: overdue_count, total_outstanding, avg_delay, on_time_ratio
-            # NOT raw DB columns, but computed derived metrics for risk scoring
-            customer = QueryClient.query("get_customer_metrics", {"customer_id": customer_id}) if customer_id else None
+        try:
             if not customer:
                 logger.debug(f"[RiskAgent] Customer metrics not found for {customer_id}, using base risk")
                 return adjusted_risk

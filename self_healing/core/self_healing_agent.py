@@ -186,7 +186,19 @@ class SelfHealingAgent(BaseAgent):
         )
 
         self._states: Dict[str, AgentRecoveryState] = {}
-        self._state_lock = threading.Lock()
+        # RLock (re-entrant lock) is used instead of a plain Lock because the
+        # call graph from an event handler to a recovery publisher re-acquires
+        # this lock on the same thread:
+        #
+        #   _handle_degraded          ← acquires lock for state update, then releases
+        #     └─ _evaluate_state      ← acquires lock for snapshot copy, then releases
+        #          └─ _publish_restart / _emit_recovery_triggered
+        #               └─ with self._state_lock   ← re-acquires on same thread
+        #
+        # With a plain Lock a future refactor that forgets to release before
+        # calling into a publish helper would deadlock silently.  RLock makes
+        # same-thread re-entry safe at no performance cost.
+        self._state_lock = threading.RLock()
         self._decision_thread: Optional[threading.Thread] = None
         self._fallback_agents = fallback_agents or {}
         self.registry = registry
