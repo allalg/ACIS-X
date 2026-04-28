@@ -44,6 +44,8 @@ class PaymentPredictionAgent(BaseAgent):
         )
         self._last_prediction_time: Dict[str, float] = {}
         self.external_cache = {}
+        self.EXTERNAL_CACHE_TTL_SECONDS = 24 * 3600
+        self.MAX_EXTERNAL_CACHE_SIZE = 5000
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -92,13 +94,18 @@ class PaymentPredictionAgent(BaseAgent):
         credit_rating = data.get("rating", "B")
         avg_delay = data.get("avg_delay")
         on_time_ratio = data.get("on_time_ratio", 0.0)
+        now = time.time()
 
         # Check external data availability
         if customer_id not in self.external_cache:
             logger.debug(f"No external data yet for {customer_id}, using defaults")
 
         # Get external data if available
-        external_data = self.external_cache.get(customer_id, {})
+        external_entry = self.external_cache.get(customer_id, {})
+        if external_entry and now - external_entry.get("cached_at", 0) > self.EXTERNAL_CACHE_TTL_SECONDS:
+            self.external_cache.pop(customer_id, None)
+            external_entry = {}
+        external_data = external_entry.get("data", external_entry)
         financial_score = external_data.get("financial_score")
         financial_score = float(financial_score) if financial_score is not None else 0.6
         external_risk = external_data.get("external_risk")
@@ -106,7 +113,6 @@ class PaymentPredictionAgent(BaseAgent):
         litigation_flag = external_data.get("litigation_flag", False)
 
         # Step 4: Predict risk for each pending invoice
-        now = time.time()
         for invoice in invoices:
             invoice_id = invoice.get("invoice_id")
 
@@ -257,4 +263,13 @@ class PaymentPredictionAgent(BaseAgent):
         if not customer_id:
             return
 
-        self.external_cache[customer_id] = data
+        if len(self.external_cache) >= self.MAX_EXTERNAL_CACHE_SIZE:
+            oldest_customer_id = min(
+                self.external_cache,
+                key=lambda cid: self.external_cache[cid].get("cached_at", 0),
+            )
+            self.external_cache.pop(oldest_customer_id, None)
+        self.external_cache[customer_id] = {
+            "data": data,
+            "cached_at": time.time(),
+        }

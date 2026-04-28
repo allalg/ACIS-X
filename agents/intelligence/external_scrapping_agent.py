@@ -1326,12 +1326,18 @@ OUTPUT (STRICT JSON):
             self._in_flight[customer_id] = True
 
         company_name = data.get("company_name")
-        self._executor.submit(
-            self._scrape_and_publish,
-            customer_id,
-            company_name,
-            event.correlation_id,
-        )
+        try:
+            self._executor.submit(
+                self._scrape_and_publish,
+                customer_id,
+                company_name,
+                event.correlation_id,
+            )
+        except RuntimeError:
+            with self._in_flight_lock:
+                self._in_flight.pop(customer_id, None)
+            logger.debug("[ExternalScrapingAgent] Executor is stopped; dropped scrape for %s", customer_id)
+            raise
 
     def _scrape_and_publish(
         self,

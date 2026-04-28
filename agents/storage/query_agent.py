@@ -81,7 +81,13 @@ class QueryAgent(BaseAgent):
 
     def process_event(self, event: Event) -> None:
         """Process query requests and publish responses."""
-        if event.event_type in ["invoice.created", "invoice.updated"]:
+        if event.event_type in [
+            "invoice.created",
+            "invoice.updated",
+            "invoice.overdue",
+            "invoice.disputed",
+            "invoice.cancelled",
+        ]:
             payload = event.payload or {}
             invoice_id = payload.get("invoice_id")
             if invoice_id:
@@ -110,8 +116,6 @@ class QueryAgent(BaseAgent):
                 response_data = self.get_overdue_invoices(data.get("customer_id"))
             elif query_type == "get_unpaid_invoices":
                 response_data = self.get_unpaid_invoices()
-            elif query_type == "get_customer_state":
-                response_data = self.get_customer_state(data.get("customer_id"))
             elif query_type == "update_customer_cache":
                 response_data = self.update_customer_cache(data.get("customer_id"), data.get("customer_data"))
             elif query_type == "update_invoice_cache":
@@ -121,6 +125,9 @@ class QueryAgent(BaseAgent):
             elif query_type == "invalidate_invoice_cache":
                 response_data = self.invalidate_invoice_cache(data.get("invoice_id"))
             else:
+                if query_type == "get_risk_velocity":
+                    logger.debug("Skipping MemoryAgent-owned query_type: get_risk_velocity")
+                    return
                 logger.warning(f"Unknown query_type: {query_type}")
                 return
                 
@@ -219,7 +226,7 @@ class QueryAgent(BaseAgent):
         # ISSUE 1 FIX: Try MemoryAgent FIRST (real-time cache)
         if self._memory_agent is not None:
             try:
-                memory_state = QueryClient.query("get_customer_state", {"customer_id": customer_id})
+                memory_state = self._memory_agent.get_customer_state(customer_id)
                 if memory_state:
                     logger.debug(f"[QueryAgent] Using MemoryAgent cache for {customer_id} (real-time source)")
                     # Enrich with static data from DB (credit_limit only changes during administrative action)
@@ -671,7 +678,7 @@ class QueryAgent(BaseAgent):
 
         # Check MemoryAgent first if available
         if self._memory_agent is not None:
-            state = QueryClient.query("get_customer_state", {"customer_id": customer_id})
+            state = self._memory_agent.get_customer_state(customer_id)
             if state:
                 logger.debug(f"Got customer state from MemoryAgent: {customer_id}")
                 return state
@@ -740,7 +747,8 @@ class QueryAgent(BaseAgent):
             
         with self._cache_lock:
             if invoice_data:
-                self._invoice_cache[invoice_id] = invoice_data
+                existing = self._invoice_cache.get(invoice_id, {})
+                self._invoice_cache[invoice_id] = {**existing, **invoice_data}
                 logger.debug(f"[FIX #2] Pre-populated invoice cache for {invoice_id}")
             else:
                 self._invoice_cache.pop(invoice_id, None)

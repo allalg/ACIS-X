@@ -498,22 +498,15 @@ class CollectionsAgent(BaseAgent):
                 )
                 return
 
-            # Check duplicate
+            # Customer-level state can change materially; use cooldown only so
+            # re-evaluation can emit a new action after the customer evolves.
             action_key = (customer_id, "customer", action)
-            if self._is_processed_action(action_key):
-                logger.debug(
-                    f"[CollectionsAgent] Duplicate customer action ignored: {action_key}"
-                )
-                return
-
-            # IMPROVEMENT 3: Time-based cooldown
             if self._is_in_cooldown(action_key):
                 logger.debug(
                     f"[CollectionsAgent] Customer action in cooldown: {action_key}"
                 )
                 return
 
-            self._add_processed_action(action_key)
             self._update_action_time(action_key)
 
             # Emit unified action event

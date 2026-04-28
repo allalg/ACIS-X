@@ -41,6 +41,7 @@ def mock_kafka_client(mock_kafka_config):
     # Mock the producer and consumer so they don't try to connect
     client._producer = MagicMock()
     client._consumer = MagicMock()
+    client._consumer.poll.return_value = {}
 
     # Mock publish: validate against EventEnvelope before accepting
     published_events: list = []

@@ -358,7 +358,7 @@ class AggregatorAgent(BaseAgent):
         last_lit_risk = last_published.get("litigation_risk", None)
 
         # If both financial and litigation risks haven't changed, skip publishing
-        if last_fin_risk == financial_risk and last_lit_risk == litigation_risk:
+        if last_published and last_fin_risk == financial_risk and last_lit_risk == litigation_risk:
             fin_str = f"{financial_risk:.4f}" if financial_risk is not None else "None"
             lit_str = f"{litigation_risk:.4f}" if litigation_risk is not None else "None"
             logger.debug(

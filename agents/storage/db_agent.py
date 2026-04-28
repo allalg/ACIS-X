@@ -90,6 +90,37 @@ class DBAgent(BaseAgent):
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    def _finalize_handler_connection(self, conn: sqlite3.Connection) -> None:
+        """Close a handler connection without committing failed partial writes."""
+        try:
+            if conn.in_transaction:
+                conn.rollback()
+            else:
+                self._maybe_prune_event_log(conn)
+        finally:
+            conn.close()
+
+    def _ensure_customer_exists(
+        self,
+        conn: sqlite3.Connection,
+        customer_id: Optional[str],
+        name: Optional[str] = None,
+    ) -> None:
+        """Create a customer parent row with a valid name for FK-dependent writes."""
+        if not customer_id:
+            return
+
+        now = datetime.utcnow().isoformat()
+        safe_name = self._sanitize_company_name(name) or customer_id
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (customer_id, safe_name, now, now),
+        )
+        self._backfill_customer_name(conn, customer_id)
+
     def _init_database(self) -> None:
         """Initialize SQLite database and create tables if not exists."""
         import time
@@ -173,7 +204,7 @@ class DBAgent(BaseAgent):
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS customers (
                         customer_id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
+                        name TEXT,
                         credit_limit REAL DEFAULT 0,
                         risk_score REAL DEFAULT 0,
                         status TEXT DEFAULT 'active',
@@ -353,11 +384,7 @@ class DBAgent(BaseAgent):
             "SELECT DISTINCT customer_id FROM payments WHERE customer_id IS NOT NULL"
         ).fetchall()
         for (cid,) in payment_customer_ids:
-            cursor.execute(
-                "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?, ?, ?)",
-                (cid, now, now),
-            )
-            self._backfill_customer_name(conn, cid)
+            self._ensure_customer_exists(conn, cid)
 
         # 1) Create placeholder invoices for orphan payments to preserve historical payments.
         cursor.execute(
@@ -378,6 +405,7 @@ class DBAgent(BaseAgent):
             FROM payments p
             LEFT JOIN invoices i ON i.invoice_id = p.invoice_id
             WHERE p.invoice_id IS NOT NULL
+              AND p.customer_id IS NOT NULL
               AND i.invoice_id IS NULL
             GROUP BY p.invoice_id
             """,
@@ -389,11 +417,7 @@ class DBAgent(BaseAgent):
             "SELECT DISTINCT customer_id FROM invoices WHERE customer_id IS NOT NULL"
         ).fetchall()
         for (cid,) in invoice_customer_ids:
-            cursor.execute(
-                "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?, ?, ?)",
-                (cid, now, now),
-            )
-            self._backfill_customer_name(conn, cid)
+            self._ensure_customer_exists(conn, cid)
 
         # 2) Recompute paid_amount from payments and update status deterministically.
         cursor.execute(
@@ -453,8 +477,8 @@ class DBAgent(BaseAgent):
             row = conn.execute(
                 "SELECT name FROM customers WHERE customer_id = ?", (customer_id,)
             ).fetchone()
-            if row and row[0] is not None:
-                return  # Already has a real name — nothing to do
+            if row and row[0] is not None and row[0] != customer_id:
+                return
 
             # Attempt to resolve from customer_risk_profile
             profile_row = conn.execute(
@@ -473,8 +497,8 @@ class DBAgent(BaseAgent):
                 if sanitized:
                     conn.execute(
                         "UPDATE customers SET name = ?, updated_at = ? "
-                        "WHERE customer_id = ? AND name IS NULL",
-                        (sanitized, datetime.utcnow().isoformat(), customer_id),
+                        "WHERE customer_id = ? AND (name IS NULL OR name = ?)",
+                        (sanitized, datetime.utcnow().isoformat(), customer_id, customer_id),
                     )
                     logger.info(
                         "[DBAgent] Backfilled name '%s' for customer %s from risk profile",
@@ -561,6 +585,8 @@ class DBAgent(BaseAgent):
             self._handle_litigation_event(event)
         elif event_type == "risk.profile.updated":  # FIX: standardized name
             self._handle_customer_risk_profile(event)
+        elif event_type == "risk.scored":
+            self._handle_risk_scored(event)
 
     def _handle_invoice_upsert(self, event: Event) -> None:
         """
@@ -608,6 +634,12 @@ class DBAgent(BaseAgent):
                 if cursor.fetchone():
                     logger.debug(f"Skipping duplicate event_id={event.event_id}")
                     return
+
+                self._ensure_customer_exists(
+                    conn,
+                    customer_id,
+                    data.get("customer_name") or data.get("company_name") or data.get("name"),
+                )
 
                 cursor.execute("""
                     INSERT INTO invoices (
@@ -684,8 +716,7 @@ class DBAgent(BaseAgent):
                     if customer_id:
                         QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
-                self._maybe_prune_event_log(conn)
-                conn.close()
+                self._finalize_handler_connection(conn)
 
     def _handle_payment_received(self, event: Event) -> None:
         """Handle payment.received event - insert payment and update invoice paid_amount and status."""
@@ -753,6 +784,12 @@ class DBAgent(BaseAgent):
                 # (payments can arrive before invoice.created due to Kafka ordering)
 
                 # 2) Ensure invoice exists — create placeholder if not yet
+                self._ensure_customer_exists(
+                    conn,
+                    customer_id,
+                    data.get("customer_name") or data.get("company_name") or data.get("name"),
+                )
+
                 if invoice_id:
                     cursor.execute("""
                         INSERT OR IGNORE INTO invoices (
@@ -834,8 +871,7 @@ class DBAgent(BaseAgent):
                     if customer_id:
                         QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
-                self._maybe_prune_event_log(conn)
-                conn.close()
+                self._finalize_handler_connection(conn)
 
     def _handle_collection_action(self, event: Event) -> None:
         """Handle all collection.* events - insert into collections_log."""
@@ -898,8 +934,7 @@ class DBAgent(BaseAgent):
                 if customer_id:
                     QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
-                self._maybe_prune_event_log(conn)
-                conn.close()
+                self._finalize_handler_connection(conn)
 
     def _handle_customer_profile(self, event: Event) -> None:
         """Handle customer.profile.updated event - upsert customer profile data.
@@ -923,6 +958,8 @@ class DBAgent(BaseAgent):
 
         # Only extract fields that are genuinely present in this event's payload
         name         = self._sanitize_company_name(data.get("customer_name") or data.get("name"))
+        if name is None:
+            name = customer_id
         has_risk     = "risk_score"   in data
         has_limit    = "credit_limit" in data
         has_status   = "status"       in data
@@ -1021,8 +1058,7 @@ class DBAgent(BaseAgent):
                     if has_limit:                cache_patch["credit_limit"] = credit_limit
                     QueryClient.query("update_customer_cache", {"customer_id": customer_id})
             finally:
-                self._maybe_prune_event_log(conn)
-                conn.close()
+                self._finalize_handler_connection(conn)
 
     def _handle_litigation_event(self, event: Event) -> None:
         """Handle LitigationRiskUpdated event - insert litigation risk data."""
@@ -1109,8 +1145,7 @@ class DBAgent(BaseAgent):
                 if True:
                     QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
-                self._maybe_prune_event_log(conn)
-                conn.close()
+                self._finalize_handler_connection(conn)
 
     def _handle_customer_risk_profile(self, event: Event) -> None:
         """
@@ -1183,6 +1218,8 @@ class DBAgent(BaseAgent):
                 if cursor.fetchone():
                     logger.debug(f"Skipping duplicate event_id={event.event_id}")
                     return
+
+                self._ensure_customer_exists(conn, customer_id, company_name)
 
                 # --- FRESHNESS GUARD ---
                 # Check the stored updated_at; if the incoming event is older, skip.
@@ -1271,8 +1308,49 @@ class DBAgent(BaseAgent):
                     QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
 
             finally:
-                self._maybe_prune_event_log(conn)
-                conn.close()
+                self._finalize_handler_connection(conn)
+
+    def _handle_risk_scored(self, event: Event) -> None:
+        """Persist invoice-level risk scores onto the customer row and event log."""
+        data = event.payload or {}
+        customer_id = data.get("customer_id")
+        if not customer_id:
+            logger.warning("risk.scored event missing customer_id, skipping")
+            return
+
+        try:
+            risk_score = float(data.get("risk_score") or 0.0)
+        except (TypeError, ValueError):
+            logger.warning("[DBAgent] Invalid risk_score for %s: %r", customer_id, data.get("risk_score"))
+            return
+
+        now = datetime.utcnow().isoformat()
+        with self._db_lock:
+            conn = self._get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
+
+                self._ensure_customer_exists(
+                    conn,
+                    customer_id,
+                    data.get("customer_name") or data.get("company_name") or data.get("name"),
+                )
+                cursor.execute(
+                    "UPDATE customers SET risk_score = ?, updated_at = ? WHERE customer_id = ?",
+                    (risk_score, now, customer_id),
+                )
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, now),
+                )
+                conn.commit()
+                QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
+            finally:
+                self._finalize_handler_connection(conn)
 
     def _maybe_prune_event_log(self, conn: "sqlite3.Connection") -> None:
         """Delete event_log rows older than 7 days, at most once per hour.

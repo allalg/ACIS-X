@@ -46,7 +46,7 @@ class RiskScoringAgent(BaseAgent):
             agent_name="RiskScoringAgent",
             agent_version="2.2.0",  # Bumped: CRITICAL - Added acis.metrics subscription for payment behavior
             group_id="risk-scoring-group",
-            subscribed_topics=[self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS, self.TOPIC_METRICS],
+            subscribed_topics=[self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS, self.TOPIC_METRICS, self.TOPIC_RISK],
             capabilities=[
                 "risk_scoring",
                 "risk_classification",
@@ -90,7 +90,7 @@ class RiskScoringAgent(BaseAgent):
         # Extract and store all available customer-level risk signals
         context_data = {
             # Core aggregated/external risk
-            "aggregated_risk": float(data.get("aggregated_risk") or data.get("risk_score") or 0.0),
+            "aggregated_risk": float(data.get("aggregated_risk") or data.get("combined_risk") or data.get("risk_score") or 0.0),
             "financial_risk": float(data.get("financial_risk") or 0.0),
             "litigation_risk": float(data.get("litigation_risk") or 0.0),
             "external_risk": float(data.get("external_risk") or 0.0),
@@ -271,13 +271,13 @@ class RiskScoringAgent(BaseAgent):
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
-        return [self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS, self.TOPIC_METRICS]  # CRITICAL FIX: Added TOPIC_METRICS
+        return [self.TOPIC_PREDICTIONS, self.TOPIC_CUSTOMERS, self.TOPIC_METRICS, self.TOPIC_RISK]
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
         if event.event_type == "payment.risk.predicted":
             self.handle_event(event)
-        elif event.event_type == "customer.profile.updated":  # BUG FIX #5: Match emitted event name from CustomerProfileAgent
+        elif event.event_type in {"customer.profile.updated", "risk.profile.updated"}:
             self._handle_customer_risk_profile(event)
         elif event.event_type == "customer.metrics.updated":  # CRITICAL FIX: Handle payment metrics
             self._handle_customer_metrics(event)

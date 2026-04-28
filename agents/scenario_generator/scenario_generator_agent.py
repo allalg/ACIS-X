@@ -123,7 +123,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             agent_name="ScenarioGeneratorAgent",
             agent_version="1.0.0",
             group_id="scenario-generator-group",
-            subscribed_topics=[self.TOPIC_COMMANDS],  # Subscribe to commands (producer-only, but needs minimal subscription)
+            subscribed_topics=[],
             capabilities=[
                 "customer_generation",
                 "invoice_generation",

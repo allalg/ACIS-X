@@ -121,8 +121,11 @@ class CustomerProfileAgent(BaseAgent):
             # FIX 6: Update last accessed time on every access
             self._state[customer_id]["_last_updated_time"] = time.time()
 
-        # FIX 6: Periodic cleanup check (only every 1000 accesses = low overhead)
-        if len(self._state) % 1000 == 0 and time.time() - self._last_cleanup > 60:
+        # Periodic cleanup by time/size; small customer sets still need TTL cleanup.
+        if (
+            time.time() - self._last_cleanup > 60
+            or len(self._state) > self.MAX_CUSTOMERS
+        ):
             self._cleanup_expired_customers()
 
         return self._state[customer_id]

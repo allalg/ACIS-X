@@ -201,7 +201,7 @@ class MemoryAgent(BaseAgent):
 
         if event_type.startswith("invoice."):
             self._handle_invoice_change(event)
-        elif event_type == "payment.received":
+        elif event_type in {"payment.received", "payment.partial"}:
             self._handle_payment_received(event)
         elif event_type == "risk.scored":  # FIX: standardized event name
             self._handle_risk_scored(event)
@@ -544,9 +544,13 @@ class MemoryAgent(BaseAgent):
             cursor = conn.cursor()
 
             now = datetime.utcnow().isoformat()
-            # We no longer insert placeholder rows for customers.
-            # If the customer doesn't exist, the FK constraint will correctly reject the metric update.
-            # (Note: SQLite won't enforce FK unless explicitly PRAGMA foreign_keys = ON) )
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (customer_id, customer_id, now, now),
+            )
 
             # IMPROVEMENT: Only update last_payment_date on actual payment events
             # For other events, the existing last_payment_date is preserved

@@ -188,6 +188,59 @@ class CustomerStateAgent(BaseAgent):
         finally:
             lock.release()
 
+    def _compute_customer_metrics(self, customer_id: str) -> Dict[str, Any]:
+        """Compute customer metrics from invoices using the same bulk-query path."""
+        result = QueryClient.query(
+            "get_invoices_by_customer",
+            {"customer_id": customer_id},
+            timeout=8,
+        )
+        invoice_list = result.get("invoices", []) if isinstance(result, dict) else (result or [])
+
+        total_outstanding = 0.0
+        for inv in invoice_list:
+            if inv.get("status") != "paid":
+                amount = float(inv.get("remaining_amount") or inv.get("total_amount") or inv.get("amount") or 0.0)
+                total_outstanding += max(amount, 0.0)
+
+        invoice_ids = [inv.get("invoice_id") for inv in invoice_list if inv.get("invoice_id")]
+        payments = self._get_payments_for_invoices(invoice_ids)
+        avg_delay, on_time_ratio = self._compute_payment_metrics(invoice_list, payments)
+
+        return {
+            "total_outstanding": total_outstanding,
+            "avg_delay": avg_delay,
+            "on_time_ratio": on_time_ratio,
+        }
+
+    def _publish_and_persist_metrics(
+        self,
+        customer_id: str,
+        metrics: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """Publish then persist metrics without holding the DB lock during publish."""
+        with self._cache_lock:
+            metrics_snapshot = dict(metrics)
+
+        customer = QueryClient.query("get_customer", {"customer_id": customer_id})
+        if customer and customer.get("name"):
+            metrics_snapshot["company_name"] = customer.get("name")
+
+        payload = {
+            "customer_id": customer_id,
+            **metrics_snapshot,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        self.publish_event(
+            topic=self.TOPIC_METRICS,
+            event_type="customer.metrics.updated",
+            entity_id=customer_id,
+            payload=payload,
+            correlation_id=correlation_id,
+        )
+        self._persist_metrics(customer_id, metrics_snapshot)
+
     def _get_payments_for_invoices(self, invoice_ids: List[str]) -> List[Dict[str, Any]]:
         """
         Get all payments for given invoices.
@@ -309,10 +362,10 @@ class CustomerStateAgent(BaseAgent):
                 now = datetime.utcnow().isoformat()
                 cursor.execute(
                     """
-                    INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at)
-                    VALUES (?, ?, ?)
+                    INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
                     """,
-                    (customer_id, now, now),
+                    (customer_id, customer_id, now, now),
                 )
                 # Immediate name backfill: resolve name from customer_risk_profile
                 # if the profile event hasn't been processed by DBAgent yet.

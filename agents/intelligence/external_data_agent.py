@@ -1,6 +1,7 @@
 import logging
 import re
 import sqlite3
+import threading
 import time
 import requests
 import uuid
@@ -103,6 +104,8 @@ class ExternalDataAgent(BaseAgent):
             max_workers=4,
             thread_name_prefix="ext-data",
         )
+        self._in_flight: set[str] = set()
+        self._in_flight_lock = threading.Lock()
 
     def _on_screener_breaker_change(self, old_state: str, new_state: str) -> None:
         if new_state == "OPEN":
@@ -125,8 +128,7 @@ class ExternalDataAgent(BaseAgent):
     def stop(self) -> None:
         """Stop agent and shut down the enrichment thread pool."""
         super().stop()
-        # wait=False: don't block agent teardown waiting for in-flight fetches
-        self._executor.shutdown(wait=False)
+        self._executor.shutdown(wait=True, cancel_futures=True)
 
     def process_event(self, event: Event) -> None:
         """Process incoming events."""
@@ -856,12 +858,27 @@ class ExternalDataAgent(BaseAgent):
         company_name = payload.get("company_name")
 
         # Submit — returns immediately
-        self._executor.submit(
-            self._enrich_and_publish,
-            customer_id,
-            company_name,
-            event.correlation_id,
-        )
+        with self._in_flight_lock:
+            if customer_id in self._in_flight:
+                logger.debug(
+                    "[ExternalDataAgent] Skipping %s - enrichment already in flight",
+                    customer_id,
+                )
+                return
+            self._in_flight.add(customer_id)
+
+        try:
+            self._executor.submit(
+                self._enrich_and_publish,
+                customer_id,
+                company_name,
+                event.correlation_id,
+            )
+        except RuntimeError:
+            with self._in_flight_lock:
+                self._in_flight.discard(customer_id)
+            logger.debug("[ExternalDataAgent] Executor is stopped; dropped enrichment for %s", customer_id)
+            raise
 
     def _enrich_and_publish(self, customer_id: str, company_name: Optional[str], correlation_id: Optional[str]) -> None:
         """Full enrichment pipeline executed on an executor thread.
@@ -1000,4 +1017,7 @@ class ExternalDataAgent(BaseAgent):
                 "[ExternalDataAgent] _enrich_and_publish failed for %s: %s",
                 customer_id, exc, exc_info=True,
             )
+        finally:
+            with self._in_flight_lock:
+                self._in_flight.discard(customer_id)
 
