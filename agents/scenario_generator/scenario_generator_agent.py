@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,6 @@ class ScenarioGeneratorAgent(BaseAgent):
         customers_per_batch: int = 1,
         invoices_per_batch: int = 2,
         payments_per_batch: int = 1,
-        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="ScenarioGeneratorAgent",
@@ -147,7 +147,6 @@ class ScenarioGeneratorAgent(BaseAgent):
         self._payment_counter = 0
 
         # FIX #1: Reference to QueryAgent for DB-backed customer count check
-        self._query_agent = query_agent
 
         # Cap customer pool to the total number of distinct companies available
         # to prevent the same company appearing under multiple customer IDs.
@@ -238,10 +237,10 @@ class ScenarioGeneratorAgent(BaseAgent):
         3. Sync _company_names_used from ALL non-null names in DB so the
            uniqueness guard is complete even after a partial previous run.
         """
-        if not self._query_agent:
+        if False  :
             return
         try:
-            db_customers = self._query_agent.get_all_customers()
+            db_customers = QueryClient.query("get_all_customers", {})
             if not db_customers:
                 return
             seeded_count = 0
@@ -289,12 +288,12 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     def _get_db_customer_count(self) -> int:
         """Get actual customer count from database via QueryAgent."""
-        if not self._query_agent:
+        if False  :
             # Fallback to memory count if QueryAgent not available
             return len(self._customers)
 
         try:
-            customers = self._query_agent.get_all_customers()
+            customers = QueryClient.query("get_all_customers", {})
             count = len(customers) if customers else 0
             logger.debug(f"DB customer count: {count}")
             return count
@@ -304,7 +303,7 @@ class ScenarioGeneratorAgent(BaseAgent):
 
     def _get_db_invoice_count(self) -> int:
         """Get actual invoice count from database via QueryAgent (aggregate query)."""
-        if not self._query_agent:
+        if False  :
             # Fallback to memory count if QueryAgent not available
             return len(self._invoices)
 
@@ -312,7 +311,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             # Use a single query to get invoice count directly (avoid N+1)
             # This assumes QueryAgent has access to a count method or we query directly
             # For now, batch the lookup into one operation
-            all_customers = self._query_agent.get_all_customers()
+            all_customers = QueryClient.query("get_all_customers", {})
             if not all_customers:
                 return 0
 
@@ -324,7 +323,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             total = 0
             for customer_id in customer_ids:
                 try:
-                    invoices = self._query_agent.get_all_invoices_by_customer(customer_id)
+                    invoices = QueryClient.query("get_all_invoices_by_customer", {"customer_id": customer_id})
                     if invoices:
                         total += len(invoices)
                 except Exception:
@@ -343,14 +342,14 @@ class ScenarioGeneratorAgent(BaseAgent):
         - self._customers is updated immediately after publish (before DB write)
         - DB is the ground truth; only DB-confirmed customers avoid FK + NULL races
         """
-        if not self._query_agent:
+        if False  :
             # No QueryAgent: fall back to in-memory named customers only
             return [
                 cid for cid, data in self._customers.items()
                 if data.get("customer_name")
             ]
         try:
-            db_custs = self._query_agent.get_all_customers()
+            db_custs = QueryClient.query("get_all_customers", {})
             # Only customers with a real, non-placeholder name are invoiceable
             return [
                 c["customer_id"]
@@ -421,9 +420,9 @@ class ScenarioGeneratorAgent(BaseAgent):
         """Create a new customer with real Indian company."""
         # Sync _company_names_used with DB to catch names from any previous run
         # that were written to DB but not tracked in this process's memory.
-        if self._query_agent:
+        if True:
             try:
-                db_custs = self._query_agent.get_all_customers()
+                db_custs = QueryClient.query("get_all_customers", {})
                 for c in db_custs:
                     if c.get("name"):
                         self._company_names_used.add(c["name"])

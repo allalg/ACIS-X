@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
+from utils.query_client import QueryClient
 from schemas.event_schema import AgentStatus, Event, SystemEventType
 
 logger = logging.getLogger(__name__)

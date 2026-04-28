@@ -1,7 +1,7 @@
-from datetime import datetime
+from pydantic import BaseModel, Field, field_validator
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
 
 
 # =============================================================================
@@ -113,6 +113,12 @@ class Event(BaseModel):
     schema_version: str = SCHEMA_VERSION
     payload: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
+
+    @field_validator('event_time')
+    def enforce_naive_utc(cls, v):
+        if v.tzinfo is not None:
+            return v.astimezone(timezone.utc).replace(tzinfo=None)
+        return v
 
 # =============================================================================
 # Agent Metrics Payload

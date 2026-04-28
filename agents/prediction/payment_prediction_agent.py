@@ -4,6 +4,7 @@ from typing import List, Any, Dict
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,6 @@ class PaymentPredictionAgent(BaseAgent):
     def __init__(
         self,
         kafka_client: Any,
-        query_agent: Any,
     ):
         super().__init__(
             agent_name="PaymentPredictionAgent",
@@ -42,7 +42,6 @@ class PaymentPredictionAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="PaymentPredictionAgent",
         )
-        self._query_agent = query_agent
         self._last_prediction_time: Dict[str, float] = {}
         self.external_cache = {}
 
@@ -72,14 +71,18 @@ class PaymentPredictionAgent(BaseAgent):
         logger.debug(f"Prediction triggered by metrics update for customer {customer_id}")
 
         # Step 2: Get all pending invoices for this customer
-        invoices = self._query_agent.get_invoices_by_customer(customer_id)
+        invoices_response = QueryClient.query("get_invoices_by_customer", {"customer_id": customer_id})
+        invoices = invoices_response.get("invoices", []) if isinstance(invoices_response, dict) else (invoices_response or [])
+        
+        # Filter for pending only, as the new query returns all invoices
+        invoices = [inv for inv in invoices if inv.get("status") != "paid"]
 
         if not invoices:
             logger.warning(f"No pending invoices found for customer {customer_id}")
             return
 
         # Step 3: Get customer data for credit_limit
-        customer_data = self._query_agent.get_customer(customer_id)
+        customer_data = QueryClient.query("get_customer", {"customer_id": customer_id})
         credit_limit = customer_data.get("credit_limit", 1) if customer_data else 1
         if credit_limit <= 0:
             credit_limit = 1
@@ -234,7 +237,7 @@ class PaymentPredictionAgent(BaseAgent):
             # Publish event using BaseAgent publish method
             self.publish_event(
                 topic=self.TOPIC_PREDICTIONS,
-                event_type="PaymentRiskPredicted",
+                event_type="payment.risk.predicted",
                 entity_id=customer_id,
                 payload=prediction_payload,
                 correlation_id=event.correlation_id,
@@ -242,7 +245,7 @@ class PaymentPredictionAgent(BaseAgent):
 
             # Log published event
             logger.info(
-                f"Published PaymentRiskPredicted event for invoice {invoice_id}: "
+                f"Published payment.risk.predicted event for invoice {invoice_id}: "
                 f"risk_score={risk_score:.4f}, risk_category={risk_category}"
             )
 

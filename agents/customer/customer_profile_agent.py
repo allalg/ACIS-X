@@ -14,6 +14,7 @@ from typing import List, Any, Dict
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class CustomerProfileAgent(BaseAgent):
     TOPIC_RISK = "acis.risk"
     TOPIC_PROFILE = "acis.customers"
 
-    def __init__(self, kafka_client: Any, query_agent: Any = None):
+    def __init__(self, kafka_client: Any = None):
         super().__init__(
             agent_name="CustomerProfileAgent",
             agent_version="2.2.0",
@@ -63,7 +64,6 @@ class CustomerProfileAgent(BaseAgent):
         )
 
         # Optional QueryAgent for DB name resolution
-        self._query_agent = query_agent
 
         # In-memory profile state (NOT source of truth)
         self._state: Dict[str, Dict[str, Any]] = {}
@@ -72,10 +72,6 @@ class CustomerProfileAgent(BaseAgent):
         self.MAX_CUSTOMERS = 10000  # Maximum customers to track
         self.TTL_SECONDS = 24 * 3600  # 24 hours
         self._last_cleanup = time.time()
-
-    def set_query_agent(self, query_agent: Any) -> None:
-        """Set QueryAgent reference for DB name resolution."""
-        self._query_agent = query_agent
         logger.info("[CustomerProfileAgent] QueryAgent reference set")
 
     def subscribe(self) -> List[str]:
@@ -564,9 +560,9 @@ class CustomerProfileAgent(BaseAgent):
         # FIX 8: Resolve company name — NEVER emit customer_name=None.
         # Priority: in-state name → DB lookup → omit field entirely.
         customer_name = state.get("company_name")
-        if not customer_name and self._query_agent:
+        if not customer_name:
             try:
-                cust = self._query_agent.get_customer(customer_id)
+                cust = QueryClient.query("get_customer", {"customer_id": customer_id})
                 if cust and cust.get("name"):
                     customer_name = cust["name"]
                     state["company_name"] = customer_name  # Cache for next emit

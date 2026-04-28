@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional, Set
 from pydantic import ValidationError
 
 from schemas.event_schema import Event, DLQEvent
+from schemas.event_envelope import EventEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +300,22 @@ class BaseAgent(ABC):
             partition = getattr(message, 'partition', None)
             offset = getattr(message, 'offset', None)
             high_watermark = getattr(message, 'high_watermark', None)
+
+            # Validate against EventEnvelope
+            try:
+                EventEnvelope(**message.value)
+            except Exception as e:
+                logger.error(f"Consume envelope validation failed: {e}")
+                dlq_event = message.value.copy() if isinstance(message.value, dict) else {"payload": message.value}
+                dlq_event.setdefault("metadata", {})
+                dlq_event["metadata"]["dlq_reason"] = "consume_validation_failed"
+                dlq_event["metadata"]["validation_errors"] = str(e)
+                
+                # Bypass normal validation by publishing directly to DLQ
+                # Using the standard publish method; if it fails validation again, 
+                # the publisher will just change topic to acis.dlq anyway.
+                self.kafka_client.publish("acis.dlq", dlq_event)
+                return
 
             # Parse and validate event
             event = self._validate_event(message.value)

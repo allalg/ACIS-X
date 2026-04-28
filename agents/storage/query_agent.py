@@ -5,6 +5,7 @@ from typing import List, Any, Dict, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +26,12 @@ class QueryAgent(BaseAgent):
         self,
         kafka_client: Any,
         db_path: Optional[str] = None,
-        memory_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="QueryAgent",
             agent_version="1.0.0",
             group_id="query-agent-group",
-            subscribed_topics=[],
+            subscribed_topics=["acis.query.request", "acis.invoices"],
             capabilities=[
                 "query_service",
                 "read_access",
@@ -49,15 +49,68 @@ class QueryAgent(BaseAgent):
         self._cache_lock = threading.Lock()
 
         # Reference to MemoryAgent for state queries (optional)
-        self._memory_agent = memory_agent
 
     def subscribe(self) -> List[str]:
-        """Return list of topics to subscribe to (empty for query agent)."""
-        return []
+        """Return list of topics to subscribe to."""
+        return ["acis.query.request", "acis.invoices"]
 
     def process_event(self, event: Event) -> None:
-        """QueryAgent does minimal event processing."""
-        pass
+        """Process query requests and publish responses."""
+        if event.event_type in ["invoice.created", "invoice.updated"]:
+            payload = event.payload or {}
+            invoice_id = payload.get("invoice_id")
+            if invoice_id:
+                self.update_invoice_cache(invoice_id, payload)
+            return
+
+        if event.event_type == "query.request":
+            payload = event.payload or {}
+            query_type = payload.get("query_type")
+            data = payload.get("data", {})
+            
+            response_data = None
+            if query_type == "get_customer":
+                response_data = self.get_customer(data.get("customer_id"))
+            elif query_type == "get_customer_metrics":
+                response_data = self.get_customer_metrics(data.get("customer_id"))
+            elif query_type == "get_all_customers":
+                response_data = self.get_all_customers()
+            elif query_type == "get_invoice":
+                response_data = self.get_invoice(data.get("invoice_id"))
+            elif query_type == "get_invoices_by_customer":
+                response_data = self.get_invoices_by_customer(data.get("customer_id"))
+            elif query_type == "get_all_invoices_by_customer":
+                response_data = self.get_all_invoices_by_customer(data.get("customer_id"))
+            elif query_type == "get_overdue_invoices":
+                response_data = self.get_overdue_invoices(data.get("customer_id"))
+            elif query_type == "get_unpaid_invoices":
+                response_data = self.get_unpaid_invoices()
+            elif query_type == "get_customer_state":
+                response_data = self.get_customer_state(data.get("customer_id"))
+            elif query_type == "update_customer_cache":
+                response_data = self.update_customer_cache(data.get("customer_id"), data.get("customer_data"))
+            elif query_type == "update_invoice_cache":
+                response_data = self.update_invoice_cache(data.get("invoice_id"), data.get("invoice_data"))
+            elif query_type == "invalidate_customer_cache":
+                response_data = self.invalidate_customer_cache(data.get("customer_id"))
+            elif query_type == "invalidate_invoice_cache":
+                response_data = self.invalidate_invoice_cache(data.get("invoice_id"))
+            else:
+                logger.warning(f"Unknown query_type: {query_type}")
+                return
+                
+            response_payload = {
+                "query_type": query_type,
+                "data": response_data
+            }
+            
+            self.publish_event(
+                topic="acis.query.response",
+                event_type="query.response",
+                entity_id=event.entity_id,
+                payload=response_payload,
+                correlation_id=event.correlation_id
+            )
 
     def start(self) -> None:
         """
@@ -112,13 +165,13 @@ class QueryAgent(BaseAgent):
                     # Update cache
                     with self._cache_lock:
                         self._customer_cache[customer_id] = result
-                    logger.debug(f"Fetched customer from DB: {customer_id}")
                     return result
+                return None
+            except Exception as e:
+                logger.error(f"Error querying customer {customer_id}: {e}")
+                return None
 
-            except sqlite3.Error as e:
-                logger.error(f"Database error querying customer {customer_id}: {e}")
 
-        return None
 
     def get_customer_metrics(self, customer_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -141,7 +194,7 @@ class QueryAgent(BaseAgent):
         # ISSUE 1 FIX: Try MemoryAgent FIRST (real-time cache)
         if self._memory_agent:
             try:
-                memory_state = self._memory_agent.get_customer_state(customer_id)
+                memory_state = QueryClient.query("get_customer_state", {"customer_id": customer_id})
                 if memory_state:
                     logger.debug(f"[QueryAgent] Using MemoryAgent cache for {customer_id} (real-time source)")
                     # Enrich with static data from DB (credit_limit only changes during administrative action)
@@ -309,54 +362,27 @@ class QueryAgent(BaseAgent):
 
         return None
 
-    def get_invoices_by_customer(self, customer_id: str) -> List[Dict[str, Any]]:
+    def get_invoices_by_customer(self, customer_id: str) -> Dict[str, Any]:
         """
-        Get all pending invoices for a customer.
+        Get all invoices for a customer from in-memory cache.
 
         Args:
             customer_id: The customer ID to look up.
 
         Returns:
-            List of invoice dicts with status != 'paid', or empty list if none found.
+            Dict containing list of invoice dicts.
         """
         if not customer_id:
-            return []
+            return {"invoices": []}
 
-        with self._db_lock:
-            try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
+        with self._cache_lock:
+            invoices = [
+                inv_data for inv_data in self._invoice_cache.values()
+                if inv_data.get("customer_id") == customer_id
+            ]
 
-                cursor.execute("""
-                    SELECT
-                        invoice_id,
-                        customer_id,
-                        COALESCE(total_amount, 0.0) AS total_amount,
-                        COALESCE(paid_amount, 0.0) AS paid_amount,
-                        CASE
-                            WHEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0)) > 0
-                            THEN (COALESCE(total_amount, 0.0) - COALESCE(paid_amount, 0.0))
-                            ELSE 0.0
-                        END AS remaining_amount,
-                        due_date,
-                        status
-                    FROM invoices
-                    WHERE customer_id = ?
-                    AND status != 'paid'
-                """, (customer_id,))
-
-                rows = cursor.fetchall()
-                conn.close()
-
-                result = [dict(row) for row in rows]
-                logger.debug(f"Fetched {len(result)} pending invoices for customer {customer_id}")
-                return result
-
-            except sqlite3.Error as e:
-                logger.error(f"Database error querying invoices for customer {customer_id}: {e}")
-
-        return []
+        logger.debug(f"Fetched {len(invoices)} invoices from cache for customer {customer_id}")
+        return {"invoices": invoices}
 
     def get_all_invoices_by_customer(self, customer_id: str) -> List[Dict[str, Any]]:
         """
@@ -532,7 +558,7 @@ class QueryAgent(BaseAgent):
 
         # Check MemoryAgent first if available
         if self._memory_agent is not None:
-            state = self._memory_agent.get_customer_state(customer_id)
+            state = QueryClient.query("get_customer_state", {"customer_id": customer_id})
             if state:
                 logger.debug(f"Got customer state from MemoryAgent: {customer_id}")
                 return state
@@ -569,22 +595,44 @@ class QueryAgent(BaseAgent):
             self._invoice_cache.clear()
         logger.info("Cleared all query agent caches")
 
-    def update_customer_cache(self, customer_id: str, customer_data: Dict[str, Any]) -> None:
+    def update_customer_cache(self, customer_id: str, customer_data: Optional[Dict[str, Any]] = None) -> bool:
         """
-        FIX #2: Pre-populate customer cache with data from DBAgent.
-        Called by DBAgent after successfully persisting customer to DB.
-        This prevents cache misses for recent writes.
+        Update or invalidate customer cache.
+        If customer_data is provided, it pre-populates the cache.
+        Otherwise, it invalidates and fetches fresh data.
         """
+        if not customer_id:
+            return False
+            
         with self._cache_lock:
-            self._customer_cache[customer_id] = customer_data
-        logger.debug(f"[FIX #2] Pre-populated customer cache for {customer_id}")
+            if customer_data:
+                self._customer_cache[customer_id] = customer_data
+                logger.debug(f"[FIX #2] Pre-populated customer cache for {customer_id}")
+            else:
+                self._customer_cache.pop(customer_id, None)
+                
+        if not customer_data:
+            self.get_customer(customer_id)
+            
+        return True
 
-    def update_invoice_cache(self, invoice_id: str, invoice_data: Dict[str, Any]) -> None:
+    def update_invoice_cache(self, invoice_id: str, invoice_data: Optional[Dict[str, Any]] = None) -> bool:
         """
-        FIX #2: Pre-populate invoice cache with data from DBAgent.
-        Called by DBAgent after successfully persisting invoice to DB.
-        This prevents cache misses for recent writes.
+        Update or invalidate invoice cache.
+        If invoice_data is provided, it pre-populates the cache.
+        Otherwise, it invalidates and fetches fresh data.
         """
+        if not invoice_id:
+            return False
+            
         with self._cache_lock:
-            self._invoice_cache[invoice_id] = invoice_data
-        logger.debug(f"[FIX #2] Pre-populated invoice cache for {invoice_id}")
+            if invoice_data:
+                self._invoice_cache[invoice_id] = invoice_data
+                logger.debug(f"[FIX #2] Pre-populated invoice cache for {invoice_id}")
+            else:
+                self._invoice_cache.pop(invoice_id, None)
+                
+        if not invoice_data:
+            self.get_invoice(invoice_id)
+            
+        return True

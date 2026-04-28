@@ -7,20 +7,21 @@ Starts the core runtime components:
 - SelfHealingAgent
 - RuntimeManager
 - PlacementEngine
-- TimeTickAgent (publishes time ticks every 5s for overdue detection)
+- TimeTickAgent
 - ScenarioGeneratorAgent
 - PaymentPredictionAgent
 - RiskScoringAgent
 - CreditPolicyAgent
 
-Creates Kafka topics up front and runs each component in its own thread.
+Creates Kafka topics up front and runs each component in its own independent OS process.
 """
 
 import logging
 import os
 import signal
 import sys
-import threading
+import time
+import multiprocessing
 from typing import Any, Dict, List, Tuple
 import pathlib
 from dotenv import load_dotenv
@@ -43,6 +44,7 @@ from agents.storage.db_agent import DBAgent
 from agents.storage.memory_agent import MemoryAgent
 from agents.storage.query_agent import QueryAgent
 from agents.system.time_tick_agent import TimeTickAgent
+from agents.system.dlq_monitor_agent import DLQMonitorAgent
 from monitoring.monitoring_agent import MonitoringAgent
 from registry.registry_service import RegistryService
 from runtime.kafka_client import KafkaClient, KafkaConfig
@@ -55,21 +57,15 @@ from self_healing.core.self_healing_agent import SelfHealingAgent
 def _configure_console_streams() -> None:
     """
     Make console logging resilient on Windows terminals with legacy encodings.
-
-    We keep the existing console encoding, but switch error handling away from
-    "strict" so one non-ASCII log line cannot crash the runtime.
     """
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
         if stream is None or not hasattr(stream, "reconfigure"):
             continue
-
         try:
             stream.reconfigure(errors="backslashreplace")
         except Exception:
-            # Some wrapped streams do not support reconfigure(); keep going.
             pass
-
 
 _configure_console_streams()
 
@@ -83,8 +79,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("run_acis")
 
-if not os.environ.get("INDIAN_KANOON_API_KEY"):
-    logger.warning("INDIAN_KANOON_API_KEY not set - ExternalScrapingAgent will run in limited mode")
 
 
 def _bootstrap_servers() -> List[str]:
@@ -97,15 +91,6 @@ def _kafka_backend() -> str:
 
 
 def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> None:
-    """
-    Delete committed consumer groups on first run only.
-
-    This forces Kafka to recreate offsets using the current client defaults on
-    the next subscribe call. It is used to keep "fresh start" behavior honest
-    instead of relying on a marker plus a comment that never changed offsets.
-
-    Marker file: .acis_consumer_groups_initialized
-    """
     marker_file = pathlib.Path(".acis_consumer_groups_initialized")
 
     if marker_file.exists():
@@ -120,7 +105,6 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
             client_id="acis-consumer-group-init"
         )
 
-        # Stable consumer groups that should be recreated on a fresh bootstrap.
         consumer_groups_to_reset = [
             "db-agent-group",
             "memory-agent-group",
@@ -142,19 +126,16 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
                 logger.info("[ConsumerGroup] Deleted consumer group: %s", group_id)
                 reset_count += 1
             except Exception as e:
-                # Group may not exist yet - this is OK.
                 logger.debug("[ConsumerGroup] Skipped group %s: %s", group_id, str(e)[:80])
 
         admin.close()
 
-        # Write marker file to indicate consumer groups have been initialized
         marker_file.write_text(
             "ACIS-X Consumer Groups Initialized\n"
             f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n"
             f"Marker: This file prevents repeated consumer group offset resets.\n"
             f"Delete this file to force a reset on next startup.\n"
         )
-
         logger.info(f"[ConsumerGroup] Marker file created: {marker_file}")
         logger.info("[ConsumerGroup] Consumer group cleanup complete (%s groups deleted)", reset_count)
 
@@ -164,7 +145,6 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
 
 
 def _reset_control_plane_consumer_groups(bootstrap_servers: List[str]) -> None:
-    """Always recreate control-plane consumer groups so orchestration starts clean."""
     control_plane_groups = [
         "runtime-manager-group",
         "placement-engine-group",
@@ -187,7 +167,6 @@ def _reset_control_plane_consumer_groups(bootstrap_servers: List[str]) -> None:
                     deleted += 1
                 except Exception as exc:
                     logger.debug("[ConsumerGroup] Control-plane group %s unchanged: %s", group_id, str(exc)[:80])
-
             logger.info("[ConsumerGroup] Control-plane reset complete (%s groups deleted)", deleted)
         finally:
             admin.close()
@@ -201,7 +180,6 @@ def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
         consumer_auto_offset_reset=auto_offset_reset,
     )
     return KafkaClient(config=config, backend=_kafka_backend())
-
 
 
 def _create_topics() -> Dict[str, bool]:
@@ -222,212 +200,158 @@ def _create_topics() -> Dict[str, bool]:
         return {}
 
 
-def _run_registry_service(service: RegistryService, shutdown_event: threading.Event) -> None:
-    service.start()
-    shutdown_event.wait()
-
-
-def _run_agent_service(agent: Any, shutdown_event: threading.Event) -> None:
+def launch_agent(agent_class: type, kwargs: Dict[str, Any]) -> None:
+    """
+    Entry point for child processes.
+    Initializes Kafka clients inside the child process and runs the agent.
+    """
     try:
+        # Create Kafka client inside the child process to avoid sharing across processes
+        kafka_client = _build_kafka_client(auto_offset_reset="latest")
+        kwargs["kafka_client"] = kafka_client
+
+        agent = agent_class(**kwargs)
+        agent_name = getattr(agent, "agent_name", agent_class.__name__)
+
+        # Handle graceful shutdown in child
+        def _handle_sigterm(signum: int, frame: Any) -> None:
+            logger.info(f"[{agent_name}] Received SIGTERM, stopping...")
+            agent.stop()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, _handle_sigterm)
+        # Ignore SIGINT in child to let supervisor handle it
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         agent.start()
+
+        # Keep process alive while agent is running
+        while getattr(agent, "_running", True):
+            time.sleep(1)
+
+        agent.stop()
     except Exception as e:
-        logger.error(f"Error in agent {agent.agent_name}: {e}")
+        logger.error(f"Fatal error in agent process {agent_class.__name__}: {e}", exc_info=True)
+        sys.exit(1)
 
-    shutdown_event.wait()
 
-
-def _build_components() -> Tuple[RegistryService, List[Any]]:
-    # FIX 5 - Architecture Design (CORRECTED):
-    # - ISSUE 2 FIX: Create ONE shared Kafka client for PRODUCER only
-    # - Each agent gets its OWN Kafka client for CONSUMER (prevents subscription overwrites)
-    # - Shared producer = 1 connection
-    # - Separate consumers per agent = isolated subscriptions and group IDs
-
-    shared_kafka_client = _build_kafka_client(auto_offset_reset="latest")
-    logger.info("[Bootstrap] Created shared Kafka producer client")
-
-    registry_service = RegistryService(kafka_client=shared_kafka_client)
-
-    # DESIGN: All business agents use auto_offset_reset="latest" so they ONLY
-    # process events generated after they start. This prevents old/poisoned Kafka
-    # messages (from previous broken runs) from replaying into a fresh DB.
-    # On restart, ScenarioGenerator seeds _customers from DB, so no data is lost.
-    query_agent = QueryAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest"))
-
-    # Create MemoryAgent with QueryAgent dependency
-    memory_agent = MemoryAgent(
-        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-        query_agent=query_agent
-    )
-
-    customer_state_agent = CustomerStateAgent(
-        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-        query_agent=query_agent
-    )
-
-    overdue_detection_agent = OverdueDetectionAgent(
-        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-        query_agent=query_agent
-    )
-
-    collections_agent = CollectionsAgent(
-        kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-        query_agent=query_agent
-    )
-
-    # Create DBAgent and link with QueryAgent for cache invalidation
-    db_agent = DBAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest"))
-    db_agent.set_query_agent(query_agent)
-
-    # Create AggregatorAgent and link with QueryAgent for company name resolution (FIX #12)
-    aggregator_agent = AggregatorAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest"))
-    aggregator_agent.set_query_agent(query_agent)
-
-    agents: List[Any] = [
-        MonitoringAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
-        SelfHealingAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            registry=registry_service,
-        ),
-        RuntimeManager(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
-        PlacementEngine(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            registry=registry_service,
-        ),
-        TimeTickAgent(kafka_client=_build_kafka_client(auto_offset_reset="latest")),
-        # Consumer agents — all started BEFORE ScenarioGeneratorAgent so they
-        # are subscribed and ready to process events before the first batch fires.
-        db_agent,
-        memory_agent,
-        query_agent,
-        customer_state_agent,
-        overdue_detection_agent,
-        ExternalDataAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            query_agent=query_agent
-        ),
-        ExternalScrapingAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            query_agent=query_agent
-        ),
-        aggregator_agent,
-        PaymentPredictionAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            query_agent=query_agent
-        ),
-        RiskScoringAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            query_agent=query_agent,
-            memory_agent=memory_agent
-        ),
-        CustomerProfileAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            query_agent=query_agent
-        ),
-        collections_agent,
-        # ScenarioGeneratorAgent LAST: ensures all consumers are subscribed
-        # before the first customer.profile.updated event is published.
-        # FIX 5: Prevents cust_00001 NULL-name race on fresh DB start.
-        ScenarioGeneratorAgent(
-            kafka_client=_build_kafka_client(auto_offset_reset="latest"),
-            generation_interval_seconds=5.0,
-            query_agent=query_agent
-        ),
+def _build_components(supervisor_client=None) -> List[Tuple[type, Dict[str, Any]]]:
+    """
+    Returns the specifications for each agent to be launched in a separate process.
+    All tight coupling (e.g., query_agent passing) has been removed.
+    """
+    specs = [
+        (RegistryService, {}),
+        (QueryAgent, {}),
+        (MemoryAgent, {}),
+        (CustomerStateAgent, {}),
+        (OverdueDetectionAgent, {}),
+        (CollectionsAgent, {}),
+        (DBAgent, {}),
+        (AggregatorAgent, {}),
+        (MonitoringAgent, {}),
+        (SelfHealingAgent, {"supervisor": supervisor_client} if supervisor_client else {}),
+        (RuntimeManager, {}),
+        (PlacementEngine, {}),
+        (TimeTickAgent, {}),
+        (DLQMonitorAgent, {}),
+        (ExternalDataAgent, {}),
+        (ExternalScrapingAgent, {}),
+        (PaymentPredictionAgent, {}),
+        (RiskScoringAgent, {}),
+        (CustomerProfileAgent, {}),
+        (ScenarioGeneratorAgent, {"generation_interval_seconds": 5.0}),
     ]
+    return specs
 
-    return registry_service, agents
+
+MAX_RESTART_ATTEMPTS = 5
+RESTART_WINDOW_SECONDS = 60
 
 
 def main() -> None:
-    shutdown_event = threading.Event()
     _create_topics()
     _reset_control_plane_consumer_groups(_bootstrap_servers())
-
-    # FIX 8: Reset consumer group offsets on first run to prevent skipping historical messages
     _reset_consumer_group_offsets_on_first_run(_bootstrap_servers())
 
-    registry_service, agents = _build_components()
+    manager = multiprocessing.Manager()
+    shared_dict = manager.dict({"restart_requests": []})
+    
+    from runtime.agent_supervisor import AgentSupervisor, SupervisorClient
+    supervisor_client = SupervisorClient(shared_dict)
+    supervisor = AgentSupervisor()
 
-    # FIX 4b: Give RuntimeManager a reference to every live agent so it can
-    # perform real stop/start restarts instead of purely simulated ones.
-    for agent in agents:
-        if hasattr(agent, "register_live_agents"):
-            agent.register_live_agents(agents)
-            logger.info("[Bootstrap] Live agent registry wired into RuntimeManager")
-            break
-
-    threads: List[threading.Thread] = []
+    agent_specs = _build_components(supervisor_client)
+    shutdown_requested = False
 
     def _request_shutdown(signum: int, frame: Any) -> None:
-        """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
+        nonlocal shutdown_requested
         logger.info("\n>>> Received signal %s, initiating graceful shutdown...", signum)
-        shutdown_event.set()
+        shutdown_requested = True
 
-    # Register signal handlers for graceful shutdown
-    # SIGINT = Ctrl+C on all platforms, SIGTERM = termination signal
     signal.signal(signal.SIGINT, _request_shutdown)
     signal.signal(signal.SIGTERM, _request_shutdown)
 
-    registry_thread = threading.Thread(
-        target=_run_registry_service,
-        args=(registry_service, shutdown_event),
-        daemon=True,
-        name="registry-service-runner",
-    )
-    threads.append(registry_thread)
-    registry_thread.start()
-
-    for agent in agents:
-        thread = threading.Thread(
-            target=_run_agent_service,
-            args=(agent, shutdown_event),
-            daemon=True,
-            name=agent.agent_name,
+    # Start all processes
+    for agent_class, kwargs in agent_specs:
+        agent_name = agent_class.__name__
+        p = multiprocessing.Process(
+            target=launch_agent,
+            args=(agent_class, kwargs),
+            name=agent_name
         )
-        threads.append(thread)
-        thread.start()
+        p.start()
+        supervisor.register(agent_name, p, agent_class, kwargs)
+        logger.info(f"Started process for {agent_name} (PID: {p.pid})")
 
-    logger.info("ACIS-X runtime bootstrap complete")
+    logger.info("ACIS-X runtime bootstrap complete (Multi-Process with Supervisor)")
     logger.info(">>> Press Ctrl+C to stop the system")
 
     try:
-        # Wait for shutdown signal (Ctrl+C or SIGTERM)
-        shutdown_event.wait()
+        # Supervisor loop
+        while not shutdown_requested:
+            # Process restart requests from SelfHealingAgent
+            requests = shared_dict.get("restart_requests", [])
+            if requests:
+                shared_dict["restart_requests"] = []
+                for agent_name in requests:
+                    logger.info(f"Received restart request for {agent_name} from SelfHealingAgent")
+                    supervisor.restart_agent(agent_name)
+
+            # Check for unexpectedly exited processes
+            for p in supervisor.all_processes():
+                if p is not None and not p.is_alive():
+                    exitcode = p.exitcode
+                    if exitcode is not None and exitcode != 0:
+                        agent_name = p.name
+                        logger.warning(f"Process {agent_name} exited unexpectedly with code {exitcode}.")
+                        supervisor.restart_agent(agent_name)
+
+            time.sleep(1)
     except KeyboardInterrupt:
-        # Fallback for KeyboardInterrupt (should be caught by signal handler)
-        logger.info("\n>>> Ctrl+C received, initiating shutdown...")
-        shutdown_event.set()
-    finally:
-        logger.info("\n>>> Stopping ACIS-X components...")
+        logger.info("\n>>> Ctrl+C received in main thread, shutting down...")
+        shutdown_requested = True
 
-        # Stop agents in reverse order of startup
-        for i, agent in enumerate(reversed(agents), 1):
-            agent_name = getattr(agent, "agent_name", type(agent).__name__)
-            try:
-                logger.info(f"  [{i}/{len(agents)}] Stopping {agent_name}...")
-                agent.stop()
-                logger.debug(f"  [{i}/{len(agents)}] Stopped {agent_name}")
-            except Exception as exc:
-                logger.warning(f"  [{i}/{len(agents)}] Failed stopping {agent_name}: {exc}")
+    # Graceful shutdown
+    logger.info("\n>>> Stopping ACIS-X multi-process components...")
+    
+    # Send SIGTERM to all child processes
+    for p in supervisor.all_processes():
+        if p and p.is_alive():
+            logger.info(f"Terminating {p.name} (PID: {p.pid})...")
+            p.terminate()
 
-        # Stop registry service
-        try:
-            logger.info(f"  [{len(agents)+1}/{len(agents)+1}] Stopping RegistryService...")
-            registry_service.stop()
-            logger.debug(f"  [{len(agents)+1}/{len(agents)+1}] Stopped RegistryService")
-        except Exception as exc:
-            logger.warning(f"Failed stopping RegistryService: {exc}")
+    # Wait up to 10s for clean exit
+    end_time = time.time() + 10
+    for p in supervisor.all_processes():
+        if p and p.is_alive():
+            timeout = max(0, end_time - time.time())
+            p.join(timeout=timeout)
+            if p.is_alive():
+                logger.warning(f"Process {p.name} did not terminate gracefully, killing it...")
+                p.kill()
 
-        # Wait for threads to finish (up to 10 seconds total)
-        logger.info("\n>>> Waiting for threads to finish (up to 10 seconds)...")
-        for i, thread in enumerate(threads, 1):
-            if thread.is_alive():
-                logger.debug(f"  Joining thread {i}/{len(threads)}: {thread.name}...")
-                thread.join(timeout=2)
-                if thread.is_alive():
-                    logger.warning(f"  Thread {thread.name} did not exit cleanly (timeout)")
-
-        logger.info(">>> ACIS-X shutdown complete")
+    logger.info(">>> ACIS-X shutdown complete")
 
 
 if __name__ == "__main__":

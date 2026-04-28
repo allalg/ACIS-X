@@ -4,6 +4,7 @@ from typing import List, Any
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,7 @@ class RiskScoringAgent(BaseAgent):
 
     def __init__(
         self,
-        kafka_client: Any,
-        query_agent: Any = None,
-        memory_agent: Any = None,
+        kafka_client: Any = None,
     ):
         super().__init__(
             agent_name="RiskScoringAgent",
@@ -56,9 +55,6 @@ class RiskScoringAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="RiskScoringAgent",
         )
-        self.query_agent = query_agent
-        self.memory_agent = memory_agent
-
         # CRITICAL FIX: Store customer-level aggregated/external risk context with TTL
         # Structure: customer_id → {"data": {...}, "updated_at": timestamp}
         # Updated by _handle_customer_risk_profile() from acis.customers topic
@@ -70,16 +66,7 @@ class RiskScoringAgent(BaseAgent):
         self.MAX_CONTEXT_CUSTOMERS = 10000
         self._last_cleanup_time = time.time()
         self._cleanup_interval_seconds = 300  # Attempt cleanup every 5 minutes
-
-    def set_query_agent(self, query_agent: Any) -> None:
-        """Set QueryAgent reference for customer context lookup."""
-        self.query_agent = query_agent
         logger.info("QueryAgent reference set for context enrichment")
-
-    def set_memory_agent(self, memory_agent: Any) -> None:
-        """Set MemoryAgent reference for temporal trend analysis (IMPROVEMENT 2)."""
-        self.memory_agent = memory_agent
-        logger.info("MemoryAgent reference set for temporal trend detection")
 
     def _handle_customer_risk_profile(self, event: Event) -> None:
         """
@@ -248,9 +235,9 @@ class RiskScoringAgent(BaseAgent):
 
         # STEP 2: Lazy fallback to QueryAgent for enriched data
         # IMPROVEMENT: Optionally enrich context with available metrics
-        if self.query_agent:
+        if True:
             try:
-                metrics = self.query_agent.get_customer_metrics(customer_id)
+                metrics = QueryClient.query("get_customer_metrics", {"customer_id": customer_id})
                 if metrics:
                     logger.debug(
                         f"[RiskScoringAgent] Lazy-loaded enriched context from QueryAgent: customer={customer_id}"
@@ -437,14 +424,14 @@ class RiskScoringAgent(BaseAgent):
         adjusted_risk = base_risk
 
         try:
-            if not self.query_agent:
+            if False  :
                 logger.debug("[RiskAgent] QueryAgent not available, using base risk")
                 return adjusted_risk
 
             # CRITICAL FIX: Use get_customer_metrics() which returns ENRICHED metrics
             # This includes: overdue_count, total_outstanding, avg_delay, on_time_ratio
             # NOT raw DB columns, but computed derived metrics for risk scoring
-            customer = self.query_agent.get_customer_metrics(customer_id) if customer_id else None
+            customer = QueryClient.query("get_customer_metrics", {"customer_id": customer_id}) if customer_id else None
             if not customer:
                 logger.debug(f"[RiskAgent] Customer metrics not found for {customer_id}, using base risk")
                 return adjusted_risk
@@ -599,9 +586,11 @@ class RiskScoringAgent(BaseAgent):
             # IMPROVEMENT 3: TEMPORAL TREND DETECTION (early warning signals)
             # Detect rapid deterioration, improving trends, volatility
             temporal_adjustment = 0
-            if self.memory_agent:
-                velocity_data = self.memory_agent.get_risk_velocity(customer_id)
-                if velocity_data:
+            try:
+                velocity_data = QueryClient.query("get_risk_velocity", {"customer_id": customer_id})
+            except Exception:
+                velocity_data = None
+            if velocity_data:
                     velocity = velocity_data.get("velocity", 0)
                     trend = velocity_data.get("trend", "stable")
                     volatility = velocity_data.get("volatility", 0)

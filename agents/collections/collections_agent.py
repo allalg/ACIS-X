@@ -20,6 +20,7 @@ from typing import List, Any, Dict, Set, Tuple, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,6 @@ class CollectionsAgent(BaseAgent):
     def __init__(
         self,
         kafka_client: Any,
-        query_agent: Any,
     ):
         super().__init__(
             agent_name="CollectionsAgent",
@@ -67,7 +67,6 @@ class CollectionsAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="CollectionsAgent",
         )
-        self._query_agent = query_agent
 
         # Priority mapping: string -> numeric score (for queuing, ML, ranking)
         self._priority_scores = {
@@ -158,7 +157,7 @@ class CollectionsAgent(BaseAgent):
 
         try:
             # ===== STEP 1: ENRICH INPUT DATA =====
-            customer_metrics = self._query_agent.get_customer_metrics(customer_id)
+            customer_metrics = QueryClient.query("get_customer_metrics", {"customer_id": customer_id})
             if not customer_metrics:
                 logger.warning(
                     f"[CollectionsAgent] No metrics found for {customer_id}, using defaults"
@@ -420,14 +419,14 @@ class CollectionsAgent(BaseAgent):
 
         try:
             # Extract customer metrics
-            customer_metrics = self._query_agent.get_customer_metrics(customer_id)
+            customer_metrics = QueryClient.query("get_customer_metrics", {"customer_id": customer_id})
             if not customer_metrics:
                 logger.warning(
                     f"[CollectionsAgent] No metrics for {customer_id}, using defaults"
                 )
                 customer_metrics = self._default_metrics()
 
-            overdue_invoices = self._query_agent.get_overdue_invoices(customer_id)
+            overdue_invoices = QueryClient.query("get_overdue_invoices", {"customer_id": customer_id})
             overdue_count = len(overdue_invoices)
 
             if overdue_count == 0:

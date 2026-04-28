@@ -164,6 +164,48 @@ ACIS_TOPIC_CONFIGS = {
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
+    "acis.dlq": TopicConfig(
+        name="acis.dlq",
+        partitions=1,
+        replication_factor=1,
+        retention_ms=604800000,  # 7 days
+        cleanup_policy="delete",
+    ),
+    "acis.alerts": TopicConfig(
+        name="acis.alerts",
+        partitions=1,
+        replication_factor=1,
+        retention_ms=86400000,  # 24h
+        cleanup_policy="delete",
+    ),
+    "acis.placement.requests": TopicConfig(
+        name="acis.placement.requests",
+        partitions=2,
+        replication_factor=1,
+        retention_ms=86400000,
+        cleanup_policy="delete",
+    ),
+    "acis.placement.assignments": TopicConfig(
+        name="acis.placement.assignments",
+        partitions=2,
+        replication_factor=1,
+        retention_ms=86400000,
+        cleanup_policy="delete",
+    ),
+    "acis.query.request": TopicConfig(
+        name="acis.query.request",
+        partitions=2,
+        replication_factor=1,
+        retention_ms=3600000,  # 1 hour
+        cleanup_policy="delete",
+    ),
+    "acis.query.response": TopicConfig(
+        name="acis.query.response",
+        partitions=2,
+        replication_factor=1,
+        retention_ms=3600000,  # 1 hour
+        cleanup_policy="delete",
+    ),
 }
 
 

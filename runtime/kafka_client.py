@@ -27,6 +27,7 @@ from enum import Enum
 from pydantic import ValidationError
 
 from schemas.event_schema import Event
+from schemas.event_envelope import EventEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class KafkaConfig:
 
     # Consumer settings
     # FIX 3: Reduce rebalance chaos with stable session settings
-    consumer_auto_offset_reset: str = "earliest"  # earliest, latest, none
+    consumer_auto_offset_reset: str = field(default_factory=lambda: __import__('os').environ.get('ACIS_OFFSET_RESET', 'latest'))  # earliest, latest, none
     consumer_enable_auto_commit: bool = False  # Offsets are committed explicitly after successful handling
     consumer_max_poll_records: int = 500
     consumer_max_poll_interval_ms: int = 300000  # 5 minutes - generous interval
@@ -371,6 +372,17 @@ class KafkaClient:
         kafka_headers["event_type"] = event.get("event_type", "unknown")
         kafka_headers["event_source"] = event.get("event_source", "unknown")
         kafka_headers["schema_version"] = event.get("schema_version", "1.0")
+
+        # Validate against EventEnvelope
+        try:
+            EventEnvelope(**event)
+        except Exception as e:
+            logger.error(f"Event envelope validation failed: {e}")
+            event["metadata"] = event.get("metadata", {})
+            event["metadata"]["dlq_reason"] = "publish_validation_failed"
+            event["metadata"]["original_topic"] = topic
+            event["metadata"]["validation_errors"] = str(e)
+            topic = "acis.dlq"
 
         # Serialize event
         serialized_event = self._serialize(event)

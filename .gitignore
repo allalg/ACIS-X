@@ -22,3 +22,5 @@ build/
 acis.db-wal
 acis.db-shm
 .github
+
+test_venv/

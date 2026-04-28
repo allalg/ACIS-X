@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
+from utils.query_client import QueryClient
 from config.settings import (
     HEALTH_SCORE_THRESHOLD,
     DECISION_INTERVAL,
@@ -164,6 +165,7 @@ class SelfHealingAgent(BaseAgent):
         host: Optional[str] = None,
         fallback_agents: Optional[Dict[str, List[str]]] = None,
         registry: Optional[RegistryService] = None,
+        supervisor: Any = None,
     ):
         super().__init__(
             agent_name="SelfHealingAgent",
@@ -188,6 +190,7 @@ class SelfHealingAgent(BaseAgent):
         self._decision_thread: Optional[threading.Thread] = None
         self._fallback_agents = fallback_agents or {}
         self.registry = registry
+        self.supervisor = supervisor
 
     def subscribe(self) -> List[str]:
         """Return subscribed Kafka topics."""
@@ -439,6 +442,26 @@ class SelfHealingAgent(BaseAgent):
         if snapshot.status == AgentStatus.TIMEOUT.value or trigger == "timeout":
             self._emit_recovery_triggered(snapshot, "restart", "TIMEOUT_DETECTED")
             if self._can_restart(snapshot, now):
+                # When 3 consecutive missed heartbeats detected for an agent: call supervisor.restart_agent(agent_name)
+                # We assume TIMEOUT implies 3 missed heartbeats
+                if self.supervisor is not None:
+                    try:
+                        success = self.supervisor.restart_agent(snapshot.agent_name)
+                        self.publish_event(
+                            topic="acis.monitoring",
+                            event_type="self_healing.restart_attempted",
+                            entity_id=snapshot.agent_name,
+                            payload={
+                                "agent_name": snapshot.agent_name,
+                                "success": success,
+                                "restart_count": 0  # Not tracked directly here
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"Supervisor restart failed: {e}")
+                else:
+                    logger.error(f"Cannot restart {snapshot.agent_name}: Supervisor not available")
+
                 self._publish_restart(snapshot, "Timeout detected by monitoring", "TIMEOUT_DETECTED")
             else:
                 self._maybe_publish_fallback(snapshot, "TIMEOUT_DETECTED")

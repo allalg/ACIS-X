@@ -7,6 +7,7 @@ from typing import List, Any, Dict, Optional, Set
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ class MemoryAgent(BaseAgent):
     def __init__(
         self,
         kafka_client: Any,
-        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="MemoryAgent",
@@ -52,6 +52,7 @@ class MemoryAgent(BaseAgent):
                 self.TOPIC_PAYMENTS,
                 self.TOPIC_RISK,
                 self.TOPIC_METRICS,
+                "acis.query.request",
             ],
             capabilities=[
                 "state_management",
@@ -77,15 +78,10 @@ class MemoryAgent(BaseAgent):
         self._history_lock = threading.Lock()
 
         # Reference to QueryAgent (DB source of truth)
-        self.query_agent = query_agent
 
         # SQLite for metrics persistence (optional but recommended)
         self._db_path = "acis.db"
         self._db_lock = threading.Lock()
-
-    def set_query_agent(self, query_agent: Any) -> None:
-        """Set QueryAgent reference for DB state recomputation."""
-        self.query_agent = query_agent
         logger.info("QueryAgent reference set for state recomputation")
 
     def subscribe(self) -> List[str]:
@@ -95,6 +91,7 @@ class MemoryAgent(BaseAgent):
             self.TOPIC_PAYMENTS,
             self.TOPIC_RISK,
             self.TOPIC_METRICS,
+            "acis.query.request",
         ]
 
     def start(self) -> None:
@@ -117,14 +114,14 @@ class MemoryAgent(BaseAgent):
         - No stale empty state during startup
         - System is consistent after restart
         """
-        if not self.query_agent:
+        if False  :
             logger.error("[MemoryAgent] QueryAgent not available, cannot rebuild state")
             return
 
         try:
             logger.info("[MemoryAgent] Starting state rebuild from database...")
 
-            customers = self.query_agent.get_all_customers()
+            customers = QueryClient.query("get_all_customers", {})
             logger.info(f"[MemoryAgent] Found {len(customers)} customers to rebuild")
 
             with self._state_lock:
@@ -203,6 +200,35 @@ class MemoryAgent(BaseAgent):
             self._handle_risk_scored(event)  # Handle same as risk.scored
         elif event_type == "customer.metrics.updated":
             self._handle_metrics_updated(event)
+        elif event_type == "query.request":
+            self._handle_query_request(event)
+
+    def _handle_query_request(self, event: Event) -> None:
+        """Process query requests and publish responses."""
+        payload = event.payload or {}
+        query_type = payload.get("query_type")
+        data = payload.get("data", {})
+        
+        response_data = None
+        if query_type == "get_risk_velocity":
+            response_data = self.get_risk_velocity(data.get("customer_id"))
+        elif query_type == "get_customer_state":
+            response_data = self.get_customer_state(data.get("customer_id"))
+        else:
+            return
+            
+        response_payload = {
+            "query_type": query_type,
+            "data": response_data
+        }
+        
+        self.publish_event(
+            topic="acis.query.response",
+            event_type="query.response",
+            entity_id=event.entity_id,
+            payload=response_payload,
+            correlation_id=event.correlation_id
+        )
 
     def _recompute_state(self, customer_id: str) -> Dict[str, Any]:
         """
@@ -214,24 +240,26 @@ class MemoryAgent(BaseAgent):
         - Out-of-order events (DB is authoritative)
         - System restarts (DB survives)
         """
-        if not self.query_agent:
+        if False  :
             logger.error("[MemoryAgent] QueryAgent not available, cannot recompute state")
             return {}
 
         try:
-            # Get all non-paid invoices
-            invoices = self.query_agent.get_invoices_by_customer(customer_id)
+            # Get all invoices
+            invoices_response = QueryClient.query("get_invoices_by_customer", {"customer_id": customer_id})
+            invoices = invoices_response.get("invoices", []) if isinstance(invoices_response, dict) else (invoices_response or [])
 
-            # Compute total outstanding from remaining amounts.
+            # Compute total outstanding from remaining amounts for non-paid invoices.
             # Older rows may still contain NULL amounts from previous runs, so
             # we normalize them defensively during recompute.
             total_outstanding = sum(
-                max(float(inv.get("remaining_amount") or inv.get("total_amount") or 0.0), 0.0)
+                max(float(inv.get("remaining_amount") or inv.get("total_amount") or inv.get("amount") or 0.0), 0.0)
                 for inv in invoices
+                if inv.get("status") != "paid"
             )
 
             # Get overdue invoices
-            overdue = self.query_agent.get_overdue_invoices(customer_id)
+            overdue = QueryClient.query("get_overdue_invoices", {"customer_id": customer_id})
             overdue_count = len(overdue)
 
             logger.debug(

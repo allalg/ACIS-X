@@ -35,50 +35,54 @@ def _bootstrap_servers():
     return [s.strip() for s in servers.split(",") if s.strip()]
 
 
-ACIS_TOPICS = [
-    "acis.customers",
-    "acis.invoices",
-    "acis.payments",
-    "acis.metrics",
-    "acis.risk",
-    "acis.commands",
-    "acis.events",
-    "acis.alerts",
-    "acis.system",
-    "acis.heartbeat",
-    "acis.registry",
-    "acis.audit",
-    "acis.external.data",
-    "acis.external.scraping",
-    "acis.customers.dlq",
-    "acis.invoices.dlq",
-    "acis.payments.dlq",
-    "acis.metrics.dlq",
-    "acis.risk.dlq",
-]
+try:
+    from runtime.topic_manager import DEFAULT_TOPICS
+    ACIS_TOPICS = list(DEFAULT_TOPICS.keys())
+except ImportError:
+    # Fallback if PYTHONPATH is not set
+    ACIS_TOPICS = [
+        "acis.customers", "acis.invoices", "acis.payments", "acis.metrics",
+        "acis.risk", "acis.commands", "acis.events", "acis.alerts",
+        "acis.system", "acis.heartbeat", "acis.registry", "acis.audit",
+        "acis.external.data", "acis.external.scraping",
+        "acis.customers.dlq", "acis.invoices.dlq", "acis.payments.dlq",
+        "acis.metrics.dlq", "acis.risk.dlq", "acis.system.dlq", "acis.dlq",
+        "acis.placement.requests", "acis.placement.assignments",
+        "acis.query.request", "acis.query.response"
+    ]
 
-CONSUMER_GROUPS = [
-    "db-agent-group",
-    "memory-agent-group",
-    "customer-state-group",
-    "overdue-detection-group",
-    "collections-group",
-    "external-data-group",
-    "external-scraping-group",
-    "litigation-agent-group",
-    "risk-scoring-group",
-    "customer-profile-group",
-    "aggregator-agent-group",
-    "payment-prediction-group",
-    "scenario-generator-group",
-    "runtime-manager-group",
-    "placement-engine-group",
-    "monitoring-group",
-    "self-healing-group",
-    "acis-registry-service",
-    "query-agent-group",
-    "time-tick-group",
-]
+def step0_kill_zombie_processes():
+    """Step 0: Ensure no orphaned ACIS-X agents are running."""
+    logger.info("=" * 60)
+    logger.info("STEP 0: Stopping ACIS-X Processes...")
+    logger.info("=" * 60)
+    
+    try:
+        import psutil
+        current_pid = os.getpid()
+        killed = 0
+        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                name = p.info.get('name') or ''
+                if 'python' in name.lower() and p.pid != current_pid:
+                    cmdline = p.info.get('cmdline') or []
+                    cmd_str = ' '.join(cmdline).lower()
+                    if "acis" in cmd_str or "multiprocessing" in cmd_str:
+                        p.terminate()
+                        killed += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+                
+        if killed > 0:
+            logger.info(f"  [OK] Terminated {killed} orphaned ACIS-X background processes.")
+            time.sleep(2)  # Give OS time to release file locks
+        else:
+            logger.info("  [OK] No orphaned processes found.")
+    except ImportError:
+        logger.warning("  psutil not installed. Cannot auto-kill zombies.")
+        logger.warning("  If reset fails with PermissionError on acis.db, manually run: taskkill /IM python.exe /F")
+    
+    logger.info("Step 0 complete.\n")
 
 
 def step1_delete_local_files():
@@ -137,7 +141,7 @@ def step2_purge_kafka_topics():
         if existing_topics:
             try:
                 admin.delete_topics(existing_topics, timeout_ms=15000)
-                logger.info(f"  ✓ Deleted {len(existing_topics)} topics. Waiting for cleanup...")
+                logger.info(f"  [OK] Deleted {len(existing_topics)} topics. Waiting for cleanup...")
                 time.sleep(5)  # Give Kafka time to finish deleting
             except Exception as e:
                 logger.warning(f"  Topic deletion warning (may be OK): {e}")
@@ -145,15 +149,23 @@ def step2_purge_kafka_topics():
 
         # --- Delete consumer group offsets ---
         logger.info("  Deleting consumer group offsets...")
-        deleted_groups = 0
-        for group in CONSUMER_GROUPS:
-            try:
-                admin.delete_consumer_groups([group])
-                logger.info(f"  ✓ Deleted group: {group}")
-                deleted_groups += 1
-            except Exception:
-                pass  # Group doesn't exist - that's fine
-        logger.info(f"  Deleted {deleted_groups} consumer groups.")
+        try:
+            groups = admin.list_consumer_groups()
+            group_ids = [g[0] for g in groups]
+            
+            # Delete any group containing these keywords
+            to_delete = [
+                gid for gid in group_ids 
+                if "-group" in gid or "acis" in gid or "agent" in gid or "query-client" in gid
+            ]
+            
+            if to_delete:
+                admin.delete_consumer_groups(to_delete)
+                logger.info(f"  [OK] Deleted {len(to_delete)} consumer groups.")
+            else:
+                logger.info("  [OK] No matching consumer groups found to delete.")
+        except Exception as e:
+            logger.warning(f"  Could not cleanly delete consumer groups: {e}")
 
         # --- Recreate topics ---
         logger.info("  Recreating topics...")
@@ -190,7 +202,7 @@ def step2_purge_kafka_topics():
 
         try:
             admin.create_topics(new_topics, timeout_ms=15000)
-            logger.info(f"  ✓ Created {len(new_topics)} topics fresh.")
+            logger.info(f"  [OK] Created {len(new_topics)} topics fresh.")
         except Exception as e:
             logger.warning(f"  Topic creation warning: {e}")
 
@@ -218,7 +230,7 @@ def step3_verify():
 
     all_ok = True
     for name, ok in checks.items():
-        status = "✓" if ok else "✗"
+        status = "[OK]" if ok else "[FAIL]"
         logger.info(f"  {status} {name}: {'absent (good)' if ok else 'STILL EXISTS (problem!)'}")
         if not ok:
             all_ok = False
@@ -226,7 +238,7 @@ def step3_verify():
     logger.info("")
     if all_ok:
         logger.info("=" * 60)
-        logger.info("✓ RESET COMPLETE - System is in a clean state.")
+        logger.info("[OK] RESET COMPLETE - System is in a clean state.")
         logger.info("  You can now run: python run_acis.py")
         logger.info("=" * 60)
     else:
@@ -235,11 +247,12 @@ def step3_verify():
 
 if __name__ == "__main__":
     logger.info("")
-    logger.info("╔══════════════════════════════════════════════════════════╗")
-    logger.info("║          ACIS-X Full System Reset                       ║")
-    logger.info("╚══════════════════════════════════════════════════════════╝")
+    logger.info("+----------------------------------------------------------+")
+    logger.info("|          ACIS-X Full System Reset                        |")
+    logger.info("+----------------------------------------------------------+")
     logger.info("")
 
+    step0_kill_zombie_processes()
     step1_delete_local_files()
     step2_purge_kafka_topics()
     step3_verify()

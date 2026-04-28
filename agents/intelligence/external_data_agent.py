@@ -13,6 +13,10 @@ from urllib3.util.retry import Retry
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
+from utils.circuit_breaker import CircuitBreaker, CircuitOpenError
+
+_screener_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +55,6 @@ class ExternalDataAgent(BaseAgent):
         self,
         kafka_client: Any,
         db_path: Optional[str] = None,
-        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="ExternalDataAgent",
@@ -63,7 +66,6 @@ class ExternalDataAgent(BaseAgent):
             agent_type="ExternalDataAgent",
         )
         self._db_path = db_path or self.DB_PATH
-        self._query_agent = query_agent
 
         # FIX: Configure session with connection pooling and retry logic
         self._session = requests.Session()
@@ -90,6 +92,21 @@ class ExternalDataAgent(BaseAgent):
         self._last_published_risk: OrderedDict = OrderedDict()  # customer_id -> last risk
         self._last_published_signature: OrderedDict = OrderedDict()  # customer_id -> signature
         self._MAX_RISK_TRACK = 5000  # evict oldest when exceeded
+        _screener_breaker.on_state_change = self._on_screener_breaker_change
+
+    def _on_screener_breaker_change(self, old_state: str, new_state: str) -> None:
+        if new_state == "OPEN":
+            logger.warning("screener.in circuit OPEN — returning null enrichment")
+        self.publish_event(
+            topic="acis.monitoring",
+            event_type="circuit_breaker.state_change",
+            entity_id=self.agent_name,
+            payload={
+                "service": "screener.in",
+                "new_state": new_state,
+                "agent_name": self.agent_name
+            }
+        )
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -242,10 +259,12 @@ class ExternalDataAgent(BaseAgent):
 
         try:
             # FIX: Increased timeout from 10 to 20 seconds
-            response = self._session.get(url, timeout=20, allow_redirects=True)
+            response = _screener_breaker.call(self._session.get, url, timeout=20, allow_redirects=True)
             if response.status_code == 200:
                 logger.info(f"[ExternalDataAgent] Slug resolved directly: {normalized}")
                 return normalized
+        except CircuitOpenError:
+            pass
         except requests.RequestException:
             pass
 
@@ -253,7 +272,7 @@ class ExternalDataAgent(BaseAgent):
         try:
             search_url = f"https://www.screener.in/api/company/search/?q={company_name}"
             # FIX: Increased timeout from 10 to 20 seconds
-            response = self._session.get(search_url, timeout=20)
+            response = _screener_breaker.call(self._session.get, search_url, timeout=20)
             if response.status_code == 200:
                 results = response.json()
                 if results and len(results) > 0:
@@ -264,6 +283,8 @@ class ExternalDataAgent(BaseAgent):
                         slug = match.group(1)
                         logger.info(f"[ExternalDataAgent] Slug resolved via search: {slug}")
                         return slug
+        except CircuitOpenError:
+            pass
         except Exception as e:
             logger.warning(f"[ExternalDataAgent] Search fallback failed: {e}")
 
@@ -362,7 +383,7 @@ class ExternalDataAgent(BaseAgent):
         for attempt in range(max_attempts):
             try:
                 logger.info(f"[ExternalDataAgent] Scraping Screener for {slug}: {url} (attempt {attempt + 1})")
-                response = self._session.get(url, timeout=10)
+                response = _screener_breaker.call(self._session.get, url, timeout=10)
 
                 if response.status_code != 200:
                     logger.warning(f"[ExternalDataAgent] Screener returned {response.status_code} for {slug}")
@@ -418,6 +439,8 @@ class ExternalDataAgent(BaseAgent):
                 )
                 return data
 
+            except CircuitOpenError:
+                return {"source": "circuit_open", "financial_risk": None, "revenue": None}
             except requests.RequestException as e:
                 logger.error(f"[ExternalDataAgent] Screener fetch failed for {slug}: {e}")
                 if attempt < max_attempts - 1:
@@ -820,9 +843,9 @@ class ExternalDataAgent(BaseAgent):
 
         # Resolve company name
         company_name = payload.get("company_name")
-        if not company_name and self._query_agent:
+        if not company_name:
             try:
-                customer = self._query_agent.get_customer(customer_id)
+                customer = QueryClient.query("get_customer", {"customer_id": customer_id})
                 if customer:
                     company_name = customer.get("name")
             except Exception as e:

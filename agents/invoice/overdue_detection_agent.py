@@ -11,6 +11,7 @@ from typing import List, Any, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,6 @@ class OverdueDetectionAgent(BaseAgent):
     def __init__(
         self,
         kafka_client: Any,
-        query_agent: Any,
     ):
         super().__init__(
             agent_name="OverdueDetectionAgent",
@@ -52,8 +52,6 @@ class OverdueDetectionAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="OverdueDetectionAgent",
         )
-
-        self._query_agent = query_agent
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -108,7 +106,7 @@ class OverdueDetectionAgent(BaseAgent):
         try:
             logger.debug(f"Time tick at {current_time_str}: checking for overdue invoices")
 
-            invoices = self._query_agent.get_unpaid_invoices()
+            invoices = QueryClient.query("get_unpaid_invoices", {})
 
             for invoice in invoices:
                 invoice_id = invoice.get("invoice_id")

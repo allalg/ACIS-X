@@ -7,6 +7,9 @@ events with simulated host, replica index, and group assignment decisions.
 
 import logging
 import threading
+import time
+import requests
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -34,7 +37,7 @@ class PlacementEngine(BaseAgent):
             agent_name="PlacementEngine",
             agent_version=agent_version,
             group_id="placement-engine-group",
-            subscribed_topics=["acis.system"],
+            subscribed_topics=["acis.system", "acis.placement.requests"],
             capabilities=[
                 "placement_decisioning",
                 "host_assignment",
@@ -55,10 +58,17 @@ class PlacementEngine(BaseAgent):
         self._replica_counters: Dict[str, int] = {}
         self._lock = threading.Lock()
         self.registry = registry
+        self._routing_table = {}
+        self._last_assigned = {}
+        self._routing_lock = threading.Lock()
+        self._registry_port = os.getenv("ACIS_REGISTRY_PORT", "5000")
+        
+        self._polling_thread = threading.Thread(target=self._poll_registry, daemon=True)
+        self._polling_thread.start()
 
     def subscribe(self) -> List[str]:
         """Consume placement requests from the system topic."""
-        return ["acis.system"]
+        return ["acis.system", "acis.placement.requests"]
 
     def process_event(self, event: Event) -> None:
         """Handle placement.requested events only."""
@@ -67,6 +77,39 @@ class PlacementEngine(BaseAgent):
             return
         if event.event_type == SystemEventType.PLACEMENT_REQUESTED.value:
             self._handle_placement_requested(event)
+        
+        # Capability routing
+        payload = event.payload
+        if "required_capability" in payload:
+            req_cap = payload["required_capability"]
+            with self._routing_lock:
+                instances = self._routing_table.get(req_cap, [])
+                if not instances:
+                    logger.warning(f"[PlacementEngine] No capable agent for {req_cap}")
+                    self.publish_event(
+                        topic="acis.alerts",
+                        event_type="placement.failed",
+                        entity_id="PlacementEngine",
+                        payload={"status": "failed", "reason": "no_capable_agent", "required_capability": req_cap}
+                    )
+                    return
+                
+                idx = self._last_assigned.get(req_cap, 0) % len(instances)
+                chosen_instance = instances[idx]
+                self._last_assigned[req_cap] = idx + 1
+                
+            logger.info(f"[PlacementEngine] Assigned {payload.get('message_key')} to {chosen_instance}")
+            self.publish_event(
+                topic="acis.placement.assignments",
+                event_type="placement.assigned",
+                entity_id="PlacementEngine",
+                payload={
+                    "instance_id": chosen_instance,
+                    "message_key": payload.get("message_key"),
+                    "original_topic": payload.get("original_topic"),
+                    "assigned_at": datetime.utcnow().isoformat()
+                }
+            )
 
     def _handle_placement_requested(self, event: Event) -> None:
         """Choose host, replica index, and group assignment for a placement request."""
@@ -215,3 +258,22 @@ class PlacementEngine(BaseAgent):
             return group_id
         agent_token = agent_name.lower().replace(" ", "-")
         return f"{agent_token}-group"
+
+    def _poll_registry(self) -> None:
+        while True:
+            try:
+                resp = requests.get(f"http://localhost:{self._registry_port}/api/agents?status=RUNNING", timeout=5)
+                if resp.status_code == 200:
+                    agents = resp.json()
+                    new_table = {}
+                    for a in agents:
+                        caps = a.get("capabilities", [])
+                        inst_id = a.get("instance_id")
+                        if inst_id:
+                            for c in caps:
+                                new_table.setdefault(c, []).append(inst_id)
+                    with self._routing_lock:
+                        self._routing_table = new_table
+            except Exception as e:
+                logger.debug(f"[PlacementEngine] Registry poll failed: {e}")
+            time.sleep(30)

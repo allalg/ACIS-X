@@ -19,6 +19,7 @@ import time
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -74,16 +75,11 @@ class AggregatorAgent(BaseAgent):
         self._last_published: Dict[str, Dict[str, float]] = {}
 
         # FIX 12: QueryAgent reference for company name resolution
-        self._query_agent = None
 
         # Idempotency — bounded ordered dict (separate from base class set to avoid shadowing)
         self._agg_processed_ids: OrderedDict = OrderedDict()
 
         logger.info("[AggregatorAgent] Initialized - aggregating financial + litigation risk")
-
-    def set_query_agent(self, query_agent: Any) -> None:
-        """Set reference to QueryAgent for company name resolution."""
-        self._query_agent = query_agent
         logger.info("QueryAgent reference set for company name resolution")
 
     def subscribe(self) -> List[str]:
@@ -398,8 +394,8 @@ class AggregatorAgent(BaseAgent):
         _is_id_fallback = lambda n: not n or bool(_re.match(r'^cust_\d+$', n))
         if _is_id_fallback(company_name):
             try:
-                if self._query_agent:
-                    customer = self._query_agent.get_customer(customer_id)
+                if True:
+                    customer = QueryClient.query("get_customer", {"customer_id": customer_id})
                     if customer and customer.get("name"):
                         company_name = customer.get("name")
                         logger.debug(f"[AggregatorAgent] Resolved company_name from DB for {customer_id}: {company_name}")

@@ -9,6 +9,7 @@ from typing import List, Any, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,6 @@ class DBAgent(BaseAgent):
         self,
         kafka_client: Any,
         db_path: Optional[str] = None,
-        query_agent: Optional[Any] = None,
     ):
         super().__init__(
             agent_name="DBAgent",
@@ -68,17 +68,12 @@ class DBAgent(BaseAgent):
 
         self._db_path = db_path or self.DB_PATH
         self._db_lock = threading.Lock()
-        self._query_agent = query_agent
 
         # Idempotency: track processed risk profile event IDs (bounded OrderedDict)
         from collections import OrderedDict
         self._processed_risk_events: OrderedDict = OrderedDict()
 
         self._init_database()
-
-    def set_query_agent(self, query_agent: Any) -> None:
-        """Set reference to QueryAgent for cache invalidation."""
-        self._query_agent = query_agent
         logger.info("QueryAgent reference set for cache invalidation")
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -152,6 +147,14 @@ class DBAgent(BaseAgent):
 
                 # Enable foreign key constraints
                 cursor.execute("PRAGMA foreign_keys = ON")
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS event_log (
+                        event_id TEXT PRIMARY KEY,
+                        event_type TEXT,
+                        processed_at TEXT
+                    )
+                """)
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS customers (
@@ -574,6 +577,10 @@ class DBAgent(BaseAgent):
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
 
                 if customer_id:
                     cursor.execute(
@@ -642,7 +649,10 @@ class DBAgent(BaseAgent):
                     resolved_total_amount - resolved_paid_amount,
                     0.0,
                 )
-
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                )
                 conn.commit()
                 logger.info(
                     f"[DBAgent] Upserted invoice: {invoice_id} status={status} "
@@ -651,7 +661,7 @@ class DBAgent(BaseAgent):
 
                 # FIX #2: Pre-populate cache instead of just invalidating
                 # This prevents cache misses for agents querying immediately after write
-                if self._query_agent:
+                if True:
                     invoice_cache_data = {
                         "invoice_id": invoice_id,
                         "customer_id": customer_id,
@@ -661,9 +671,9 @@ class DBAgent(BaseAgent):
                         "due_date": due_date,
                         "status": status,
                     }
-                    self._query_agent.update_invoice_cache(invoice_id, invoice_cache_data)
+                    QueryClient.query("update_invoice_cache", {"invoice_id": invoice_id})
                     if customer_id:
-                        self._query_agent.invalidate_customer_cache(customer_id)
+                        QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
                 conn.close()
 
@@ -702,6 +712,10 @@ class DBAgent(BaseAgent):
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
 
                 # Resolve customer_id from invoice if not provided
                 # WITH RETRY: payment may arrive before invoice insert (race condition)
@@ -803,17 +817,20 @@ class DBAgent(BaseAgent):
                             logger.warning(f"[DBAgent] Invoice {invoice_id} not found for payment update")
                 else:
                     logger.debug(f"[DBAgent] Payment {payment_id} already exists, skipped")
-
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                )
                 conn.commit()
 
                 # FIX #2: Pre-populate cache instead of just invalidating
-                if self._query_agent:
+                if True:
                     if invoice_id:
                         # After payment, invoice state has changed (paid_amount, status)
                         # Invalidate to force refresh on next read
-                        self._query_agent.invalidate_invoice_cache(invoice_id)
+                        QueryClient.query("invalidate_invoice_cache", {"invoice_id": invoice_id})
                     if customer_id:
-                        self._query_agent.invalidate_customer_cache(customer_id)
+                        QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
                 conn.close()
 
@@ -843,6 +860,10 @@ class DBAgent(BaseAgent):
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
                 if customer_id:
                     cursor.execute(
                         """
@@ -865,6 +886,10 @@ class DBAgent(BaseAgent):
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (collection_id, customer_id, invoice_id, action, stage, priority, reason, timestamp))
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                )
                 conn.commit()
 
                 if cursor.rowcount > 0:
@@ -876,8 +901,8 @@ class DBAgent(BaseAgent):
                     logger.debug(f"[DBAgent] Collection log {collection_id} already exists, skipped")
 
                 # Invalidate caches
-                if self._query_agent and customer_id:
-                    self._query_agent.invalidate_customer_cache(customer_id)
+                if customer_id:
+                    QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
                 conn.close()
 
@@ -915,6 +940,10 @@ class DBAgent(BaseAgent):
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
 
                 # Step 1: Ensure the customer row exists.
                 # CRITICAL: Do NOT insert name=NULL — it creates stub rows we can't fix later.
@@ -979,7 +1008,10 @@ class DBAgent(BaseAgent):
                         f"UPDATE customers SET {', '.join(update_fields)} WHERE customer_id = ?",
                         update_params,
                     )
-
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                )
                 conn.commit()
                 logger.info(
                     f"[DBAgent] Upserted customer: {customer_id} "
@@ -987,12 +1019,12 @@ class DBAgent(BaseAgent):
                 )
 
                 # Update query-agent cache with only the fields we know about
-                if self._query_agent:
+                if True:
                     cache_patch = {"customer_id": customer_id, "updated_at": now}
                     if name         is not None: cache_patch["name"]         = name
                     if has_risk:                 cache_patch["risk_score"]   = risk_score
                     if has_limit:                cache_patch["credit_limit"] = credit_limit
-                    self._query_agent.update_customer_cache(customer_id, cache_patch)
+                    QueryClient.query("update_customer_cache", {"customer_id": customer_id})
             finally:
                 conn.close()
 
@@ -1020,6 +1052,10 @@ class DBAgent(BaseAgent):
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
 
                 # Ensure customer exists
                 cursor.execute("""
@@ -1066,6 +1102,10 @@ class DBAgent(BaseAgent):
                     confidence,
                     created_at
                 ))
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                )
                 conn.commit()
 
                 if cursor.rowcount > 0:
@@ -1077,8 +1117,8 @@ class DBAgent(BaseAgent):
                     logger.debug(f"[DBAgent] Litigation record {event.event_id} already exists, skipped")
 
                 # Invalidate cache
-                if self._query_agent:
-                    self._query_agent.invalidate_customer_cache(customer_id)
+                if True:
+                    QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
             finally:
                 conn.close()
 
@@ -1149,6 +1189,10 @@ class DBAgent(BaseAgent):
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
+                if cursor.fetchone():
+                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
+                    return
 
                 # --- FRESHNESS GUARD ---
                 # Check the stored updated_at; if the incoming event is older, skip.
@@ -1215,7 +1259,10 @@ class DBAgent(BaseAgent):
                     now_iso,   # created_at (preserved by COALESCE for existing rows)
                     now_iso,   # updated_at (always refreshed)
                 ))
-
+                cursor.execute(
+                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
+                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                )
                 conn.commit()
 
                 logger.info(
@@ -1230,8 +1277,8 @@ class DBAgent(BaseAgent):
                     self._processed_risk_events[event_id] = True
 
                 # Invalidate cache
-                if self._query_agent:
-                    self._query_agent.invalidate_customer_cache(customer_id)
+                if True:
+                    QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
 
             finally:
                 conn.close()

@@ -31,6 +31,10 @@ from collections import OrderedDict
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
+from utils.query_client import QueryClient
+from utils.circuit_breaker import CircuitBreaker, CircuitOpenError
+
+_news_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,7 @@ class ExternalScrapingAgent(BaseAgent):
     GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
     BING_NEWS_RSS_URL = "https://www.bing.com/news/search"
 
-    def __init__(self, kafka_client: Any, query_agent: Optional[Any] = None):
+    def __init__(self, kafka_client: Any):
         super().__init__(
             agent_name="ExternalScrapingAgent",
             agent_version="4.0.0",
@@ -85,7 +89,6 @@ class ExternalScrapingAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="ExternalScrapingAgent",
         )
-        self._query_agent = query_agent
         
         # Caches
         self._nclt_cache = {}      # TTL: 12h
@@ -113,7 +116,23 @@ class ExternalScrapingAgent(BaseAgent):
             "X-Requested-With": "XMLHttpRequest"
         })
 
+        _news_breaker.on_state_change = self._on_news_breaker_change
+
         logger.info("[ExternalScrapingAgent] Initialized with NCLT + Industry News fusion")
+
+    def _on_news_breaker_change(self, old_state: str, new_state: str) -> None:
+        if new_state == "OPEN":
+            logger.warning("Google News circuit OPEN — skipping news fetch")
+        self.publish_event(
+            topic="acis.monitoring",
+            event_type="circuit_breaker.state_change",
+            entity_id=self.agent_name,
+            payload={
+                "service": "google_news",
+                "new_state": new_state,
+                "agent_name": self.agent_name
+            }
+        )
 
     def _create_session(self, timeout: int, retries: int) -> requests.Session:
         """Create a resilient requests session."""
@@ -602,7 +621,7 @@ class ExternalScrapingAgent(BaseAgent):
             # Google News
             try:
                 url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded_q}&hl=en-IN&gl=IN&ceid=IN:en"
-                resp = self._session.get(url, timeout=20)
+                resp = _news_breaker.call(self._session.get, url, timeout=20)
                 if resp.status_code == 200:
                     root = ET.fromstring(resp.content)
                     for item in root.findall(".//item")[:max_items]:
@@ -620,6 +639,8 @@ class ExternalScrapingAgent(BaseAgent):
                         seen.add(title.lower())
                         results.append({"title": title, "description": desc, "pubDate": pub,
                                         "source": "google_news", "news_tier": tier})
+            except CircuitOpenError:
+                pass
             except Exception as e:
                 logger.debug(f"[ExternalScrapingAgent] Google ({tier}) failed: {e}")
 
@@ -726,7 +747,7 @@ class ExternalScrapingAgent(BaseAgent):
             # Google News RSS
             try:
                 url = f"{self.GOOGLE_NEWS_RSS_URL}?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
-                resp = self._session.get(url, timeout=15)
+                resp = _news_breaker.call(self._session.get, url, timeout=15)
                 if resp.status_code == 200:
                     root = ET.fromstring(resp.content)
                     for item in root.findall(".//item")[:8]:
@@ -747,6 +768,8 @@ class ExternalScrapingAgent(BaseAgent):
                             "pubDate": pub, "source": "google_news",
                             "query_type": q_type,
                         })
+            except CircuitOpenError:
+                pass
             except Exception as e:
                 logger.debug(f"[ExternalScrapingAgent] Macro Google fetch ({q_type}) failed: {e}")
 
@@ -1273,9 +1296,9 @@ OUTPUT (STRICT JSON):
         company_name = data.get("company_name")
         industry = "unknown"
         aliases = []
-        if self._query_agent:
+        if True:
             try:
-                customer = self._query_agent.get_customer(customer_id)
+                customer = QueryClient.query("get_customer", {"customer_id": customer_id})
                 if customer:
                     if customer.get("name"):
                         company_name = customer.get("name")
