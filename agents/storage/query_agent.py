@@ -700,12 +700,15 @@ class QueryAgent(BaseAgent):
         """Invalidate cached customer data."""
         with self._cache_lock:
             self._customer_cache.pop(customer_id, None)
+            self._loaded_customer_ids.discard(customer_id)
         logger.debug(f"Invalidated customer cache: {customer_id}")
 
     def invalidate_invoice_cache(self, invoice_id: str) -> None:
         """Invalidate cached invoice data."""
         with self._cache_lock:
-            self._invoice_cache.pop(invoice_id, None)
+            inv = self._invoice_cache.pop(invoice_id, None)
+            if inv and "customer_id" in inv:
+                self._loaded_customer_ids.discard(inv["customer_id"])
         logger.debug(f"Invalidated invoice cache: {invoice_id}")
 
     def clear_cache(self) -> None:
@@ -713,6 +716,7 @@ class QueryAgent(BaseAgent):
         with self._cache_lock:
             self._customer_cache.clear()
             self._invoice_cache.clear()
+            self._loaded_customer_ids.clear()
         logger.info("Cleared all query agent caches")
 
     def update_customer_cache(self, customer_id: str, customer_data: Optional[Dict[str, Any]] = None) -> bool:

@@ -84,7 +84,19 @@ class MemoryAgent(BaseAgent):
         # SQLite for metrics persistence (optional but recommended)
         self._db_path = "acis.db"
         self._db_lock = threading.Lock()
+        self._persistent_conn = None
         logger.info("QueryAgent reference set for state recomputation")
+
+    def _get_persistent_conn(self) -> sqlite3.Connection:
+        if self._persistent_conn is None:
+            self._persistent_conn = sqlite3.connect(
+                self._db_path,
+                isolation_level="IMMEDIATE",
+                check_same_thread=False
+            )
+            self._persistent_conn.execute("PRAGMA foreign_keys = ON")
+            self._persistent_conn.execute("PRAGMA journal_mode = WAL")
+        return self._persistent_conn
 
     def subscribe(self) -> List[str]:
         """Return list of topics to subscribe to."""
@@ -539,9 +551,9 @@ class MemoryAgent(BaseAgent):
                                  False for other events (invoice, risk, metrics)
         """
         try:
-            conn = sqlite3.connect(self._db_path, isolation_level="IMMEDIATE")
-            conn.execute("PRAGMA foreign_keys = ON")
-            cursor = conn.cursor()
+            with self._db_lock:
+                conn = self._get_persistent_conn()
+                cursor = conn.cursor()
 
             now = datetime.utcnow().isoformat()
             cursor.execute(
@@ -609,7 +621,6 @@ class MemoryAgent(BaseAgent):
                 ))
 
             conn.commit()
-            conn.close()
 
             logger.debug(f"[MemoryAgent] Persisted metrics for {customer_id} (update_last_payment={update_last_payment})")
 

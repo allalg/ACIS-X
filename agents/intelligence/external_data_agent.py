@@ -170,7 +170,13 @@ class ExternalDataAgent(BaseAgent):
                 updated_at = datetime.fromisoformat(row["updated_at"])
                 if datetime.utcnow() - updated_at < timedelta(hours=self.CACHE_TTL_HOURS):
                     logger.info(f"[ExternalDataAgent] Cache hit for {company_name}")
-                    return dict(row)
+                    d = dict(row)
+                    # Remap from DB column names to internal dict keys
+                    if "market_cap (₹ Cr.)" in d:
+                        d["market_cap"] = d.pop("market_cap (₹ Cr.)")
+                    if "debt (₹ Cr.)" in d:
+                        d["debt"] = d.pop("debt (₹ Cr.)")
+                    return d
                 else:
                     logger.info(f"[ExternalDataAgent] Cache expired for {company_name}")
             return None
@@ -189,36 +195,39 @@ class ExternalDataAgent(BaseAgent):
         """
         real_name = data.get("real_company_name") or data.get("company_name")
         ticker    = data.get("ticker") or data.get("company_name")  # slug used as ticker
+        source    = data.get("source", "")
         try:
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
 
-            # Ensure ticker column exists (migration-safe)
-            try:
-                cursor.execute("ALTER TABLE external_financials ADD COLUMN ticker TEXT")
-                conn.commit()
-            except Exception:
-                pass  # column already exists
+            # Ensure ticker + source columns exist (migration-safe)
+            for col, col_type in [("ticker", "TEXT"), ("source", "TEXT"), ("\"debt (₹ Cr.)\"", "REAL"), ("\"market_cap (₹ Cr.)\"", "REAL")]:
+                try:
+                    cursor.execute(f"ALTER TABLE external_financials ADD COLUMN {col} {col_type}")
+                    conn.commit()
+                except Exception:
+                    pass  # column already exists
 
             cursor.execute("""
                 INSERT INTO external_financials (
-                    company_name, ticker, pe, roe, roce, debt, market_cap,
+                    company_name, ticker, pe, roe, roce, "debt (₹ Cr.)", "market_cap (₹ Cr.)",
                     sales_growth, profit_growth, operating_margin,
-                    interest_coverage, risk, updated_at
+                    interest_coverage, risk, source, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_name) DO UPDATE SET
                     ticker           = COALESCE(excluded.ticker,            external_financials.ticker),
                     pe               = COALESCE(excluded.pe,               external_financials.pe),
                     roe              = COALESCE(excluded.roe,              external_financials.roe),
                     roce             = COALESCE(excluded.roce,             external_financials.roce),
-                    debt             = COALESCE(excluded.debt,             external_financials.debt),
-                    market_cap       = COALESCE(excluded.market_cap,       external_financials.market_cap),
+                    "debt (₹ Cr.)"   = COALESCE(excluded."debt (₹ Cr.)",   external_financials."debt (₹ Cr.)"),
+                    "market_cap (₹ Cr.)" = COALESCE(excluded."market_cap (₹ Cr.)", external_financials."market_cap (₹ Cr.)"),
                     sales_growth     = COALESCE(excluded.sales_growth,     external_financials.sales_growth),
                     profit_growth    = COALESCE(excluded.profit_growth,    external_financials.profit_growth),
                     operating_margin = COALESCE(excluded.operating_margin, external_financials.operating_margin),
                     interest_coverage= COALESCE(excluded.interest_coverage,external_financials.interest_coverage),
                     risk             = COALESCE(excluded.risk,             external_financials.risk),
+                    source           = excluded.source,
                     updated_at       = excluded.updated_at
             """, (
                 real_name,
@@ -233,11 +242,12 @@ class ExternalDataAgent(BaseAgent):
                 data.get("operating_margin"),
                 data.get("interest_coverage"),
                 data.get("risk"),
+                source,
                 data.get("updated_at"),
             ))
             conn.commit()
             conn.close()
-            logger.info(f"[ExternalDataAgent] Stored financials for {real_name} (ticker={ticker})")
+            logger.info(f"[ExternalDataAgent] Stored financials for {real_name} (ticker={ticker}, source={source})")
         except Exception as e:
             logger.error(f"[ExternalDataAgent] DB write error: {e}")
 
@@ -265,50 +275,135 @@ class ExternalDataAgent(BaseAgent):
         slug = name.split()[0] if name else "UNKNOWN"
         return slug
 
+    def _strip_pvt(self, company_name: str) -> str:
+        """
+        Convert a private-company name to its listed-entity equivalent.
+        e.g. 'Ola Electric Mobility Pvt Ltd' → 'Ola Electric Mobility Ltd'
+        Also tries 'Limited' variant since some registrations use the full word.
+        Useful for companies that were private when onboarded but have since IPO'd.
+        """
+        # First strip Pvt from 'Pvt Ltd' or 'Pvt Limited'
+        name = re.sub(
+            r'\bPvt\.?\s+(Ltd|Limited)\.?\b', r'\1',
+            company_name, flags=re.IGNORECASE
+        ).strip()
+        return name
+
+    def _name_variants(self, company_name: str) -> list:
+        """
+        Generate name variants for Screener search:
+        - Original name
+        - Pvt stripped version
+        - 'Ltd' <-> 'Limited' swapped version
+        """
+        variants = [company_name]
+        stripped = self._strip_pvt(company_name)
+        if stripped != company_name:
+            variants.append(stripped)
+        # Swap Ltd <-> Limited
+        if re.search(r'\bLtd\.?\b', company_name, re.IGNORECASE):
+            variants.append(re.sub(r'\bLtd\.?\b', 'Limited', company_name, flags=re.IGNORECASE))
+        elif re.search(r'\bLimited\b', company_name, re.IGNORECASE):
+            variants.append(re.sub(r'\bLimited\b', 'Ltd', company_name, flags=re.IGNORECASE))
+        # Also add bare name without any legal suffixes (handles rebranded companies)
+        bare = re.sub(
+            r'\b(Pvt|Private|Ltd|Limited|Inc|Corp|Corporation|LLP|LLC)\b\.?', '',
+            company_name, flags=re.IGNORECASE
+        ).strip().rstrip('.')
+        if bare and bare != company_name and len(bare) >= 3:
+            variants.append(bare)
+        # Deduplicate
+        seen = set()
+        return [v for v in variants if v and not (v in seen or seen.add(v))]
+
+    def _slug_candidates(self, company_name: str) -> list:
+        """
+        Generate multiple slug candidates to maximise Screener hit rate.
+        Tries:
+          1. Slug from raw company name          (e.g. 'OLA')
+          2. Slug from Pvt→Ltd transformed name  (e.g. 'OLA' — same here, but different for multi-word)
+          3. Full cleaned name without suffixes   (e.g. 'OLAELECTRIC', 'OLAELEC')
+          4. Two-word slug                        (e.g. 'OLAELECTRIC')
+        """
+        candidates = []
+
+        # Candidate 1: standard first-word slug
+        candidates.append(self._normalize_company_name(company_name))
+
+        # Candidate 2: after stripping Pvt
+        listed_name = self._strip_pvt(company_name)
+        if listed_name != company_name:
+            candidates.append(self._normalize_company_name(listed_name))
+
+        # Candidate 3: concatenated first-two-words (handles 'OLA ELECTRIC' → 'OLAELECTRIC')
+        upper = company_name.upper()
+        for suffix in ["LIMITED", "LTD", "PRIVATE", "PVT", "CORPORATION", "CORP",
+                        "INDUSTRIES", "IND", "INDIA", "COMPANY", "CO", "INC", "MOBILITY",
+                        "SERVICES", "TECHNOLOGIES", "SOLUTIONS"]:
+            upper = re.sub(rf"\b{suffix}\b\.?", "", upper)
+        words = re.sub(r"[^A-Z0-9 ]", " ", upper).split()
+        words = [w for w in words if len(w) > 1]
+        if len(words) >= 2:
+            candidates.append("".join(words[:2])[:12])  # e.g. OLAELECTRIC
+            candidates.append("".join(words[:2])[:8])   # e.g. OLAELEC
+
+        # Deduplicate preserving order
+        seen = set()
+        return [c for c in candidates if c and not (c in seen or seen.add(c))]
+
     def _resolve_slug(self, company_name: str) -> str:
         """
         Resolve company name to valid Screener slug.
-        1. Try normalized slug first
-        2. If 404, fallback to search page
-        Returns validated slug or normalized fallback.
+        1. Try each slug candidate directly against screener.in/company/<slug>/
+        2. If none hit, fall back to Screener search API with the raw name
+           AND the Pvt-stripped name.
+        Returns validated slug or first-word fallback.
         """
-        normalized = self._normalize_company_name(company_name)
-        url = f"https://www.screener.in/company/{normalized}/"
+        candidates = self._slug_candidates(company_name)
 
-        try:
-            # FIX: Increased timeout from 10 to 20 seconds
-            response = _screener_breaker.call(self._session.get, url, timeout=20, allow_redirects=True)
-            if response.status_code == 200:
-                logger.info(f"[ExternalDataAgent] Slug resolved directly: {normalized}")
-                return normalized
-        except CircuitOpenError:
-            pass
-        except requests.RequestException:
-            pass
+        # -- Direct slug probe --
+        for slug in candidates:
+            try:
+                url = f"https://www.screener.in/company/{slug}/"
+                response = _screener_breaker.call(
+                    self._session.get, url, timeout=20, allow_redirects=True
+                )
+                if response.status_code == 200:
+                    logger.info(f"[ExternalDataAgent] Slug resolved directly: {slug} (for '{company_name}')")
+                    return slug
+            except CircuitOpenError:
+                break   # circuit open — stop probing
+            except requests.RequestException:
+                continue
 
-        # Fallback: search page
-        try:
-            search_url = f"https://www.screener.in/api/company/search/?q={company_name}"
-            # FIX: Increased timeout from 10 to 20 seconds
-            response = _screener_breaker.call(self._session.get, search_url, timeout=20)
-            if response.status_code == 200:
-                results = response.json()
-                if results and len(results) > 0:
-                    # API returns list of dicts with 'url' like '/company/RELIANCE/'
-                    first_url = results[0].get("url", "")
-                    match = re.search(r"/company/([^/]+)/", first_url)
-                    if match:
-                        slug = match.group(1)
-                        logger.info(f"[ExternalDataAgent] Slug resolved via search: {slug}")
-                        return slug
-        except CircuitOpenError:
-            pass
-        except Exception as e:
-            logger.warning(f"[ExternalDataAgent] Search fallback failed: {e}")
+        # -- Screener search API fallback (try all name variants) --
+        search_names = self._name_variants(company_name)
 
-        # Last resort: return normalized
-        logger.warning(f"[ExternalDataAgent] Using normalized slug fallback: {normalized}")
-        return normalized
+        for sname in search_names:
+            try:
+                search_url = f"https://www.screener.in/api/company/search/?q={quote_plus(sname)}"
+                response = _screener_breaker.call(self._session.get, search_url, timeout=20)
+                if response.status_code == 200:
+                    results = response.json()
+                    if results:
+                        first_url = results[0].get("url", "")
+                        match = re.search(r"/company/([^/]+)/", first_url)
+                        if match:
+                            slug = match.group(1)
+                            logger.info(
+                                f"[ExternalDataAgent] Slug resolved via search: {slug} "
+                                f"(query='{sname}')"
+                            )
+                            return slug
+            except CircuitOpenError:
+                break
+            except Exception as e:
+                logger.warning(f"[ExternalDataAgent] Search fallback failed for '{sname}': {e}")
+
+        # Last resort: return first-word slug
+        fallback = candidates[0] if candidates else "UNKNOWN"
+        logger.warning(f"[ExternalDataAgent] Using normalized slug fallback: {fallback}")
+        return fallback
 
     def _parse_numeric(self, text: str) -> Optional[float]:
         """
@@ -372,6 +467,128 @@ class ExternalDataAgent(BaseAgent):
 
         return None
 
+    def _parse_ranges_tables(self, soup: BeautifulSoup):
+        """
+        Parse Screener.in's `table.ranges-table` blocks used for growth metrics.
+
+        On the P&L tab, Screener renders Sales Growth, Profit Growth and
+        Interest Coverage as small side-by-side tables with header text like
+        "Compounded Sales Growth" and rows like:
+          10 Years: | 14%
+          5 Years:  | 16%
+          3 Years:  | 13%
+          TTM:      | 9%
+
+        NOTE: Screener does NOT use <tbody> — <tr> elements sit directly inside
+        <table>. We must use table.select("tr") not table.select("tbody tr").
+
+        We prefer the 3-Year CAGR row as a stable signal.
+        Returns (sales_growth, profit_growth, interest_coverage) as floats or None.
+        """
+        sales_g = None
+        profit_g = None
+        int_cov = None
+
+        PREFER_ROW = ("3 years", "ttm", "5 years", "10 years")  # priority order
+
+        for table in soup.select("table.ranges-table"):
+            # Header can be inside <thead> or directly as <th>
+            header_el = table.select_one("thead th") or table.select_one("th")
+            if not header_el:
+                continue
+            header = header_el.get_text(strip=True).lower()
+
+            rows = {}  # label.lower() -> raw_value_text
+            # NOTE: Screener has no <tbody>; <tr> sits directly inside <table>
+            for tr in table.select("tr"):
+                tds = tr.find_all("td")
+                if len(tds) >= 2:
+                    label = tds[0].get_text(strip=True).lower().rstrip(":")
+                    value = tds[1].get_text(strip=True)
+                    rows[label] = value
+
+            # Pick the best available value following priority order
+            def pick_value(rows_dict=rows):
+                for pref in PREFER_ROW:
+                    val = rows_dict.get(pref)
+                    if val and val not in ("", "%", "--", "N/A"):
+                        return self._parse_numeric(val)
+                return None
+
+            if "sales growth" in header or "compounded sales" in header:
+                if sales_g is None:
+                    sales_g = pick_value()
+            elif "profit growth" in header or "compounded profit" in header:
+                if profit_g is None:
+                    profit_g = pick_value()
+            elif "interest coverage" in header:
+                if int_cov is None:
+                    int_cov = pick_value()
+
+        return sales_g, profit_g, int_cov
+
+    def _compute_interest_coverage_from_pl(self, soup: BeautifulSoup) -> Optional[float]:
+        """Compute Interest Coverage Ratio from Screener's P&L table.
+
+        Screener does NOT display Interest Coverage as a standalone metric.
+        It must be calculated: Operating Profit / Interest expense.
+        We use the most recent year's figures (last column in the P&L table).
+
+        Returns the ratio as a float, or None if the data is unavailable.
+        """
+        try:
+            pl_table = soup.select_one("section#profit-loss table.data-table")
+            if not pl_table:
+                return None
+
+            op_profit = None
+            interest = None
+
+            for tr in pl_table.select("tbody tr"):
+                tds = tr.find_all("td")
+                if not tds:
+                    continue
+                label = tds[0].get_text(strip=True).lower()
+                # Get the last (most recent) column value
+                last_val = tds[-1].get_text(strip=True) if len(tds) > 1 else None
+
+                if label.startswith("operating profit") and not label.startswith("operating profit margin"):
+                    op_profit = self._parse_numeric(last_val)
+                elif label == "interest":
+                    interest = self._parse_numeric(last_val)
+
+            if op_profit is not None and interest not in (None, 0):
+                ratio = round(op_profit / interest, 2)
+                logger.debug(f"[ExternalDataAgent] Computed Interest Coverage: {op_profit}/{interest} = {ratio}")
+                return ratio
+        except Exception as e:
+            logger.debug(f"[ExternalDataAgent] Interest coverage computation failed: {e}")
+
+        return None
+
+    def _compute_debt_from_bs(self, soup: BeautifulSoup) -> Optional[float]:
+        """Extract total debt from Screener's Balance Sheet table ('Borrowings' row).
+        Values in this table are ALREADY in Crores.
+        """
+        try:
+            bs_table = soup.select_one("section#balance-sheet table.data-table")
+            if not bs_table:
+                return None
+
+            for tr in bs_table.select("tbody tr"):
+                tds = tr.find_all("td")
+                if not tds:
+                    continue
+                label = tds[0].get_text(strip=True).lower()
+                if label == "borrowings" or label.startswith("borrowings"):
+                    last_val = tds[-1].get_text(strip=True) if len(tds) > 1 else None
+                    # _parse_numeric strips commas. Since there's no "Cr.", it won't multiply by 1e7.
+                    # It will just return the float value in Crores directly.
+                    return self._parse_numeric(last_val)
+        except Exception as e:
+            logger.debug(f"[ExternalDataAgent] Debt extraction from BS failed: {e}")
+        return None
+
     def _fetch_screener_data(self, company_name: str, slug: str) -> Dict:
         """
         Scrape financial data from Screener.in for the given company.
@@ -413,9 +630,9 @@ class ExternalDataAgent(BaseAgent):
                 soup = BeautifulSoup(response.text, "lxml")
 
                 # Extract using label-based approach
-                data["market_cap"] = self._parse_numeric(
-                    self._get_value_by_label(soup, "Market Cap")
-                )
+                mcap = self._parse_numeric(self._get_value_by_label(soup, "Market Cap"))
+                data["market_cap"] = round(mcap / 1e7, 2) if mcap is not None else None
+
                 data["pe"] = self._parse_numeric(
                     self._get_value_by_label(soup, "Stock P/E") or
                     self._get_value_by_label(soup, "P/E")
@@ -426,18 +643,9 @@ class ExternalDataAgent(BaseAgent):
                 data["roce"] = self._parse_numeric(
                     self._get_value_by_label(soup, "ROCE")
                 )
-                data["debt"] = self._parse_numeric(
-                    self._get_value_by_label(soup, "Debt") or
-                    self._get_value_by_label(soup, "Debt to equity")
-                )
-                data["sales_growth"] = self._parse_numeric(
-                    self._get_value_by_label(soup, "Sales growth") or
-                    self._get_value_by_label(soup, "Revenue growth")
-                )
-                data["profit_growth"] = self._parse_numeric(
-                    self._get_value_by_label(soup, "Profit growth") or
-                    self._get_value_by_label(soup, "Net profit growth")
-                )
+
+                # Fetch Debt from Balance Sheet (already in Crores)
+                data["debt"] = self._compute_debt_from_bs(soup)
                 data["operating_margin"] = self._parse_numeric(
                     self._get_value_by_label(soup, "OPM") or
                     self._get_value_by_label(soup, "Operating margin")
@@ -447,13 +655,31 @@ class ExternalDataAgent(BaseAgent):
                     self._get_value_by_label(soup, "Int Coverage")
                 )
 
+                # FIX: sales_growth, profit_growth live inside
+                # `table.ranges-table` in the P&L section — NOT in the top-ratios
+                # ul.  Parse them from the table directly.
+                sales_g, profit_g, int_cov = self._parse_ranges_tables(soup)
+                if data["interest_coverage"] is None:
+                    data["interest_coverage"] = int_cov
+                if sales_g is not None:
+                    data["sales_growth"] = sales_g
+                if profit_g is not None:
+                    data["profit_growth"] = profit_g
+
+                # Interest Coverage: Screener doesn't display this as a
+                # standalone metric.  Compute from P&L: Operating Profit / Interest.
+                if data["interest_coverage"] is None:
+                    data["interest_coverage"] = self._compute_interest_coverage_from_pl(soup)
+
                 # Compute risk score
                 data["risk"] = self._compute_risk(data)
 
                 logger.info(
                     f"[ExternalDataAgent] Scraped Screener data for {slug}: "
                     f"PE={data['pe']}, ROE={data['roe']}, ROCE={data['roce']}, "
-                    f"Debt={data['debt']}, Risk={data['risk']:.2f}"
+                    f"Debt={data['debt']}, SalesG={data['sales_growth']}, "
+                    f"ProfitG={data['profit_growth']}, IntCov={data['interest_coverage']}, "
+                    f"Risk={data['risk']:.2f}"
                 )
                 return data
 
@@ -497,15 +723,19 @@ class ExternalDataAgent(BaseAgent):
             pass
 
         symbol = slug
-        try:
-            search_url = f"https://www.nseindia.com/api/search/autocomplete?q={quote_plus(company_name)}"
-            resp = self._session.get(search_url, timeout=15, headers={"Referer": "https://www.nseindia.com"})
-            if resp.status_code == 200:
-                results = resp.json().get("symbols", [])
-                if results:
-                    symbol = results[0].get("symbol") or symbol
-        except Exception:
-            pass
+        # Use clean company name variants for NSE search (strip Pvt, try Ltd/Limited)
+        search_names = self._name_variants(company_name)
+        for sname in search_names:
+            try:
+                search_url = f"https://www.nseindia.com/api/search/autocomplete?q={quote_plus(sname)}"
+                resp = self._session.get(search_url, timeout=15, headers={"Referer": "https://www.nseindia.com"})
+                if resp.status_code == 200:
+                    results = resp.json().get("symbols", [])
+                    if results:
+                        symbol = results[0].get("symbol") or symbol
+                        break
+            except Exception:
+                continue
 
         try:
             quote_url = f"https://www.nseindia.com/api/quote-equity?symbol={quote_plus(symbol)}"
@@ -519,7 +749,7 @@ class ExternalDataAgent(BaseAgent):
             issued_cap = self._safe_float(payload.get("securityInfo", {}).get("issuedCap"))
             market_cap = None
             if issued_cap and price:
-                market_cap = issued_cap * price
+                market_cap = round((issued_cap * price) / 1e7, 2)  # Convert to Crores
 
             # Prefer EPS-derived company PE (accurate) over sector PE (benchmark)
             pe = None
@@ -549,18 +779,29 @@ class ExternalDataAgent(BaseAgent):
         Best-effort fallback only.
         """
         fallback: Dict[str, Any] = {}
-        try:
-            search_url = f"https://api.bseindia.com/BseIndiaAPI/api/SmartSearch/w?text={quote_plus(company_name)}"
-            search_resp = self._session.get(search_url, timeout=15, headers={"Referer": "https://www.bseindia.com"})
-            if search_resp.status_code != 200:
-                return fallback
-            results = search_resp.json()
-            if not results:
-                return fallback
-            scrip_code = results[0].get("ScripCode")
-            if not scrip_code:
-                return fallback
+        # Use clean name variants for BSE search (strip Pvt, try Ltd/Limited)
+        search_names = self._name_variants(company_name)
+        for sname in search_names:
+            try:
+                search_url = f"https://api.bseindia.com/BseIndiaAPI/api/SmartSearch/w?text={quote_plus(sname)}"
+                search_resp = self._session.get(search_url, timeout=15, headers={"Referer": "https://www.bseindia.com"})
+                if search_resp.status_code != 200:
+                    continue
+                results = search_resp.json()
+                if not results:
+                    continue
+                scrip_code = results[0].get("ScripCode")
+                if scrip_code:
+                    break
+            except Exception:
+                continue
+        else:
+            return fallback
 
+        if not scrip_code:
+            return fallback
+
+        try:
             quote_url = f"https://api.bseindia.com/BseIndiaAPI/api/GetStkCurrMain/w?quotetype=EQ&scripcode={scrip_code}&flag=0"
             quote_resp = self._session.get(quote_url, timeout=15, headers={"Referer": "https://www.bseindia.com"})
             if quote_resp.status_code != 200:
@@ -619,42 +860,34 @@ class ExternalDataAgent(BaseAgent):
         return data
 
     def _enrich_with_screener_fallback(self, data: Dict[str, Any], company_name: str, slug: str) -> Dict[str, Any]:
-        """Fill missing NSE/BSE values using Screener.in (historical/advanced ratios)."""
+        """Fill missing NSE/BSE values using Screener.in (historical/advanced ratios).
+
+        For private companies with no public data, values are left as NULL rather
+        than using unreliable Tofler scraping or LLM estimation.
+        """
         essential_keys = ["pe", "roe", "roce", "debt", "market_cap", "sales_growth", "profit_growth"]
         needs_fallback = any(data.get(k) is None for k in essential_keys)
 
+        # Build accurate source tracking
+        sources_used = []
+        # Check which exchange sources actually returned data
+        nse_contributed = any(data.get(k) is not None for k in ["pe", "roe", "market_cap"])
+        if nse_contributed:
+            sources_used.append("nse/bse")
+
         if needs_fallback:
             screener_data = self._fetch_screener_data(company_name, slug)
+            screener_contributed = False
             for k in essential_keys + ["operating_margin", "interest_coverage"]:
-                if data.get(k) is None:
+                if data.get(k) is None and screener_data.get(k) is not None:
                     data[k] = screener_data.get(k)
-            data["source"] = "nse/bse+screener.in"
+                    screener_contributed = True
+            if screener_contributed:
+                sources_used.append("screener.in")
 
-        # If still missing essential data, try Tofler (private companies)
-        still_missing = any(data.get(k) is None for k in essential_keys)
-        if still_missing:
-            tofler_data = self._fetch_tofler_data(company_name)
-            if tofler_data:
-                for k in essential_keys + ["operating_margin", "interest_coverage"]:
-                    if data.get(k) is None:
-                        data[k] = tofler_data.get(k)
-                data["source"] = data.get("source", "") + "+tofler"
-                data["confidence"] = self.CONFIDENCE_TOFLER
-                logger.info(f"[ExternalDataAgent] Tofler enrichment applied for {company_name}")
-
-        # Last resort: LLM estimation — applied at low confidence weight
-        still_missing_after_tofler = all(data.get(k) is None for k in essential_keys)
-        if still_missing_after_tofler:
-            llm_risk = self._estimate_risk_from_llm(company_name)
-            if llm_risk is not None:
-                # LLM risk is a weak signal — scale by confidence weight before storing
-                data["llm_estimated_risk"] = round(llm_risk * self.CONFIDENCE_LLM, 4)
-                data["source"] = data.get("source", "") + "+llm_estimation"
-                data["confidence"] = self.CONFIDENCE_LLM
-                logger.info(
-                    f"[ExternalDataAgent] LLM estimation applied for {company_name}: "
-                    f"raw={llm_risk:.4f}, weighted={data['llm_estimated_risk']:.4f}"
-                )
+        # Build source string from actually-used sources only
+        data["source"] = "+".join(sources_used) if sources_used else "none"
+        data["confidence"] = self.CONFIDENCE_STRUCTURED if sources_used else 0.0
 
         data["risk"] = self._compute_risk(data)
         return data
@@ -896,10 +1129,10 @@ class ExternalDataAgent(BaseAgent):
                 except Exception as e:
                     logger.debug(f"[ExternalDataAgent] Failed to lookup customer: {e}")
 
-            if not company_name:
+            if not company_name or bool(re.match(r'^cust_\d+$', company_name)):
                 logger.debug(
                     f"[ExternalDataAgent] Skipping enrichment for {customer_id}: "
-                    f"no company name resolved"
+                    f"no real company name resolved (got '{company_name}')"
                 )
                 return
 
@@ -909,7 +1142,7 @@ class ExternalDataAgent(BaseAgent):
             slug = self._resolve_slug(company_name)
 
             current_time = time.time()
-            last_fetch = self._last_fetch_time.get(slug, 0)
+            last_fetch = self._last_fetch_time.get(company_name, 0)
             time_since_fetch = (current_time - last_fetch) / 3600
 
             # Check DB cache (keyed by real company_name, fallback by slug/ticker)
@@ -926,9 +1159,9 @@ class ExternalDataAgent(BaseAgent):
                     updated_at = cached.get("updated_at")
                     if updated_at:
                         db_ts = datetime.fromisoformat(updated_at).timestamp()
-                        self._last_fetch_time[slug] = max(self._last_fetch_time.get(slug, 0), db_ts)
+                        self._last_fetch_time[company_name] = max(self._last_fetch_time.get(company_name, 0), db_ts)
                 except Exception:
-                    self._last_fetch_time[slug] = current_time
+                    self._last_fetch_time[company_name] = current_time
 
             elif last_fetch > 0 and time_since_fetch < self.THROTTLE_MIN_HOURS:
                 logger.info(
@@ -948,7 +1181,7 @@ class ExternalDataAgent(BaseAgent):
 
                 self._store_financials(financial_data)
                 external_risk = financial_data.get("risk")
-                self._last_fetch_time[slug] = current_time
+                self._last_fetch_time[company_name] = current_time
 
             source = financial_data.get("source", "screener.in")
             confidence = financial_data.get("confidence", self.CONFIDENCE_STRUCTURED)

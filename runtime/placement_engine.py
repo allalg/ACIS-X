@@ -278,19 +278,16 @@ class PlacementEngine(BaseAgent):
     def _poll_registry(self) -> None:
         while not self._stop_polling:
             try:
-                resp = requests.get(
-                    f"http://localhost:{self._registry_port}/api/agents?status=RUNNING",
-                    timeout=5,
-                )
-                if resp.status_code == 200:
-                    agents = resp.json()
+                if self.registry:
+                    agents = self.registry.get_all_agents()
                     new_table = {}
                     for a in agents:
-                        caps = a.get("capabilities", [])
-                        inst_id = a.get("instance_id")
-                        if inst_id:
-                            for c in caps:
-                                new_table.setdefault(c, []).append(inst_id)
+                        if a.status == "RUNNING":
+                            caps = a.capabilities or []
+                            inst_id = a.instance_id
+                            if inst_id:
+                                for c in caps:
+                                    new_table.setdefault(c, []).append(inst_id)
                     with self._routing_lock:
                         self._routing_table = new_table
             except Exception as e:

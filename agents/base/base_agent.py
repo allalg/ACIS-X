@@ -128,8 +128,8 @@ class BaseAgent(ABC):
         self._last_lag_detection_event: Optional[datetime] = None
 
         # Latency tracking (circular buffer of last 100 latencies)
-        self._latencies_ms: List[float] = []
         self._max_latency_samples = 100
+        self._latencies_ms: collections.deque = collections.deque(maxlen=self._max_latency_samples)
 
     @staticmethod
     def _generate_instance_id(agent_name: str) -> str:
@@ -381,8 +381,6 @@ class BaseAgent(ABC):
                         self._events_processed += 1
                         # Track latency
                         self._latencies_ms.append(latency_ms)
-                        if len(self._latencies_ms) > self._max_latency_samples:
-                            self._latencies_ms.pop(0)
                     break
 
                 except Exception as e:

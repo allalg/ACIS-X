@@ -586,10 +586,6 @@ class KafkaClient:
             if kafka_msg:
                 messages.append(kafka_msg)
 
-            # Break on first message if quick polling
-            if timeout_ms < 100:
-                break
-
         return messages
 
     def _poll_kafka_python(

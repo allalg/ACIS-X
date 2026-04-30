@@ -147,5 +147,17 @@ class QueryClient:
             except Exception as e:
                 logger.error(f"Error polling query response: {e}")
                 time.sleep(0.1)
-                
         raise QueryTimeoutError(f"Query {query_type} timed out after {timeout} seconds")
+
+    @classmethod
+    def close_thread_consumer(cls) -> None:
+        """Close the consumer for the calling thread to prevent leaks."""
+        tl = cls._thread_local
+        if getattr(tl, "consumer", None):
+            try:
+                tl.consumer.close()
+            except Exception as e:
+                logger.warning(f"Error closing thread consumer: {e}")
+            finally:
+                tl.consumer = None
+                tl.consumer_ready = False

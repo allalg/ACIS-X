@@ -1472,7 +1472,13 @@ OUTPUT (STRICT JSON):
                 "casemine_total": fusion.get("casemine_total", 0),
                 "casemine_high_risk_courts": fusion.get("casemine_high_risk_courts", []),
 
-                "source": "nclt+casemine+news+llm_unified",
+                # Build source from actually-used data sources only
+                "source": "+".join(filter(None, [
+                    "nclt" if nclt_count > 0 else None,
+                    "casemine" if fusion.get("casemine_total", 0) > 0 else None,
+                    "news" if articles else None,
+                    "llm_unified" if fusion.get("analysis_status") == "llm_unified" else None,
+                ])) or "none",
                 "confidence": fusion["confidence"],
                 "analysis_status": fusion["analysis_status"],
                 "temporal_context": {

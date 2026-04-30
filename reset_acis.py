@@ -61,40 +61,101 @@ except ImportError:
     ]
 
 def step0_kill_zombie_processes():
-    """Step 0: Ensure no orphaned ACIS-X agents are running."""
+    """Step 0: Ensure no orphaned ACIS-X agents are running.
+
+    Strategy:
+    1. Find every Python process whose cmdline contains 'run_acis' or 'acis'.
+    2. For each such root, collect the entire process TREE (parent + all
+       recursive children) — this catches multiprocessing spawn workers that
+       don't carry 'acis' in their own cmdline.
+    3. Kill children first (bottom-up), then the root, so no orphans remain.
+    4. Do a second clean-up pass for any stragglers still matching 'acis'.
+    """
     logger.info("=" * 60)
     logger.info("STEP 0: Stopping ACIS-X Processes...")
     logger.info("=" * 60)
-    
+
     try:
         import psutil
         current_pid = os.getpid()
         killed = 0
+
+        # ── Pass 1: find ACIS root processes and kill their whole tree ──────
+        roots = []
         for p in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                name = p.info.get('name') or ''
-                if 'python' in name.lower() and p.pid != current_pid:
-                    cmdline = p.info.get('cmdline') or []
-                    cmd_str = ' '.join(cmdline).lower()
-                    
-                    # Kill anything running run_acis, reset_acis, or any ACIS multiprocessing child
-                    if "acis" in cmd_str or "multiprocessing" in cmd_str:
-                        # Use kill() for forceful termination on Windows instead of terminate()
-                        p.kill()
-                        killed += 1
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                if p.pid == current_pid:
+                    continue
+                name = (p.info.get('name') or '').lower()
+                if 'python' not in name:
+                    continue
+                cmd_str = ' '.join(p.info.get('cmdline') or []).lower()
+                if 'run_acis' in cmd_str or ('acis' in cmd_str and 'reset_acis' not in cmd_str):
+                    roots.append(p)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-                
-        if killed > 0:
-            logger.info(f"  [OK] Force-killed {killed} orphaned ACIS-X background processes.")
-            time.sleep(3)  # Give OS time to release file locks and clean up PIDs
+
+        trees_to_kill = []
+        seen_pids = set()
+
+        for root in roots:
+            try:
+                children = root.children(recursive=True)
+                for child in children:
+                    if child.pid not in seen_pids:
+                        trees_to_kill.append(child)
+                        seen_pids.add(child.pid)
+                if root.pid not in seen_pids:
+                    trees_to_kill.append(root)
+                    seen_pids.add(root.pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        # Kill children first (reverse = deepest leaf first), then roots
+        for p in reversed(trees_to_kill):
+            try:
+                p.kill()
+                killed += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        if killed:
+            time.sleep(3)  # let OS release file handles / sockets
+
+        # ── Pass 2: mop up stragglers not caught by tree walk ───────────────
+        stragglers = 0
+        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if p.pid == current_pid or p.pid in seen_pids:
+                    continue
+                name = (p.info.get('name') or '').lower()
+                if 'python' not in name:
+                    continue
+                cmd_str = ' '.join(p.info.get('cmdline') or []).lower()
+                if 'acis' in cmd_str and 'reset_acis' not in cmd_str:
+                    p.kill()
+                    stragglers += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        if stragglers:
+            time.sleep(1)
+
+        total = killed + stragglers
+        if total > 0:
+            logger.info(
+                f"  [OK] Force-killed {total} orphaned ACIS-X processes "
+                f"({killed} from process trees, {stragglers} stragglers)."
+            )
         else:
             logger.info("  [OK] No orphaned processes found.")
+
     except ImportError:
         logger.warning("  psutil not installed. Cannot auto-kill zombies.")
-        logger.warning("  If reset fails with PermissionError on acis.db, manually run: taskkill /IM python.exe /F")
-    
+        logger.warning("  Run manually: taskkill /F /IM python.exe")
+
     logger.info("Step 0 complete.\n")
+
 
 
 def step1_delete_local_files():

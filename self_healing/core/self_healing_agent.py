@@ -394,7 +394,12 @@ class SelfHealingAgent(BaseAgent):
         now = datetime.utcnow()
 
         with self._state_lock:
-            states_snapshot = {aid: AgentRecoveryState(**s.__dict__) for aid, s in self._states.items()}
+            states_snapshot = {}
+            for aid, s in self._states.items():
+                s_dict = s.__dict__.copy()
+                if "candidate_fallbacks" in s_dict and isinstance(s_dict["candidate_fallbacks"], list):
+                    s_dict["candidate_fallbacks"] = list(s_dict["candidate_fallbacks"])
+                states_snapshot[aid] = AgentRecoveryState(**s_dict)
 
         for agent_id, state in states_snapshot.items():
             # Skip self and stopped agents
@@ -444,7 +449,10 @@ class SelfHealingAgent(BaseAgent):
             if state is None or state.agent_name == self.agent_name:
                 return
 
-            snapshot = AgentRecoveryState(**state.__dict__)
+            s_dict = state.__dict__.copy()
+            if "candidate_fallbacks" in s_dict and isinstance(s_dict["candidate_fallbacks"], list):
+                s_dict["candidate_fallbacks"] = list(s_dict["candidate_fallbacks"])
+            snapshot = AgentRecoveryState(**s_dict)
 
         now = datetime.utcnow()
 

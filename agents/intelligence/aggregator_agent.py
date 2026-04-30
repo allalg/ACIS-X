@@ -320,7 +320,7 @@ class AggregatorAgent(BaseAgent):
         Only skips entirely when NEITHER signal exists.
         """
         # FIX 7: Periodic cleanup (every 1000 aggregations or every 60 seconds)
-        if len(self._cache) % 1000 == 0 and time.time() - self._last_cleanup > 60:
+        if time.time() - self._last_cleanup > 60:
             self._cleanup_expired_cache()
 
         cache_entry = self._cache.get(customer_id)

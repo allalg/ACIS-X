@@ -165,14 +165,7 @@ class CustomerStateAgent(BaseAgent):
                 correlation_id=correlation_id,
             )
 
-            # Persist to DB
-            metrics_dict = {
-                "total_outstanding": total_outstanding,
-                "avg_delay": avg_delay,
-                "on_time_ratio": on_time_ratio,
-                "last_payment_date": last_payment_date,
-            }
-            self._persist_metrics(customer_id, metrics_dict)
+            # Persist to DB is handled by DBAgent
 
             logger.info(
                 f"Published metrics for customer {customer_id}: "
@@ -239,7 +232,6 @@ class CustomerStateAgent(BaseAgent):
             payload=payload,
             correlation_id=correlation_id,
         )
-        self._persist_metrics(customer_id, metrics_snapshot)
 
     def _get_payments_for_invoices(self, invoice_ids: List[str]) -> List[Dict[str, Any]]:
         """
@@ -345,67 +337,5 @@ class CustomerStateAgent(BaseAgent):
 
         return avg_delay, on_time_ratio
 
-    def _persist_metrics(
-        self, customer_id: str, metrics: Dict[str, float]
-    ) -> None:
-        """
-        Persist metrics to customer_metrics table.
 
-        Creates or updates record.
-        """
-        with self._db_lock:
-            try:
-                conn = sqlite3.connect(self._db_path)
-                conn.execute("PRAGMA foreign_keys = ON")
-                cursor = conn.cursor()
 
-                now = datetime.utcnow().isoformat()
-                cursor.execute(
-                    """
-                    INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (customer_id, customer_id, now, now),
-                )
-                # Immediate name backfill: resolve name from customer_risk_profile
-                # if the profile event hasn't been processed by DBAgent yet.
-                profile_row = cursor.execute(
-                    """
-                    SELECT company_name FROM customer_risk_profile
-                    WHERE customer_id = ?
-                      AND company_name IS NOT NULL
-                      AND company_name NOT LIKE 'cust_%'
-                    LIMIT 1
-                    """,
-                    (customer_id,),
-                ).fetchone()
-                if profile_row and profile_row[0]:
-                    cursor.execute(
-                        "UPDATE customers SET name = ?, updated_at = ? "
-                        "WHERE customer_id = ? AND name IS NULL",
-                        (profile_row[0], now, customer_id),
-                    )
-
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO customer_metrics
-                    (customer_id, total_outstanding, avg_delay, on_time_ratio, last_payment_date, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        customer_id,
-                        metrics["total_outstanding"],
-                        metrics["avg_delay"],
-                        metrics["on_time_ratio"],
-                        metrics.get("last_payment_date"),  # CRITICAL FIX #4
-                        now,
-                    ),
-                )
-
-                conn.commit()
-                conn.close()
-
-                logger.debug(f"Persisted metrics for customer {customer_id}")
-
-            except sqlite3.Error as e:
-                logger.error(f"Database error persisting metrics for {customer_id}: {e}")
