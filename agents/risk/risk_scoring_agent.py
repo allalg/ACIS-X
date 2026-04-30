@@ -633,7 +633,10 @@ class RiskScoringAgent(BaseAgent):
             base_adjustment = max(-0.3, min(0.85, total_adjustment))
 
             # Apply weighted blending to base factors
-            adjusted_risk = base_risk + (0.5 * base_adjustment)
+            # NOTE: Previously 0.5 which compressed the dynamic range to ~2%.
+            # Raised to 0.85 to ensure meaningful differentiation between
+            # pristine and severely delinquent customers.
+            adjusted_risk = base_risk + (0.85 * base_adjustment)
 
             # CRITICAL FIX: Apply temporal adjustment SEPARATELY to avoid feedback loop
             # Temporal signals (velocity, trend, volatility) should influence but NOT dominate
@@ -647,7 +650,7 @@ class RiskScoringAgent(BaseAgent):
             logger.debug(
                 f"[RiskAgent] Risk refinement for {customer_id}: "
                 f"base={base_risk:.3f} + "
-                f"(0.5 × [0.40×{overdue_adjustment:+.3f} + 0.20×{payment_adjustment:+.3f} + "
+                f"(0.85 × [0.40×{overdue_adjustment:+.3f} + 0.20×{payment_adjustment:+.3f} + "
                 f"0.15×{delay_adjustment:+.3f} + 0.15×{outstanding_adjustment:+.3f} + "
                 f"0.10×{high_exposure_adjustment:+.3f}]) + "
                 f"(0.3 × temporal[{temporal_adjustment:+.3f}]) "

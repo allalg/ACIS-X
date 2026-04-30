@@ -109,15 +109,24 @@ def temp_db_path() -> Generator[str, None, None]:
 
     yield path
 
-    # Cleanup
-    if os.path.exists(path):
-        os.remove(path)
-
-    # Also clean up WAL files if they exist
-    for suffix in ["-wal", "-shm"]:
-        wal_path = path + suffix
-        if os.path.exists(wal_path):
-            os.remove(wal_path)
+    # Cleanup with retry for Windows file locks
+    import gc
+    import time
+    
+    # Force GC to aggressively close dangling sqlite3 connections
+    gc.collect()
+    
+    for _ in range(5):
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            for suffix in ["-wal", "-shm"]:
+                wal_path = path + suffix
+                if os.path.exists(wal_path):
+                    os.remove(wal_path)
+            break
+        except PermissionError:
+            time.sleep(0.1)
 
 
 @pytest.fixture
@@ -203,6 +212,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "integration: Integration tests (needs Kafka)")
     config.addinivalue_line("markers", "schema: Database schema tests")
     config.addinivalue_line("markers", "slow: Slow tests")
+    config.addinivalue_line("markers", "novel: Novel distributed systems and ML correctness tests")
 
 
 # =====================================================================

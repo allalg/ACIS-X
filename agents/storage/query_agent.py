@@ -116,6 +116,8 @@ class QueryAgent(BaseAgent):
                 response_data = self.get_overdue_invoices(data.get("customer_id"))
             elif query_type == "get_unpaid_invoices":
                 response_data = self.get_unpaid_invoices()
+            elif query_type == "get_payments_by_invoices":
+                response_data = self.get_payments_by_invoices(data.get("invoice_ids", []))
             elif query_type == "update_customer_cache":
                 response_data = self.update_customer_cache(data.get("customer_id"), data.get("customer_data"))
             elif query_type == "update_invoice_cache":
@@ -658,6 +660,56 @@ class QueryAgent(BaseAgent):
 
             except sqlite3.Error as e:
                 logger.error(f"Database error querying unpaid invoices: {e}")
+
+        return []
+
+    def get_payments_by_invoices(self, invoice_ids: List[str]) -> List[Dict[str, Any]]:
+        """
+        Get all payments for a list of invoice IDs.
+
+        This query is used by CustomerStateAgent to compute avg_delay and
+        on_time_ratio from payment history, replacing a former direct SQLite
+        access pattern that bypassed the QueryAgent.
+
+        Args:
+            invoice_ids: List of invoice IDs to look up payments for.
+
+        Returns:
+            List of payment dicts with payment_id, invoice_id, payment_date, amount.
+        """
+        if not invoice_ids:
+            return []
+
+        with self._db_lock:
+            try:
+                conn = sqlite3.connect(self._db_path)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+
+                placeholders = ",".join("?" * len(invoice_ids))
+                cursor.execute(
+                    f"""
+                    SELECT payment_id, invoice_id, payment_date, amount
+                    FROM payments
+                    WHERE invoice_id IN ({placeholders})
+                    """,
+                    invoice_ids,
+                )
+
+                rows = cursor.fetchall()
+                conn.close()
+
+                result = [dict(row) for row in rows]
+                logger.debug(
+                    f"[QueryAgent] Fetched {len(result)} payments for "
+                    f"{len(invoice_ids)} invoice(s)"
+                )
+                return result
+
+            except sqlite3.Error as e:
+                logger.error(
+                    f"[QueryAgent] Database error fetching payments: {e}"
+                )
 
         return []
 

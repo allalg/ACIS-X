@@ -1,6 +1,5 @@
 import logging
 import random
-import sqlite3
 import threading
 from datetime import datetime
 from typing import List, Any, Dict, Optional, Tuple, Set
@@ -54,9 +53,6 @@ class CustomerStateAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="CustomerStateAgent",
         )
-
-        self._db_path = db_path or self.DB_PATH
-        self._db_lock = threading.Lock()
 
         # Incremental metrics cache per customer
         # Structure: customer_id -> {
@@ -235,7 +231,11 @@ class CustomerStateAgent(BaseAgent):
 
     def _get_payments_for_invoices(self, invoice_ids: List[str]) -> List[Dict[str, Any]]:
         """
-        Get all payments for given invoices.
+        Get all payments for given invoices via QueryClient.
+
+        Routes through QueryAgent.get_payments_by_invoices() rather than
+        opening a direct SQLite connection — all DB reads should flow
+        through the QueryAgent for consistency and testability.
 
         Returns:
             List of payment dicts from database
@@ -243,31 +243,18 @@ class CustomerStateAgent(BaseAgent):
         if not invoice_ids:
             return []
 
-        with self._db_lock:
-            try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                placeholders = ",".join("?" * len(invoice_ids))
-
-                cursor.execute(
-                    f"""
-                    SELECT payment_id, invoice_id, payment_date, amount
-                    FROM payments
-                    WHERE invoice_id IN ({placeholders})
-                """,
-                    invoice_ids,
-                )
-
-                rows = cursor.fetchall()
-                conn.close()
-
-                return [dict(row) for row in rows]
-
-            except sqlite3.Error as e:
-                logger.error(f"Database error fetching payments: {e}")
-                return []
+        try:
+            result = QueryClient.query(
+                "get_payments_by_invoices",
+                {"invoice_ids": invoice_ids},
+                timeout=8,
+            )
+            if isinstance(result, list):
+                return result
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching payments via QueryClient: {e}")
+            return []
 
     def _compute_payment_metrics(
         self, invoices: List[Dict[str, Any]], payments: List[Dict[str, Any]]
