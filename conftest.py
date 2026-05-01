@@ -213,6 +213,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "schema: Database schema tests")
     config.addinivalue_line("markers", "slow: Slow tests")
     config.addinivalue_line("markers", "novel: Novel distributed systems and ML correctness tests")
+    config.addinivalue_line("markers", "lifecycle: End-to-end invoice/payment lifecycle timing tests")
+    config.addinivalue_line("markers", "intelligence: Intelligence comparison tests (ACIS-X vs baselines)")
+    config.addinivalue_line("markers", "performance: Performance and resilience benchmarks")
 
 
 # =====================================================================
