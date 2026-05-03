@@ -16,7 +16,16 @@
 \usepackage{float}
 \usepackage{caption}
 \usepackage{indentfirst}
+\usepackage[x11names]{xcolor}
+\usepackage{tikz}
+\usepackage{fancyhdr}
+\usepackage{tocloft}
 \usepackage{eso-pic}
+
+\definecolor{red}{HTML}{FF0000}
+
+
+
 
 \onehalfspacing
 \setlength{\tabcolsep}{4pt}
@@ -32,18 +41,36 @@
     singlelinecheck=true
 }
 
+\newif\iffrontborderpage
+\frontborderpagefalse
+
 % Match the updated sample report's top/bottom double page border.
 \AddToShipoutPictureBG{%
+    \iffrontborderpage
     \AtPageLowerLeft{%
-        \linethickness{0.45pt}%
+        % Top Border
+        \linethickness{0.5pt}%
         \put(0,\LenToUnit{\dimexpr\paperheight-24pt\relax}){\line(1,0){\LenToUnit{\paperwidth}}}%
-        \linethickness{1.1pt}%
+        \linethickness{1.5pt}%
         \put(0,\LenToUnit{\dimexpr\paperheight-28pt\relax}){\line(1,0){\LenToUnit{\paperwidth}}}%
-        \linethickness{0.45pt}%
-        \put(0,\LenToUnit{24pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
-        \linethickness{1.1pt}%
+        % Bottom Border
+        \linethickness{1.5pt}%
         \put(0,\LenToUnit{28pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
+        \linethickness{0.5pt}%
+        \put(0,\LenToUnit{24pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
     }%
+    \fi
+}
+
+\fancypagestyle{titlepagelayout}{
+  \fancyhf{}
+  \global\frontborderpagetrue
+}
+
+\fancypagestyle{borderedpage}{
+  \fancyhf{}
+  \fancyfoot[C]{\thepage}
+  \global\frontborderpagetrue
 }
 
 % Match reference report chapter and heading format.
@@ -67,6 +94,204 @@
 \titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
 \begin{document}
+
+\begin{titlepage}
+    \thispagestyle{titlepagelayout}
+    \centering
+    \vspace*{0.2cm}
+    {\large \textbf{VISVESVARAYA TECHNOLOGICAL UNIVERSITY}\\[0.2cm]
+    \large \textbf{``Jnana Sangama'', Belagavi - 590014, KARNATAKA, INDIA}}
+    
+    \vspace{0.6cm}
+    \includegraphics[height=0.15\textwidth]{images/vtu-logo copy.png}
+    
+    \vspace{0.4cm}
+    \textit{\textbf{Project Phase I -BCS685}\\[0.1cm]}
+    \textit{\textbf{On}}
+    
+    \vspace{0.4cm}
+    {\Large \textit{\textbf{ACIS-X: INTELLIGENT COLLECTIONS SYSTEM}}}
+    
+    \vspace{0.6cm}
+    \textit{Submitted in Partially fulfillment of the requirement for the award of degree \\Of\\[0.1cm]}
+    \textbf{Bachelor of Engineering In}\\[0.1cm]
+    \textbf{Computer Science \& Engineering}\\[0.1cm]
+    Of Visvesvaraya Technological University, Belgaum.
+    
+    \vspace{0.6cm}
+    Submitted by:\\[0.1cm]
+    \textcolor{red}{
+    \textbf{NITIN BHARADWAJ M V S: 1AM23CS125} \\
+    \textbf{NIKHIL NAGENDRA: 1AM23CS120} \\
+    \textbf{JOHAN K GEORGE: 1AM23CS075} \\
+    \textbf{PRASANNA ACHARYA: 1AM23CS149} \\
+    }
+    
+    \vspace{0.2cm}
+    Under the Guidance of:\\[0.1cm]
+    \textbf{Ms. Pallavi K V}\\[0.1cm]
+    Asst Professor, Dept. of CSE
+    
+    \vspace{0.6cm}
+    \includegraphics[height=0.12\textwidth]{images/AMC-LOGO.png}
+    
+    \vspace{0.6cm}
+    {\normalsize \textbf{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING AMC ENGINEERING COLLEGE}}\\[0.1cm]
+    18th K.M. Bannerghatta Main Road, Bengaluru – 560083 Year 2025-26
+    
+\end{titlepage}
+
+\titlespacing*{\chapter}{0pt}{-15pt}{10pt}
+\titlespacing*{\section}{0pt}{-6pt}{-1pt}
+\titlespacing*{\subsection}{0pt}{-4pt}{-1pt}
+
+\pagenumbering{roman}
+\doublespacing
+\sloppy
+
+\titlespacing*{\chapter}{0pt}{-15pt}{-15pt}
+\setlength{\parindent}{0pt}
+
+\chapter*{AMC Engineering College}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Certificate}
+
+\singlespacing
+
+\begin{center}
+    Belagavi - 560083\\
+    \textbf{Department of Computer Science \& Engineering}\\
+    \vspace{0.2cm}
+    \includegraphics[height=0.1\textwidth]{images/AMC-LOGO.png} \\[0.5cm]
+    \large{\textbf{CERTIFICATE}}
+\end{center}
+
+\doublespacing
+
+Certified that the Project work entitled \textbf{``ACIS-X: INTELLIGENT COLLECTIONS SYSTEM''} carried out by bonafide students \textbf{JOHAN GEORGE} of AMC Engineering College, in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of Visvesvaraya Technological University, Belgaum during the year 2025-2026. It is certified that all corrections/suggestions indicated for internal assessment have been incorporated in the report. The Project report has been approved as it satisfies the academic requirements in respect of Project Work prescribed for the said Bachelor of Engineering degree.\\
+
+\vspace{1.5cm}
+\noindent
+\begin{minipage}[t]{0.32\textwidth}
+    \singlespacing
+    \centering
+    \textbf{Project Guide\\[0.3cm]Ms. Pallavi K V,\\Assistant Professor,\\Dept. of CSE}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \singlespacing
+    \centering
+    \textbf{HOD\\[0.3cm]Dr. V. Mareeswari,\\Prof. \& Head,\\Dept. of CSE}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \singlespacing
+    \centering
+    \textbf{Principal\\[0.3cm]Dr. Yuvaraju B N,\\Principal,\\AMCEC}
+\end{minipage}
+
+\vspace{1.0cm}
+\textbf{External Viva}\\[0.2cm]
+\textbf{External Name} \hspace{7cm} \textbf{Signature with Date}\\
+1. \\
+2. 
+
+\titlespacing*{\chapter}{0pt}{20pt}{10pt}
+\setlength{\parindent}{0pt}
+\doublespacing
+
+\chapter*{DECLARATION}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Declaration}
+
+\doublespacing
+
+We the undersigned students of 8th semester Department of Computer Science \& Engineering, AMC Engineering College, declare that our project work entitled \textbf{``ACIS-X: INTELLIGENT COLLECTIONS SYSTEM''} is a bonafide work of ours. Our project is neither a copy nor by means a modification of any other engineering project. We also declare that this project was not entitled for submission to any other university in the past and shall remain the only submission made and will not be submitted by us to any other university in the future.\\
+
+\vspace{1.5cm}
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{2}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll}
+        \textbf{Name} & \textbf{USN} & \textbf{Signature} \\[0.5cm]
+        JOHAN GEORGE & YOUR-USN & 
+    \end{tabular*}
+\end{table}
+
+\pagebreak
+
+\chapter*{ACKNOWLEDGEMENT}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+
+\doublespacing
+
+First and fore most we would like to thank GOD, the Almighty for being so merciful on us.
+
+We have a great pleasure in expressing our deep sense of gratitude to founder \textbf{Chairman Dr. K.R. Paramahamsa} and Executive Vice President \textbf{Mr. Rahul Kalluri} for having provided us with a great infrastructure and well-furnished labs for successful completion of our Project.
+
+We express our special thanks and gratitude to our Academic advisor \textbf{Dr. Nagaraja R} for providing us all the necessary advice for successful completion of our project.
+
+We express our sincere thanks and gratitude to our Principal \textbf{Dr. Yuvaraju B N} for providing us all the necessary support successful completion of our project.
+
+We would like to extend our special thanks to \textbf{Dr. V. Mareeswari} Professor and HOD, Department of CSE, for her support and encouragement and suggestions given to us in the course of our project work.
+
+We would like to extend our special thanks to Project coordinators \textbf{Prof. Velvizhi Ramya R} and \textbf{Prof Snigdha Kesh}, Department of CSE, for their support and encouragement and suggestions given to us in the course of our project work.
+
+We are grateful to our guide \textbf{Ms. Pallavi K V} Asst. Prof., Department of CSE, AMC Engineering College, Bengaluru for her constant motivation \& timely help, encouragement and suggestion.
+
+Last but not the least, we wish to thank all the teaching \& non-teaching staffs of department of Computer Science and Engineering, for their support, patience and endurance shown during the preparation of this project report.\\
+
+\vspace{1.5cm}
+\begin{flushleft}
+\textbf{JOHAN GEORGE}\\
+\textbf{YOUR-USN}
+\end{flushleft}
+
+\pagebreak
+
+\chapter*{ABSTRACT}
+\thispagestyle{borderedpage}
+\addcontentsline{toc}{chapter}{Abstract}
+
+\doublespacing
+The Intelligent Collections System (ACIS-X) represents a modern, data-driven approach to debt recovery operations. Designed to overcome the limitations of traditional, rigid collection strategies, ACIS-X utilizes multi-agent reinforcement learning (MARL) alongside scalable backend microservices and responsive frontends. By dynamically adjusting communication cadence and tone based on simulated debtor behavior, it identifies optimal, empathetic collection strategies that maximize recovery rates while maintaining a positive customer relationship. The proposed architecture consists of discrete Python-based heuristic agents coordinating through Apache Kafka, governed through an extensible registry, and supervised to minimize operational risk and compliance drift.
+
+\newpage
+
+\pagestyle{borderedpage}
+
+\renewcommand{\contentsname}{\centering \large{\textbf{CONTENTS}}}
+\thispagestyle{titlepagelayout}
+\newpage
+
+
+\tableofcontents
+\thispagestyle{titlepagelayout}
+\newpage
+
+
+{
+\newgeometry{right=3.5cm, top=2.455cm}
+\doublespacing
+\listoffigures
+\thispagestyle{titlepagelayout}
+\newpage
+\doublespacing
+\listoftables
+\thispagestyle{titlepagelayout}
+\newpage
+\restoregeometry
+}
+
+\frontborderpagefalse
+\pagenumbering{arabic}
+\pagestyle{plain}
+\onehalfspacing
+\setlength{\parindent}{0.5in}
+\titlespacing*{\chapter}{0pt}{-30pt}{22pt}
+\titlespacing*{\section}{0pt}{14pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
 \chapter{Introduction}
 
@@ -762,6 +987,267 @@ The schedule in Table~\ref{tab:acis_project_schedule} outlines the planned timel
     \hline
     Phase 4 & Week 8 & Final report polishing, consolidated testing evidence, final submission prep. & Pending \\
 \end{longtable}
+
+\chapter{SYSTEM DESIGN}
+
+\section{System Architecture}
+The system architecture of ACIS-X is designed as an event-driven, multi-agent platform for intelligent accounts receivable monitoring and collections decision support. The architecture separates data ingestion, customer-state construction, external enrichment, prediction, risk scoring, collections actioning, persistence, and runtime supervision into independent but coordinated modules.
+
+At the center of the architecture is a Kafka-based event backbone. Each major business event, such as customer creation, invoice generation, payment posting, metric computation, risk scoring, and collections action, is published to a dedicated topic. This allows agents to operate independently while still participating in a unified processing workflow. The event-based design also improves traceability because each decision can be connected back to the events and derived signals that produced it.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/architecture-diag.png}
+    \caption{System architecture of ACIS-X}
+    \label{fig:system_architecture}
+\end{figure}
+
+As shown in Fig~\ref{fig:system_architecture}, ACIS-X consists of five major architectural layers. The input layer provides customer, invoice, payment, and external source information. The event bus layer routes this information through Kafka topics. The agent layer performs state computation, enrichment, aggregation, prediction, risk scoring, and collections actioning. The storage and query layer persists events and derived records using SQLite, while QueryAgent and MemoryAgent provide structured access to state. The user and operations layer exposes the processed outputs through the FastAPI backend-for-frontend, React dashboard, monitoring services, registry services, and self-healing runtime modules.
+
+The architecture is intentionally modular. Business agents focus on receivables intelligence, while runtime agents focus on operational reliability. This separation ensures that failures in monitoring, recovery, or placement logic do not directly alter the business decision rules, and business logic can evolve without rewriting the runtime orchestration layer.
+
+\section{Component Design / Module Decomposition}
+The component design of ACIS-X decomposes the platform into specialized agents and services. Each component has a clearly defined responsibility, communicates using event contracts, and produces outputs that can be consumed by downstream modules. This design supports maintainability, testing, and future extension of the platform.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/components-diag.png}
+    \caption{Component design of ACIS-X}
+    \label{fig:component_design}
+\end{figure}
+
+Fig~\ref{fig:component_design} shows the main functional modules of the system. ScenarioGeneratorAgent produces simulated operational events. CustomerStateAgent converts invoice and payment behavior into customer metrics. ExternalDataAgent and ExternalScrapingAgent enrich customer context with external signals. AggregatorAgent combines internal and external evidence into a broader customer profile. PaymentPredictionAgent estimates payment risk for open invoices, and RiskScoringAgent converts prediction and context into final risk decisions. CollectionsAgent uses those decisions to recommend appropriate collections actions.
+
+The persistence and query components support the business agents. DBAgent stores events, customer records, invoices, payments, metrics, risk profiles, and collections actions. QueryAgent responds to structured read requests, while MemoryAgent maintains fast runtime context for frequently used customer state. Operational components such as RegistryService, RuntimeManager, MonitoringAgent, PlacementEngine, SelfHealingAgent, and DLQMonitorAgent supervise agent health, recovery, placement, and failed-event handling.
+
+\vspace{-4pt}
+\begin{longtable}{|L{0.23\textwidth}|L{0.33\textwidth}|L{0.20\textwidth}|L{0.16\textwidth}|}
+    \caption{Core Components of ACIS-X}\label{tab:acis_components} \\
+
+    \hline
+    \textbf{Component} & \textbf{Responsibility} & \textbf{Main Input} & \textbf{Main Output} \\
+    \hline
+    \endfirsthead
+
+    \multicolumn{4}{c}%
+    {\tablename\ \thetable\: \textit{Continued from previous page}} \\
+    \hline
+    \textbf{Component} & \textbf{Responsibility} & \textbf{Main Input} & \textbf{Main Output} \\
+    \hline
+    \endhead
+
+    \hline \multicolumn{4}{r}{\textit{Continued on next page}} \\
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    ScenarioGeneratorAgent & Generates sample customer, invoice, and payment activity for simulation and validation. & Scenario settings & Customer, invoice, and payment events \\
+    \hline
+    CustomerStateAgent & Computes customer-level receivables metrics from invoice and payment behavior. & Invoice and payment events & Customer metrics \\
+    \hline
+    ExternalDataAgent & Collects structured external financial or company-level enrichment data. & Customer identity & External financial metrics \\
+    \hline
+    ExternalScrapingAgent & Extracts litigation, news, or web-based risk indicators related to customers. & Customer/company profile & External risk indicators \\
+    \hline
+    AggregatorAgent & Combines internal metrics and external indicators into a consolidated risk profile. & Metrics and enrichment data & Aggregated risk profile \\
+    \hline
+    PaymentPredictionAgent & Estimates payment delay or non-payment likelihood for open invoices. & Invoice and customer metrics & Payment prediction \\
+    \hline
+    RiskScoringAgent & Produces final risk scores and risk bands using prediction and context. & Prediction and profile data & Risk score event \\
+    \hline
+    CollectionsAgent & Converts risk outcomes into prioritized collections recommendations. & Risk score event & Collections action \\
+    \hline
+    DBAgent & Persists raw events and derived records into the local database. & Domain and system events & SQLite records \\
+    \hline
+    QueryAgent & Serves structured read requests for agents and the API layer. & Query requests & Query responses \\
+    \hline
+    MemoryAgent & Maintains fast runtime customer and decision context. & Domain events & Cached state \\
+    \hline
+    MonitoringAgent & Tracks runtime health, heartbeats, lag, and error conditions. & Health and system events & Health status \\
+    \hline
+    SelfHealingAgent & Initiates recovery actions when agents become unhealthy or fail. & Health status & Recovery action \\
+    \hline
+    RegistryService & Maintains active agent identity, status, and capability metadata. & Agent registration & Agent registry state \\
+\end{longtable}
+
+\section{Interface Design}
+The interface design of ACIS-X defines how agents, storage, external sources, and the user-facing dashboard communicate with each other. Since the system is event-driven, most internal interfaces are asynchronous Kafka topics. Each topic represents a specific type of event and allows producers and consumers to remain loosely coupled.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/interface-diag.png}
+    \caption{Interface design of ACIS-X}
+    \label{fig:interface_design}
+\end{figure}
+
+As represented in Fig~\ref{fig:interface_design}, ACIS-X uses four primary interface categories. Internal interfaces connect agents through Kafka topics. External interfaces allow enrichment agents to access financial, litigation, news, or company-related data. Persistence interfaces connect DBAgent and QueryAgent with the SQLite database. User-facing interfaces expose risk profiles, collections actions, metrics, and runtime status through the FastAPI backend and React dashboard.
+
+The topic interface is the most important internal communication mechanism. It allows the system to process events incrementally and supports future scaling by adding more producers or consumers without changing the entire architecture.
+
+\vspace{-4pt}
+\begin{longtable}{|L{0.22\textwidth}|L{0.23\textwidth}|L{0.25\textwidth}|L{0.22\textwidth}|}
+    \caption{Kafka Topic Interface Summary}\label{tab:kafka_topic_interfaces} \\
+
+    \hline
+    \textbf{Topic} & \textbf{Producer} & \textbf{Consumer} & \textbf{Purpose} \\
+    \hline
+    \endfirsthead
+
+    \multicolumn{4}{c}%
+    {\tablename\ \thetable\: \textit{Continued from previous page}} \\
+    \hline
+    \textbf{Topic} & \textbf{Producer} & \textbf{Consumer} & \textbf{Purpose} \\
+    \hline
+    \endhead
+
+    \hline \multicolumn{4}{r}{\textit{Continued on next page}} \\
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    acis.customers & ScenarioGeneratorAgent & DBAgent, MemoryAgent, risk/profile agents & Customer master events \\
+    \hline
+    acis.invoices & ScenarioGeneratorAgent & DBAgent, CustomerStateAgent, PaymentPredictionAgent & Invoice lifecycle data \\
+    \hline
+    acis.payments & ScenarioGeneratorAgent & DBAgent, CustomerStateAgent & Payment behavior data \\
+    \hline
+    acis.metrics & CustomerStateAgent, enrichment agents & AggregatorAgent, PaymentPredictionAgent, DBAgent & Derived customer metrics \\
+    \hline
+    acis.predictions & PaymentPredictionAgent & RiskScoringAgent, DBAgent & Invoice-level prediction output \\
+    \hline
+    acis.risk & AggregatorAgent, RiskScoringAgent & CollectionsAgent, DBAgent, dashboard layer & Customer and invoice risk state \\
+    \hline
+    acis.collections & CollectionsAgent & DBAgent, dashboard layer & Collections recommendation output \\
+    \hline
+    acis.query.request & API layer or agents & QueryAgent & Structured read request \\
+    \hline
+    acis.query.response & QueryAgent & API layer or requesting agent & Structured query result \\
+    \hline
+    acis.agent.health & Runtime agents & MonitoringAgent, SelfHealingAgent & Agent health and heartbeat tracking \\
+    \hline
+    acis.dlq & Failed processors & DLQMonitorAgent & Failed-event inspection and recovery \\
+\end{longtable}
+
+\section{Data Structure Design}
+The data structure design of ACIS-X is centered on structured events and persistent domain records. Events are used for communication between agents, while database records are used for durable storage and later query. This separation allows the system to process live data in real time while still preserving historical evidence for audit, replay, and report generation.
+
+The event schema is designed to provide traceability. Each event contains an identifier, event type, source, timestamp, entity reference, and payload. Derived structures such as customer metrics, risk profiles, and collections actions include reason fields so downstream modules can explain how a decision was produced.
+
+\vspace{-4pt}
+\begin{longtable}{|L{0.28\textwidth}|L{0.62\textwidth}|}
+    \caption{Data Structures Used in ACIS-X}\label{tab:acis_data_structures} \\
+
+    \hline
+    \textbf{Data Structure} & \textbf{Description} \\
+    \hline
+    \endfirsthead
+
+    \multicolumn{2}{c}%
+    {\tablename\ \thetable\: \textit{Continued from previous page}} \\
+    \hline
+    \textbf{Data Structure} & \textbf{Description} \\
+    \hline
+    \endhead
+
+    \hline \multicolumn{2}{r}{\textit{Continued on next page}} \\
+    \endfoot
+
+    \hline
+    \endlastfoot
+
+    Event schema & Common message format containing event id, event type, source, timestamp, entity id, and payload. \\
+    \hline
+    Event envelope & Transport wrapper used for metadata, correlation, retry handling, and routing context. \\
+    \hline
+    Customer record & Stores customer identity, organization information, account status, and related metadata. \\
+    \hline
+    Invoice record & Stores invoice id, customer id, issue date, due date, amount, paid amount, and invoice status. \\
+    \hline
+    Payment record & Stores payment id, invoice id, customer id, payment date, amount, and settlement reference. \\
+    \hline
+    Customer metrics payload & Stores outstanding amount, overdue amount, average delay, payment ratio, and behavioral indicators. \\
+    \hline
+    External financial payload & Stores company-level enrichment values such as financial score, stability signal, and source metadata. \\
+    \hline
+    Litigation/news payload & Stores external legal or public-risk indicators collected for customer risk enrichment. \\
+    \hline
+    Risk profile payload & Stores aggregated score, risk band, contributing factors, reason codes, and computed timestamp. \\
+    \hline
+    Collections action payload & Stores recommended action, priority, reason, cooldown key, and action status. \\
+    \hline
+    Agent registry record & Stores agent id, role, status, host, heartbeat time, and capability information. \\
+    \hline
+    Query request/response & Represents structured read requests and responses used by QueryAgent for database-backed access. \\
+\end{longtable}
+
+\section{Algorithm Design}
+Algorithm design in ACIS-X focuses on converting event streams into operational decisions. Each algorithm is implemented through one or more agents, and each stage publishes structured output for the next stage. The overall process begins with ingestion and persistence, continues through customer-state computation and enrichment, and ends with risk scoring, collections actioning, and runtime recovery.
+
+\subsection{Event Ingestion and Persistence Algorithm}
+The event ingestion and persistence algorithm ensures that incoming business events are validated, stored, and made available to downstream agents.
+
+\begin{enumerate}[itemsep=2pt]
+    \item Receive customer, invoice, payment, metric, risk, or collections event from the relevant Kafka topic.
+    \item Validate the event structure, mandatory fields, event type, and entity reference.
+    \item Check the event identifier to reduce duplicate processing during retries or replay.
+    \item Transform the event payload into the corresponding database record when persistence is required.
+    \item Store the raw event and derived domain record through DBAgent.
+    \item Publish or expose stored state for later access through QueryAgent and MemoryAgent.
+    \item Route invalid or failed events to dead-letter handling for inspection and recovery.
+\end{enumerate}
+
+\subsection{Customer Metrics Computation Algorithm}
+The customer metrics computation algorithm converts invoice and payment history into useful receivables indicators.
+
+\begin{enumerate}[itemsep=2pt]
+    \item Consume invoice and payment events for a customer.
+    \item Retrieve related invoice and payment history from local state or QueryAgent.
+    \item Calculate outstanding balance, overdue balance, paid amount, and unpaid amount.
+    \item Calculate behavioral features such as average payment delay, on-time payment ratio, and overdue frequency.
+    \item Generate a customer metrics payload with computed values and timestamp.
+    \item Publish the metrics event for aggregation, prediction, storage, and dashboard use.
+\end{enumerate}
+
+\subsection{External Enrichment and Risk Aggregation Algorithm}
+The external enrichment and aggregation algorithm expands customer evaluation beyond internal payment behavior.
+
+\begin{enumerate}[itemsep=2pt]
+    \item Identify customers requiring external enrichment using customer profile or metric events.
+    \item Resolve the company or customer reference needed for external lookup.
+    \item Collect financial, litigation, news, or web-based indicators through enrichment agents.
+    \item Normalize external values into comparable risk signals.
+    \item Combine internal receivables metrics and external risk indicators.
+    \item Produce an aggregated customer risk profile with score, reasons, and evidence references.
+    \item Publish the aggregated profile for prediction, risk scoring, persistence, and visualization.
+\end{enumerate}
+
+\subsection{Payment Prediction and Final Risk Scoring Algorithm}
+The prediction and risk scoring algorithm determines the likelihood and severity of payment risk for customers and invoices.
+
+\begin{enumerate}[itemsep=2pt]
+    \item Select active or open invoices that require risk evaluation.
+    \item Read current customer metrics, invoice attributes, and aggregated external profile.
+    \item Estimate payment delay or non-payment likelihood using available behavioral and contextual indicators.
+    \item Generate a prediction event containing probability, confidence, and reason context.
+    \item Refine the prediction using business rules, risk thresholds, and customer-level context.
+    \item Assign the final risk band, such as low, medium, high, or critical.
+    \item Publish the final risk score event for collections actioning, storage, and dashboard display.
+\end{enumerate}
+
+\subsection{Collections Action and Self-Healing Algorithm}
+The collections action algorithm converts final risk output into an operational recommendation, while the self-healing algorithm maintains runtime reliability.
+
+\begin{enumerate}[itemsep=2pt]
+    \item Consume high-risk or updated risk-score events from the risk topic.
+    \item Determine action severity using risk band, overdue amount, payment behavior, and policy conditions.
+    \item Select the recommended collections action, such as reminder, follow-up, escalation, or manual review.
+    \item Apply duplicate prevention and cooldown rules to avoid repeated action for the same customer or invoice.
+    \item Persist the collections action and publish it for dashboard visibility.
+    \item Monitor agent heartbeats, topic lag, failed events, and runtime errors.
+    \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
+\end{enumerate}
 
 \bibliographystyle{ieeetr}
 \bibliography{references}
