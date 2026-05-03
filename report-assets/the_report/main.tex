@@ -1,9 +1,9 @@
 \documentclass[12pt,a4paper]{report}
 % chktex-file 1
 % chktex-file 44
-\usepackage[margin=1in]{geometry}
+\usepackage[left=1.15in,right=1in,top=1in,bottom=1in]{geometry}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}
+\usepackage{mathptmx}
 \usepackage{setspace}
 \usepackage{titlesec}
 \usepackage{enumitem}
@@ -12,20 +12,59 @@
 \usepackage{ragged2e}
 \usepackage{url}
 \usepackage[numbers]{natbib}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{indentfirst}
+\usepackage{eso-pic}
 
-
-
-\setstretch{1.15}
+\onehalfspacing
 \setlength{\tabcolsep}{4pt}
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0pt}
 \newcolumntype{L}[1]{>{\RaggedRight\arraybackslash\hspace{0pt}}p{#1}}
 
-% Match reference report chapter heading format.
-\titlespacing*{\chapter}{0pt}{-50pt}{20pt}
+\renewcommand{\figurename}{Fig}
+\captionsetup{
+    font=normalsize,
+    labelfont=bf,
+    justification=centering,
+    singlelinecheck=true
+}
+
+% Match the updated sample report's top/bottom double page border.
+\AddToShipoutPictureBG{%
+    \AtPageLowerLeft{%
+        \linethickness{0.45pt}%
+        \put(0,\LenToUnit{\dimexpr\paperheight-24pt\relax}){\line(1,0){\LenToUnit{\paperwidth}}}%
+        \linethickness{1.1pt}%
+        \put(0,\LenToUnit{\dimexpr\paperheight-28pt\relax}){\line(1,0){\LenToUnit{\paperwidth}}}%
+        \linethickness{0.45pt}%
+        \put(0,\LenToUnit{24pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
+        \linethickness{1.1pt}%
+        \put(0,\LenToUnit{28pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
+    }%
+}
+
+% Match reference report chapter and heading format.
+\titlespacing*{\chapter}{0pt}{-30pt}{22pt}
 \titleformat{\chapter}[display]
-    {\normalfont\fontsize{16}{20}\bfseries\raggedright}
+    {\normalfont\fontsize{14}{18}\bfseries\centering}
     {\MakeUppercase{\chaptername}\ \thechapter}
-    {-5pt}
-    {\normalfont\fontsize{18}{22}\bfseries\centering\MakeUppercase}
+    {8pt}
+    {\normalfont\fontsize{16}{20}\bfseries\centering\MakeUppercase}
+\titleformat{\section}
+    {\normalfont\fontsize{14}{18}\bfseries}
+    {\thesection}
+    {1em}
+    {}
+\titlespacing*{\section}{0pt}{14pt}{8pt}
+\titleformat{\subsection}
+    {\normalfont\fontsize{12}{16}\bfseries}
+    {\thesubsection}
+    {1em}
+    {}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
 \begin{document}
 
@@ -501,188 +540,104 @@ Primary evidence inputs for this chapter include:
 
 \section{Software and Hardware Tools Used}
 
-\subsection{Hardware Tools Used}
+\subsection{Software Requirements}
+ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for persistence, and pytest for verification. The selected tools prioritize fast iteration, explicit event contracts, and practical production transition.
+
+\begin{longtable}{|L{0.40\textwidth}|L{0.50\textwidth}|}
+    \caption{Software Requirements}\label{tab:acis_software_tools} \\
+
+    \hline
+    \textbf{Operating System} & Windows / macOS / Linux \\
+    \hline
+    \textbf{Development Environment} & Visual Studio Code \\
+    \hline
+    \textbf{Programming Language} & Python 3.9+ \\
+    \hline
+    \textbf{Event Broker} & Apache Kafka \\
+    \hline
+    \textbf{Database} & SQLite \\
+    \hline
+\end{longtable}
+
+\subsection{Hardware Requirements}
 The current ACIS-X implementation supports local and production-like deployment using lightweight infrastructure. Since the system is event-driven and includes external enrichment calls, the hardware baseline must satisfy both message-processing throughput and stable I/O for persistence and logging.
 
-\begin{longtable}{|L{0.17\textwidth}|L{0.21\textwidth}|L{0.50\textwidth}|}
-    \caption{Hardware and Infrastructure Requirements}\label{tab:acis_hardware_tools} \\
+\begin{longtable}{|L{0.40\textwidth}|L{0.50\textwidth}|}
+    \caption{Hardware Requirements}\label{tab:acis_hardware_tools} \\
 
     \hline
-    \textbf{Component} & \textbf{Baseline Specification} & \textbf{Purpose in ACIS-X} \\
+    \textbf{Processor} & Minimum 1 GHz; Recommended 2 GHz or more \\
     \hline
-    \endfirsthead
-
+    \textbf{Memory (RAM)} & Minimum 1 GB; Recommended 4 GB and above \\
     \hline
-    \textbf{Component} & \textbf{Baseline Specification} & \textbf{Purpose in ACIS-X} \\
+    \textbf{Storage} & Minimum 20 GB free disk space \\
     \hline
-    \endhead
-
-    \hline
-    \endfoot
-
-    \hline
-    \endlastfoot
-
-    Application Host & 4 vCPU class processor, 8 GB RAM minimum, 20 GB free disk & Runs ACIS-X agents, runtime orchestration threads, local logs, and SQLite persistence with sufficient memory headroom for bursty event workloads. \\
-    \hline
-    Kafka Broker Node & Apache Kafka endpoint on port 9092 (single node for current baseline) & Provides asynchronous topic-based communication across agents; required for ingestion, orchestration, health signaling, and risk-action pipelines. \\
-    \hline
-    Persistence Storage & Local SSD/NVMe preferred; SQLite database files (acis.db, WAL, SHM) & Supports low-latency event persistence and query operations for customer, invoice, risk, and collections entities. \\
-    \hline
-    Network Connectivity & Stable localhost or private network; outbound internet access for enrichment APIs & Required for broker communication and external intelligence integration (financial and litigation data retrieval). \\
-    \hline
-    Container Runtime (Optional) & Docker/Compose support for integration-test setup & Used to provision Kafka for integration testing and reproducible local environment validation. \\
-    \hline
-    Log Storage and Diagnostics & Persistent file storage for acis.log and test outputs & Enables troubleshooting, audit trail reconstruction, operational health checks, and post-incident diagnostics. \\
 \end{longtable}
 
 The baseline above is aligned with stated system targets in deployment documentation, including startup under 30 seconds, stable memory behavior under load, and sustained event throughput expectations.
 
-\subsection{Software Tools}
-ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for persistence, and pytest for verification. The selected tools prioritize fast iteration, explicit event contracts, and practical production transition.
+\section{Conceptual/Analysis Modeling}
 
-\begin{longtable}{|L{0.17\textwidth}|L{0.22\textwidth}|L{0.49\textwidth}|}
-    \caption{Software Stack for ACIS-X}\label{tab:acis_software_tools} \\
+\subsection{Use Case Diagram}
+The Use Case diagram identifies the primary actors (such as event producers, the orchestration runtime, external enrichment services, and collections managers) interacting with the core usage scenarios of the system.
 
-    \hline
-    \textbf{Category} & \textbf{Technology} & \textbf{Role in the System} \\
-    \hline
-    \endfirsthead
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{images/use-case-diag.png}
+    \caption{Use case diagram for ACIS-X}
+    \label{fig:use_case}
+\end{figure}
 
-    \hline
-    \textbf{Category} & \textbf{Technology} & \textbf{Role in the System} \\
-    \hline
-    \endhead
+\subsection{Sequence Diagram}
+The Sequence Diagram visualizes the asynchronous, topic-based communication flowing between dedicated agents (e.g., ScenarioGenerator, ExternalData, RiskScoring) and their centralized exchange via the Kafka Event Bus.
 
-    \hline
-    \endfoot
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{images/sequence-diag.png}
+    \caption{Sequence diagram illustrating event communication flows}
+    \label{fig:sequence_diagram}
+\end{figure}
 
-    \hline
-    \endlastfoot
+\subsection{Activity Diagram}
+The Activity Diagram details the step-by-step workflow for the data processing pipeline starting from raw invoice ingestion, progressing to metrics computation and enrichment, and culminating in collections escalations.
 
-    Programming Runtime & Python 3.9+ with virtual environments & Core language for all agents, runtime services, orchestration scripts, and validation utilities. \\
-    \hline
-    Event Broker & Apache Kafka (Confluent image 7.5.0 in compose baseline) & Message backbone for business events, system events, health telemetry, and command/control workflows. \\
-    \hline
-    Kafka Client Libraries & kafka-python 2.3.0 and confluent-kafka 2.3.0 & Backend-flexible producer/consumer support with manual commits, lag tracking, and DLQ integration. \\
-    \hline
-    API and Service Layer & FastAPI 0.135.1, Starlette, Uvicorn 0.42.0 & Supports service interfaces and operational exposure for runtime-adjacent capabilities. \\
-    \hline
-    Data and Schema Validation & Pydantic 2.12.5, typing extensions & Enforces structured event contracts, payload validation, and schema-version consistency. \\
-    \hline
-    Storage & SQLite (with DBAgent, QueryAgent, MemoryAgent) & Persistent storage for customers, invoices, payments, profiles, enrichment caches, and collections actions. \\
-    \hline
-    External Data Integration & requests 2.32.3, BeautifulSoup4 4.12.3, lxml 5.2.2 & Fetches and parses external financial/litigation context used by enrichment agents. \\
-    \hline
-    Monitoring and System Metrics & psutil 5.9.8 and application logs & Captures process-level health indicators and supports runtime resilience decisions. \\
-    \hline
-    Testing Framework & pytest, pytest-cov, pytest-mock, pytest-asyncio & Provides unit/integration categories, architecture-regression checks, and coverage-driven validation. \\
-    \hline
-    Operations and Control & \path{run_acis.py}, \path{scripts/acis_control.py}, cleanup and restart scripts & Startup, stop, status, and environment reset automation for reliable operational procedures. \\
-\end{longtable}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{images/activity-diag.png}
+    \caption{Activity diagram mapping out the decision pipeline}
+    \label{fig:activity_diagram}
+\end{figure}
+
+\subsection{State Chart Diagram}
+The State Chart Diagram maps the lifecycle of an account's state within ACIS-X, transitioning between normal operations, an early warning status during overdue detection, and a high-risk state triggering immediate policy/collections interventions.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\textwidth]{images/state-chart-diag.png}
+    \caption{State chart diagram specifying account state transitions}
+    \label{fig:state_chart}
+\end{figure}
 
 \section{Software Requirement Specification}
 The Software Requirement Specification (SRS) defines what ACIS-X must do and how well it must do it under realistic operational conditions. Requirements are grouped into functional, non-functional, interface/data, and governance-oriented validation requirements.
 
 \subsection{Functional Requirements}
-\begin{longtable}{|L{0.09\textwidth}|L{0.21\textwidth}|L{0.32\textwidth}|L{0.24\textwidth}|}
-    \caption{Functional Requirements for ACIS-X}\label{tab:acis_functional_requirements} \\
-
-    \hline
-    \textbf{ID} & \textbf{Requirement} & \textbf{Expected System Behavior} & \textbf{Validation Basis} \\
-    \hline
-    \endfirsthead
-
-    \hline
-    \textbf{ID} & \textbf{Requirement} & \textbf{Expected System Behavior} & \textbf{Validation Basis} \\
-    \hline
-    \endhead
-
-    \hline
-    \endfoot
-
-    \hline
-    \endlastfoot
-
-    FR-01 & Runtime bootstrap & System shall initialize registry/control-plane services and all configured agents through a single startup entry point. & \path{run_acis.py} startup flow \\
-    \hline
-    FR-02 & Topic readiness & System shall create or validate required ACIS topics before event processing begins. & \path{runtime/topic_manager.py} \\
-    \hline
-    FR-03 & Canonical consumer grouping & Replicas of the same agent type shall share canonical group IDs for partition-based scaling without duplication. & changelog + architecture tests \\
-    \hline
-    FR-04 & Event consumption and commit discipline & Consuming agents shall poll, validate, process, and commit offsets after successful handling. & BaseAgent consumer loop \\
-    \hline
-    FR-05 & Customer state computation & System shall compute customer metrics from customer/invoice/payment streams and publish enriched state updates. & CustomerStateAgent contract \\
-    \hline
-    FR-06 & External enrichment with fallback chain & External agents shall resolve company identity through payload, query lookup, and controlled fallback order. & unit architecture tests \\
-    \hline
-    FR-07 & Risk aggregation & System shall fuse external financial and litigation signals into aggregated risk context for downstream processing. & AggregatorAgent design \\
-    \hline
-    FR-08 & Payment-risk prediction & System shall generate account/invoice-level payment-risk predictions and publish them as structured events. & PaymentPredictionAgent role \\
-    \hline
-    FR-09 & Final risk scoring & System shall combine model outputs and contextual risk signals to publish a normalized final risk score. & RiskScoringAgent role \\
-    \hline
-    FR-10 & Time-driven overdue detection & System shall generate periodic time ticks and evaluate overdue conditions using temporal logic. & TimeTick + OverdueDetection \\
-    \hline
-    FR-11 & Collections action routing & System shall issue collections decisions/actions for prioritized high-risk or overdue entities. & CollectionsAgent role \\
-    \hline
-    FR-12 & Persistence and queryability & System shall persist core entities and allow query-based retrieval for enrichment and decision support. & DBAgent + QueryAgent tests \\
-    \hline
-    FR-13 & Health monitoring and self-healing & System shall emit heartbeats/metrics and trigger recovery workflows for degraded or failed components. & Monitoring + SelfHealing \\
-    \hline
-    FR-14 & Orchestration event lifecycle & RuntimeManager and PlacementEngine shall process spawn/restart/scale orchestration events end-to-end. & orchestration unit tests \\
-    \hline
-    FR-15 & Graceful shutdown & System shall stop agents in controlled order and close runtime resources safely. & \path{run_acis.py} shutdown path \\
-    \hline
-    FR-16 & Dead-letter handling & Failed processing paths shall support DLQ routing to preserve diagnostics and prevent silent data loss. & runtime/README + client API \\
-    \hline
-    FR-17 & Test-first regression safety & System shall provide unit and integration categories to validate architecture contracts and schema behavior. & \path{pytest.ini} + \path{tests/} \\
-\end{longtable}
+\begin{enumerate}[label=\textbf{\roman*.}]
+    \item \textbf{Event Ingestion:} The system must be able to continuously consume customer, invoice, and payment events from Kafka topics.
+    \item \textbf{State Computation:} The system must compute and maintain real-time customer behavior metrics and exposure aggregations.
+    \item \textbf{External Enrichment:} The system should fetch and integrate external financial and litigation data to enrich customer profiles.
+    \item \textbf{Risk Prediction:} It must generate structured invoice-level payment-risk predictions based on unified account data.
+    \item \textbf{Action Routing:} The system must evaluate risk scores against policies and trigger appropriate collections actions automatically.
+\end{enumerate}
 
 \subsection{Non-Functional Requirements}
-\begin{longtable}{|L{0.09\textwidth}|L{0.17\textwidth}|L{0.25\textwidth}|L{0.35\textwidth}|}
-    \caption{Non-Functional Requirements for ACIS-X}\label{tab:acis_nonfunctional_requirements} \\
-
-    \hline
-    \textbf{ID} & \textbf{Quality Attribute} & \textbf{Target/Constraint} & \textbf{Operational Interpretation} \\
-    \hline
-    \endfirsthead
-
-    \hline
-    \textbf{ID} & \textbf{Quality Attribute} & \textbf{Target/Constraint} & \textbf{Operational Interpretation} \\
-    \hline
-    \endhead
-
-    \hline
-    \endfoot
-
-    \hline
-    \endlastfoot
-
-    NFR-01 & Throughput & Target sustained throughput above 1000 events/second (baseline guidance). & Pipeline must support practical scaling for high-volume event streams without severe lag growth. \\
-    \hline
-    NFR-02 & Startup time & Runtime startup target below 30 seconds in baseline environment. & Platform should become operational quickly after restart/maintenance events. \\
-    \hline
-    NFR-03 & Memory efficiency & Memory target below 500 MB at approximately 10k-event local run context. & Prevent runaway resource growth and preserve host stability. \\
-    \hline
-    NFR-04 & Reliability & Manual offset commit and error-safe polling required for consumer paths. & Minimize duplicate processing and avoid consumer-loop collapse on transient failures. \\
-    \hline
-    NFR-05 & Fault tolerance & Retry and DLQ patterns required for recoverable and non-recoverable failures. & Preserve failure visibility while keeping primary flows resilient. \\
-    \hline
-    NFR-06 & Scalability & Canonical consumer groups plus configurable replica limits (default max replicas = 3). & Enable horizontal scaling using Kafka partition distribution rather than duplicated consumption. \\
-    \hline
-    NFR-07 & Observability & Continuous logging, heartbeat publication, lag/metrics reporting, registry state visibility. & Operators must detect degradation early and verify component health continuously. \\
-    \hline
-    NFR-08 & Maintainability & Modular agent boundaries and event contracts must remain explicit and versioned. & Localized changes should not require full-system rewrites. \\
-    \hline
-    NFR-09 & Testability & Unit tests must run without Kafka; integration tests must run with broker-backed setup. & Supports rapid CI feedback and controlled end-to-end verification. \\
-    \hline
-    NFR-10 & Portability & Must run on standard Python environments with optional Docker-based broker provisioning. & Reduces environment lock-in for development and validation teams. \\
-    \hline
-    NFR-11 & Data integrity & Event schema versioning and payload validation must be enforced before processing. & Protects downstream agents from malformed payload propagation. \\
-    \hline
-    NFR-12 & Security posture & API secrets managed through environment variables; production hardening to include broker/network controls. & Prevent plaintext credential embedding and support secure deployment evolution. \\
-\end{longtable}
+\begin{enumerate}[label=\textbf{\roman*.}]
+    \item \textbf{Performance:} The platform should process events efficiently with high throughput and minimal latency.
+    \item \textbf{Reliability:} The system must ensure continuous operation with automated retry and dead-letter queue (DLQ) mechanisms for fault tolerance.
+    \item \textbf{Scalability:} The architecture should scale horizontally by allowing multiple agent replicas within canonical consumer groups.
+    \item \textbf{Maintainability:} The modular multi-agent structure and explicit event contracts must support easy updates and independent component lifecycle management.
+    \item \textbf{Observability:} The system should emit continuous logs, heartbeats, and metrics to ensure clear diagnostic visibility.
+\end{enumerate}
 
 The functional and non-functional requirements above define the SRS baseline for ACIS-X in the same subsection structure used in the reference report.
 
@@ -808,7 +763,7 @@ The schedule in Table~\ref{tab:acis_project_schedule} outlines the planned timel
     Phase 4 & Week 8 & Final report polishing, consolidated testing evidence, final submission prep. & Pending \\
 \end{longtable}
 
-\bibliographystyle{IEEEtran}
+\bibliographystyle{ieeetr}
 \bibliography{references}
 
 \end{document}
