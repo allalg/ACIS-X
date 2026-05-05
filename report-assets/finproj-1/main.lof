@@ -1,0 +1,18 @@
+{\vspace {10pt}}
+\noindent \textbf {\hspace {0.25cm}}\textbf {Fig. No.}\hfill \textbf {Figure Name}\hfill \textbf {Page No.}\hspace {-1.2cm}
+{\vspace {5pt}}
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces System Architecture}}{32}{figure.caption.6}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Use-Case Diagram}}{33}{figure.caption.7}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Dataflow Diagram}}{34}{figure.caption.8}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {7.1}{\ignorespaces Student Portal}}{47}{figure.caption.9}%
+\contentsline {figure}{\numberline {7.2}{\ignorespaces Admin Portal}}{48}{figure.caption.10}%
+\contentsline {figure}{\numberline {7.3}{\ignorespaces Recruiter Portal}}{48}{figure.caption.11}%
+\contentsline {figure}{\numberline {7.4}{\ignorespaces Student Profile}}{49}{figure.caption.12}%
+\contentsline {figure}{\numberline {7.5}{\ignorespaces AI Chatbot Assistance}}{50}{figure.caption.13}%

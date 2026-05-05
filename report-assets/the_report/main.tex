@@ -31,14 +31,14 @@
 \setlength{\tabcolsep}{4pt}
 \setlength{\parindent}{0.5in}
 \setlength{\parskip}{0pt}
-\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash\hspace{0pt}}p{#1}}
+\newcolumntype{L}[1]{>{\justifying\arraybackslash\hspace{0pt}}p{#1}}
 
 \renewcommand{\figurename}{Fig}
 \captionsetup{
     font=normalsize,
     labelfont=bf,
-    justification=centering,
-    singlelinecheck=true
+    justification=justified,
+    singlelinecheck=false
 }
 
 \newif\iffrontborderpage
@@ -133,7 +133,7 @@
     Asst Professor, Dept. of CSE
     
     \vspace{0.6cm}
-    \includegraphics[height=0.12\textwidth]{images/AMC-LOGO.png}
+    \includegraphics[height=0.12\textwidth]{images/amc-logo.jpeg}
     
     \vspace{0.6cm}
     {\normalsize \textbf{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING AMC ENGINEERING COLLEGE}}\\[0.1cm]
@@ -161,7 +161,7 @@
     Belagavi - 560083\\
     \textbf{Department of Computer Science \& Engineering}\\
     \vspace{0.2cm}
-    \includegraphics[height=0.1\textwidth]{images/AMC-LOGO.png} \\[0.5cm]
+    \includegraphics[height=0.1\textwidth]{images/amc-logo.jpeg} \\[0.5cm]
     \large{\textbf{CERTIFICATE}}
 \end{center}
 
@@ -288,6 +288,7 @@ The Intelligent Collections System (ACIS-X) represents a modern, data-driven app
 \titlespacing*{\section}{0pt}{14pt}{8pt}
 \titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
+\justifying
 
 
 \chapter{Introduction}

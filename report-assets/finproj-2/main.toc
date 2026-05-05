@@ -1,0 +1,52 @@
+\contentsline {chapter}{Certificate}{i}{section*.2}%
+\contentsline {chapter}{Declaration}{ii}{section*.4}%
+\contentsline {chapter}{Acknowledgements}{iii}{section*.6}%
+\contentsline {chapter}{Abstract}{iv}{section*.8}%
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Overview}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Objectives}{1}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Purpose, Scope, and Applicability}{2}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Purpose}{2}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}Scope}{3}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}Applicability}{3}{subsection.1.3.3}%
+\contentsline {section}{\numberline {1.4}Organization of the Report}{4}{section.1.4}%
+\contentsline {chapter}{\numberline {2}Literature Survey}{6}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Introduction}{6}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Objective of Literature Survey}{7}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Summary of Literature Survey}{8}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Drawbacks of Existing Systems}{31}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Problem Statement}{33}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Proposed Solution}{34}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}YOLOv8-Based Object Detection}{35}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}ESP32 Web Server and Alert Control}{35}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Communication Workflow}{35}{subsection.2.6.3}%
+\contentsline {chapter}{\numberline {3}Requirement Engineering}{37}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Software and Hardware Tools Used}{37}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Hardware Tools Used}{37}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Software Tools}{38}{subsection.3.1.2}%
+\contentsline {section}{\numberline {3.2}Software Requirement Specification}{38}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Functional Requirements}{38}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Non-Functional Requirements}{39}{subsection.3.2.2}%
+\contentsline {chapter}{\numberline {4}PROJECT PLANNING}{40}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Project Planning}{40}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Scheduling}{43}{subsection.4.1.1}%
+\contentsline {chapter}{\numberline {5}SYSTEM DESIGN}{45}{chapter.5}%
+\contentsline {section}{\numberline {5.1}System Architecture}{45}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Component Design / Module Decomposition}{46}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Arduino snippet}{47}{section.5.3}%
+\contentsline {section}{\numberline {5.4}Detection logic snippet}{48}{section.5.4}%
+\contentsline {chapter}{\numberline {6}Implementation}{50}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Overview of the System}{50}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Hardware and Sensor Integration}{51}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Detection}{51}{section.6.3}%
+\contentsline {section}{\numberline {6.4}Alert Mechanism}{52}{section.6.4}%
+\contentsline {section}{\numberline {6.5}User Interface}{52}{section.6.5}%
+\contentsline {chapter}{\numberline {7}Results and Discussion}{53}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Overview}{53}{section.7.1}%
+\contentsline {section}{\numberline {7.2}YOLOv8 Model Performance on COCO Dataset}{53}{section.7.2}%
+\contentsline {section}{\numberline {7.3}System-Level Performance Evaluation}{54}{section.7.3}%
+\contentsline {section}{\numberline {7.4}Challenges and Limitations}{55}{section.7.4}%
+\contentsline {section}{\numberline {7.5}Summary}{56}{section.7.5}%
+\contentsline {section}{\textbf {CO--PO MAPPING}}{57}{section*.17}%
+\contentsline {section}{\textbf {REFERENCES}}{59}{section*.20}%
+\contentsline {section}{\textbf {ANNEXURE }}{61}{section*.21}%
