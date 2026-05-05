@@ -193,7 +193,7 @@
   showstringspaces=false
 }
 
-\newcolumntype{L}[1]{>{\justifying\arraybackslash\hspace{0pt}}p{#1}}
+\newcolumntype{L}[1]{>{\justifying\parindent=0pt\arraybackslash\hspace{0pt}}p{#1}}
 
 \begin{document}
 
@@ -221,7 +221,7 @@
     {\textcolor[HTML]{FF0000}{\textbf{NITIN BHARADWAJ M V S(1AM23CS125)}}}\\
     {\textcolor[HTML]{FF0000}{\textbf{NIKHIL NAGENDRA(1AM23CS120)}}}\\
     {\textcolor[HTML]{FF0000}{\textbf{JOHAN K GEORGE(1AM23CS075)}}}\\
-    {\textcolor[HTML]{FF0000}{\textbf{PRASANNA ACHARYA(1AM23CS149)}}}\\
+    {\textcolor[HTML]{FF0000}{\textbf{PRASANNA B ACHARYA(1AM23CS149)}}}\\
     \vspace{1.0cm}
 
     Under the Guidance of:\\[0.1cm]
@@ -264,7 +264,7 @@
 
 \doublespacing
 
-Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: AUTOMATED CREDIT CONTROL SYSTEM''}} carried out by \textbf{NITIN BHARADWAJ M V S(1AM23CS125)}, \textbf{NIKHIL NAGENDRA(1AM23CS120)},\textbf{ JOHAN K GEORGE(1AM23CS075)}, and \textbf{PRASANNA ACHARYA(1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belgaum during the year 2026-27. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
+Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: AUTOMATED CREDIT CONTROL SYSTEM''}} carried out by \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)},\textbf{ JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA B ACHARYA (1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belgaum during the year 2026-27. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
 
 \vspace{1.5cm}
 \noindent
@@ -330,7 +330,7 @@ We the undersigned students of 8th semester Department of Computer Science \& En
         NITIN BHARADWAJ M V S & 1AM23CS125 & \\
         NIKHIL NAGENDRA & 1AM23CS120 & \\
         JOHAN K GEORGE & 1AM23CS075 & \\
-        PRASANNA ACHARYA & 1AM23CS149 & \\
+        PRASANNA B ACHARYA & 1AM23CS149 & \\
     \end{tabular*}
 \end{table}
 
@@ -358,10 +358,14 @@ We are grateful to our guide \textbf{Ms. Pallavi K V} Asst. Prof., Department of
 
 Last but not the least, we wish to thank all the teaching \& non-teaching staffs of department of Computer Science and Engineering, for their support, patience and endurance shown during the preparation of this project report.\\
 
-\vspace{1.5cm}
+\vspace{1cm}
 
-\textbf{JOHAN GEORGE}\\
-\textbf{YOUR-USN}
+{\raggedleft 
+\textbf{NITIN BHARADWAJ M V S (1AM23CS125)}\\
+\textbf{NIKHIL NAGENDRA (1AM23CS120)}\\
+\textbf{JOHAN K GEORGE (1AM23CS075)}\\
+\textbf{PRASANNA B ACHARYA (1AM23CS149)} 
+\par}
 
 
 \pagebreak
@@ -436,8 +440,6 @@ From an analytical perspective, the platform transforms a basic receivables pipe
 
 A key design characteristic of ACIS-X is role separation among agents. Context-building components, such as customer profile and enrichment agents, gather and organize information, while decision-authority components, such as risk scoring and collections agents, publish final actionable outcomes. This separation improves maintainability, traceability, and operational clarity.
 
-Overall, ACIS-X is positioned as a production-oriented intelligent collections framework intended to improve timeliness of receivables decisions, strengthen risk visibility, and reduce manual coordination overhead in credit-control operations.
-
 \section{Objectives}
 The project objectives of ACIS-X are to build a reliable and extensible platform for intelligent receivables operations with real-time risk awareness and actionable outcomes. The primary objectives are:
 
@@ -475,16 +477,7 @@ The project objectives of ACIS-X are to build a reliable and extensible platform
 \subsection{Purpose}
 The purpose of ACIS-X is to provide a technically grounded and operationally practical framework for proactive collections intelligence. Rather than reacting after receivables have materially aged, the system is designed to surface emerging risk earlier, link that risk to customer and invoice context, and trigger consistent action paths through policy and collections workflows.
 
-This purpose is achieved through a layered architecture where each agent contributes a well-defined transformation:
-\begin{itemize}[itemsep=2pt]
-    \item raw financial events are converted into behavior metrics,
-    \item behavior metrics are enriched with external context,
-    \item enriched context is converted into aggregate and invoice-level risk outputs,
-    \item risk outputs are converted into collections actions,
-    \item platform telemetry is converted into operational recovery decisions.
-\end{itemize}
-
-As a result, ACIS-X is not only a data-processing system but also a decision-support and execution pipeline for receivables risk management.
+This purpose is achieved through a layered architecture where each agent contributes a well-defined transformation. As a result, ACIS-X acts as both a data-processing system and an execution pipeline for receivables risk management.
 
 \subsection{Scope}
 The current implementation scope of ACIS-X includes end-to-end event orchestration for intelligent collections with the following technical boundaries and capabilities:
@@ -860,19 +853,7 @@ Under this design, ACIS-X provides four concrete advantages relative to fragment
     \item \textbf{Governance readiness:} reason-coded outputs and structured event histories support audit and improvement cycles.
 \end{itemize}
 
-Beyond these advantages, the architecture supports continuous learning from outcomes. As interventions succeed or fail, feedback events can be incorporated into periodic model and policy updates, closing the loop between analytics and operational execution.
-
-An indicative closed-loop operating cycle for ACIS-X is:
-\begin{enumerate}[itemsep=2pt]
-    \item ingest and normalize events,
-    \item update account state and compute features,
-    \item generate risk and policy-informed decisions,
-    \item execute prioritized actions,
-    \item capture outcome and process telemetry,
-    \item recalibrate models and thresholds on governed cadence.
-\end{enumerate}
-
-This cycle ensures that the system remains adaptive under changing behavior patterns while preserving explainability and operational control.
+Beyond these advantages, the architecture supports continuous learning from outcomes, closing the loop between analytics and operational execution. This ensures the system remains adaptive under changing behavior patterns while preserving explainability.
 
 \chapter{REQUIREMENT ENGINEERING}
 
@@ -1101,11 +1082,11 @@ The schedule in Table~\ref{tab:acis_project_schedule} outlines the planned timel
     \hline
     Phase 1 & Week 3 & Core backend pipeline refinement, table/LaTeX stabilization, chapter updates. & Completed \\
     \hline
-    Phase 2 & Week 4 & Frontend planning finalization, UI wireframe selection, API binding contracts. & In Progress \\
+    Phase 2 & Week 4 & Frontend planning finalization, UI wireframe selection, API binding contracts. & Completed \\
     \hline
-    Phase 2 & Week 5 & Frontend implementation (dashboards, risk/action views, status panels). & Pending \\
+    Phase 2 & Week 5 & Frontend implementation (dashboards, risk/action views, status panels). & In Progress \\
     \hline
-    Phase 3 & Week 6 & End-to-end integration: frontend with event and persistence outputs. & Pending \\
+    Phase 3 & Week 6 & End-to-end integration: frontend with event and persistence outputs. & In Progress \\
     \hline
     Phase 3 & Week 7 & System validation, performance checks, bug fixes, UX improvements. & Pending \\
     \hline
@@ -1370,6 +1351,14 @@ The collections action algorithm converts final risk output into an operational 
     \item Apply duplicate prevention and cooldown rules to avoid repeated action for the same customer or invoice.
     \item Persist the collections action and publish it for dashboard visibility.
     \item Monitor agent heartbeats, topic lag, failed events, and runtime errors.
+    \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
+\end{enumerate}
+
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+\end{document}
+gent heartbeats, topic lag, failed events, and runtime errors.
     \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
 \end{enumerate}
 

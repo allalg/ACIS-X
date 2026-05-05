@@ -4,12 +4,12 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Use case diagram for ACIS-X}}{26}{figure.caption.6}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Sequence diagram illustrating event communication flows}}{26}{figure.caption.7}%
-\contentsline {figure}{\numberline {3.3}{\ignorespaces Activity diagram mapping out the decision pipeline}}{27}{figure.caption.8}%
-\contentsline {figure}{\numberline {3.4}{\ignorespaces State chart diagram specifying account state transitions}}{28}{figure.caption.9}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Use case diagram for ACIS-X}}{25}{figure.caption.6}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Sequence diagram illustrating event communication flows}}{25}{figure.caption.7}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces Activity diagram mapping out the decision pipeline}}{26}{figure.caption.8}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces State chart diagram specifying account state transitions}}{27}{figure.caption.9}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces System architecture of ACIS-X}}{33}{figure.caption.10}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces Component design of ACIS-X}}{34}{figure.caption.11}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Interface design of ACIS-X}}{37}{figure.caption.12}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces System architecture of ACIS-X}}{32}{figure.caption.10}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Component design of ACIS-X}}{33}{figure.caption.11}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Interface design of ACIS-X}}{36}{figure.caption.12}%
