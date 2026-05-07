@@ -309,6 +309,7 @@ class RiskScoringAgent(BaseAgent):
             customer_id, invoice_id, base_risk_score, confidence, reasons
         )
 
+
         logger.info(
             f"[RiskAgent] invoice={invoice_id}, base={base_risk_score:.2f}, "
             f"confidence={confidence:.2f}, refined={adjusted_risk:.2f}"
@@ -333,8 +334,9 @@ class RiskScoringAgent(BaseAgent):
         logger.debug(f"Risk reasons: {reasons}")
         logger.debug(f"Risk level: {risk_level}, Severity: {severity}")
 
-        # Step 4: Create risk.scored payload
-        # CRITICAL: Include invoice details for MemoryAgent aggregation
+        # Step 4: Build risk.scored payload.
+        # Forward SHAP fields from PaymentPredictionAgent v1.1+ so DBAgent
+        # can persist them in risk_explanations for regulatory explainability.
         risk_payload = {
             "customer_id": customer_id,
             "invoice_id": invoice_id,
@@ -343,10 +345,16 @@ class RiskScoringAgent(BaseAgent):
             "severity": severity,
             "confidence": confidence,
             "reasons": reasons,
-            # NEW: Invoice metadata for structured aggregation
             "amount": amount,
             "days_overdue": days_overdue,
             "timestamp": timestamp,
+            # SHAP pass-through (None-safe; DBAgent uses IS NULL guards)
+            "shap_values": data.get("shap_values"),
+            "shap_top_driver": data.get("shap_top_driver"),
+            "shap_sum": data.get("shap_sum"),
+            "shap_baseline": data.get("shap_baseline", 0.0),
+            "shap_rating_adjustment": data.get("shap_rating_adjustment", 0.0),
+            "shap_litigation_adjustment": data.get("shap_litigation_adjustment", 0.0),
         }
 
         # Step 5: Publish risk.scored event

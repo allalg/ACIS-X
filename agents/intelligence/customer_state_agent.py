@@ -116,13 +116,42 @@ class CustomerStateAgent(BaseAgent):
             
             invoice_list = result.get("invoices", []) if isinstance(result, dict) else (result or [])
 
-            # Compute total outstanding locally
+            # Compute total outstanding locally and AR Aging buckets
             total_outstanding = 0.0
+            aging_buckets = {
+                "current": 0.0,
+                "1_30_days": 0.0,
+                "31_60_days": 0.0,
+                "61_90_days": 0.0,
+                "90_plus_days": 0.0,
+            }
+            
+            now_utc = datetime.utcnow()
             for inv in invoice_list:
-                if inv.get("status") != "paid":
-                    # Sum remaining_amount if available, else total_amount/amount
+                status = inv.get("status")
+                # Both "paid" and "completed" (from scenario generator) mean fully paid.
+                if status not in ("paid", "completed", "cancelled"):
                     amount = float(inv.get("remaining_amount") or inv.get("total_amount") or inv.get("amount") or 0.0)
-                    total_outstanding += max(amount, 0.0)
+                    if amount > 0:
+                        total_outstanding += amount
+                        
+                        due_date_str = inv.get("due_date")
+                        if due_date_str:
+                            try:
+                                dt_due = datetime.fromisoformat(due_date_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                                days_past = (now_utc - dt_due).days
+                                if days_past <= 0:
+                                    aging_buckets["current"] += amount
+                                elif days_past <= 30:
+                                    aging_buckets["1_30_days"] += amount
+                                elif days_past <= 60:
+                                    aging_buckets["31_60_days"] += amount
+                                elif days_past <= 90:
+                                    aging_buckets["61_90_days"] += amount
+                                else:
+                                    aging_buckets["90_plus_days"] += amount
+                            except ValueError:
+                                pass
 
             # Get payments to compute delays
             invoice_ids = [inv.get("invoice_id") for inv in invoice_list if inv.get("invoice_id")]
@@ -148,6 +177,7 @@ class CustomerStateAgent(BaseAgent):
                 "total_outstanding": total_outstanding,
                 "avg_delay": avg_delay,
                 "on_time_ratio": on_time_ratio,
+                "aging_buckets": aging_buckets,
                 "last_payment_date": last_payment_date,
                 "timestamp": datetime.utcnow().isoformat(),
             }
@@ -187,10 +217,37 @@ class CustomerStateAgent(BaseAgent):
         invoice_list = result.get("invoices", []) if isinstance(result, dict) else (result or [])
 
         total_outstanding = 0.0
+        aging_buckets = {
+            "current": 0.0,
+            "1_30_days": 0.0,
+            "31_60_days": 0.0,
+            "61_90_days": 0.0,
+            "90_plus_days": 0.0,
+        }
+        now_utc = datetime.utcnow()
         for inv in invoice_list:
-            if inv.get("status") != "paid":
+            if inv.get("status") not in ("paid", "completed", "cancelled"):
                 amount = float(inv.get("remaining_amount") or inv.get("total_amount") or inv.get("amount") or 0.0)
-                total_outstanding += max(amount, 0.0)
+                if amount > 0:
+                    total_outstanding += amount
+                    
+                    due_date_str = inv.get("due_date")
+                    if due_date_str:
+                        try:
+                            dt_due = datetime.fromisoformat(due_date_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                            days_past = (now_utc - dt_due).days
+                            if days_past <= 0:
+                                aging_buckets["current"] += amount
+                            elif days_past <= 30:
+                                aging_buckets["1_30_days"] += amount
+                            elif days_past <= 60:
+                                aging_buckets["31_60_days"] += amount
+                            elif days_past <= 90:
+                                aging_buckets["61_90_days"] += amount
+                            else:
+                                aging_buckets["90_plus_days"] += amount
+                        except ValueError:
+                            pass
 
         invoice_ids = [inv.get("invoice_id") for inv in invoice_list if inv.get("invoice_id")]
         payments = self._get_payments_for_invoices(invoice_ids)
@@ -200,6 +257,7 @@ class CustomerStateAgent(BaseAgent):
             "total_outstanding": total_outstanding,
             "avg_delay": avg_delay,
             "on_time_ratio": on_time_ratio,
+            "aging_buckets": aging_buckets,
         }
 
     def _publish_and_persist_metrics(
@@ -273,7 +331,7 @@ class CustomerStateAgent(BaseAgent):
             if invoice_id:
                 payment_map.setdefault(invoice_id, []).append(payment)
 
-        paid_invoices = [inv for inv in invoices if inv.get("status") == "paid"]
+        paid_invoices = [inv for inv in invoices if inv.get("status") in ("paid", "completed")]
 
         if not paid_invoices:
             return 0.0, 0.0  # ISSUE 3 FIX: Changed from 0.5 to 0.0 (safer default)
@@ -298,8 +356,8 @@ class CustomerStateAgent(BaseAgent):
                 if not payment_date_str:
                     continue
 
-                due_date = datetime.fromisoformat(due_date_str)
-                payment_date = datetime.fromisoformat(payment_date_str)
+                due_date = datetime.fromisoformat(due_date_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                payment_date = datetime.fromisoformat(payment_date_str.replace("Z", "+00:00")).replace(tzinfo=None)
 
                 delay_days = max((payment_date - due_date).days, 0)
 
