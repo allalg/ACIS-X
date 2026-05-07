@@ -1,49 +1,49 @@
-\contentsline {chapter}{Certificate}{i}{}%
-\contentsline {chapter}{Declaration}{ii}{}%
-\contentsline {chapter}{Acknowledgement}{iii}{}%
-\contentsline {chapter}{Abstract}{iv}{}%
-\contentsline {chapter}{\numberline {1}Introduction}{1}{}%
-\contentsline {section}{\numberline {1.1}Overview}{1}{}%
-\contentsline {section}{\numberline {1.2}Objectives}{2}{}%
-\contentsline {section}{\numberline {1.3}Purpose, Scope, and Applicability}{3}{}%
-\contentsline {subsection}{\numberline {1.3.1}Purpose}{3}{}%
-\contentsline {subsection}{\numberline {1.3.2}Scope}{3}{}%
-\contentsline {subsection}{\numberline {1.3.3}Applicability}{4}{}%
-\contentsline {section}{\numberline {1.4}Organization of the Report}{4}{}%
-\contentsline {chapter}{\numberline {2}Literature Survey}{6}{}%
-\contentsline {section}{\numberline {2.1}Introduction}{6}{}%
-\contentsline {section}{\numberline {2.2}Objective of Literature Survey}{7}{}%
-\contentsline {section}{\numberline {2.3}Summary of Literature Survey}{8}{}%
-\contentsline {subsection}{\numberline {2.3.1}Scalability and Real-Time Detection Challenges}{13}{}%
-\contentsline {section}{\numberline {2.4}Drawbacks of Existing Systems}{14}{}%
-\contentsline {section}{\numberline {2.5}Problem Statement}{15}{}%
-\contentsline {section}{\numberline {2.6}Proposed Solution}{16}{}%
-\contentsline {subsection}{\numberline {2.6.1}Event and State Intelligence Layer}{17}{}%
-\contentsline {subsection}{\numberline {2.6.2}Risk and Policy Intelligence Layer}{18}{}%
-\contentsline {subsection}{\numberline {2.6.3}Real-Time Actioning and Monitoring Layer}{18}{}%
-\contentsline {chapter}{\numberline {3}REQUIREMENT ENGINEERING}{21}{}%
-\contentsline {section}{\numberline {3.1}Software and Hardware Tools Used}{21}{}%
-\contentsline {subsection}{\numberline {3.1.1}Software Requirements}{21}{}%
-\contentsline {subsection}{\numberline {3.1.2}Hardware Requirements}{21}{}%
-\contentsline {section}{\numberline {3.2}Conceptual/Analysis Modeling}{22}{}%
-\contentsline {subsection}{\numberline {3.2.1}Use Case Diagram}{22}{}%
-\contentsline {subsection}{\numberline {3.2.2}Sequence Diagram}{23}{}%
-\contentsline {subsection}{\numberline {3.2.3}Activity Diagram}{23}{}%
-\contentsline {subsection}{\numberline {3.2.4}State Chart Diagram}{24}{}%
-\contentsline {section}{\numberline {3.3}Software Requirement Specification}{25}{}%
-\contentsline {subsection}{\numberline {3.3.1}Functional Requirements}{26}{}%
-\contentsline {subsection}{\numberline {3.3.2}Non-Functional Requirements}{26}{}%
-\contentsline {chapter}{\numberline {4}PROJECT PLANNING}{27}{}%
-\contentsline {section}{\numberline {4.1}Project Planning}{27}{}%
-\contentsline {subsection}{\numberline {4.1.1}Scheduling}{28}{}%
-\contentsline {chapter}{\numberline {5}SYSTEM DESIGN}{30}{}%
-\contentsline {section}{\numberline {5.1}System Architecture}{30}{}%
-\contentsline {section}{\numberline {5.2}Component Design / Module Decomposition}{31}{}%
-\contentsline {section}{\numberline {5.3}Interface Design}{33}{}%
-\contentsline {section}{\numberline {5.4}Data Structure Design}{34}{}%
-\contentsline {section}{\numberline {5.5}Algorithm Design}{35}{}%
-\contentsline {subsection}{\numberline {5.5.1}Event Ingestion and Persistence Algorithm}{36}{}%
-\contentsline {subsection}{\numberline {5.5.2}Customer Metrics Computation Algorithm}{36}{}%
-\contentsline {subsection}{\numberline {5.5.3}External Enrichment and Risk Aggregation Algorithm}{36}{}%
-\contentsline {subsection}{\numberline {5.5.4}Payment Prediction and Final Risk Scoring Algorithm}{37}{}%
-\contentsline {subsection}{\numberline {5.5.5}Collections Action and Self-Healing Algorithm}{37}{}%
+\contentsline {chapter}{Certificate}{i}{chapter*.1}%
+\contentsline {chapter}{Declaration}{ii}{chapter*.2}%
+\contentsline {chapter}{Acknowledgement}{iii}{chapter*.4}%
+\contentsline {chapter}{Abstract}{iv}{chapter*.5}%
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Overview}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Objectives}{2}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Purpose, Scope, and Applicability}{3}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Purpose}{3}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}Scope}{3}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}Applicability}{4}{subsection.1.3.3}%
+\contentsline {section}{\numberline {1.4}Organization of the Report}{5}{section.1.4}%
+\contentsline {chapter}{\numberline {2}Literature Survey}{6}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Introduction}{6}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Objective of Literature Survey}{7}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Summary of Literature Survey}{9}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Scalability and Real-Time Detection Challenges}{15}{subsection.2.3.1}%
+\contentsline {section}{\numberline {2.4}Drawbacks of Existing Systems}{16}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Problem Statement}{17}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Proposed Solution}{18}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Event and State Intelligence Layer}{19}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Risk and Policy Intelligence Layer}{20}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Real-Time Actioning and Monitoring Layer}{21}{subsection.2.6.3}%
+\contentsline {chapter}{\numberline {3}REQUIREMENT ENGINEERING}{23}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Software and Hardware Tools Used}{23}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Software Requirements}{23}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Hardware Requirements}{24}{subsection.3.1.2}%
+\contentsline {section}{\numberline {3.2}Conceptual/Analysis Modeling}{24}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Use Case Diagram}{24}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Sequence Diagram}{25}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Activity Diagram}{26}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}State Chart Diagram}{27}{subsection.3.2.4}%
+\contentsline {section}{\numberline {3.3}Software Requirement Specification}{27}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Functional Requirements}{28}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Non-Functional Requirements}{28}{subsection.3.3.2}%
+\contentsline {chapter}{\numberline {4}PROJECT PLANNING}{29}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Project Planning}{29}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Scheduling}{30}{subsection.4.1.1}%
+\contentsline {chapter}{\numberline {5}SYSTEM DESIGN}{32}{chapter.5}%
+\contentsline {section}{\numberline {5.1}System Architecture}{32}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Component Design / Module Decomposition}{33}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Interface Design}{36}{section.5.3}%
+\contentsline {section}{\numberline {5.4}Data Structure Design}{38}{section.5.4}%
+\contentsline {section}{\numberline {5.5}Algorithm Design}{39}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}Event Ingestion and Persistence Algorithm}{39}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}Customer Metrics Computation Algorithm}{40}{subsection.5.5.2}%
+\contentsline {subsection}{\numberline {5.5.3}External Enrichment and Risk Aggregation Algorithm}{40}{subsection.5.5.3}%
+\contentsline {subsection}{\numberline {5.5.4}Payment Prediction and Final Risk Scoring Algorithm}{40}{subsection.5.5.4}%
+\contentsline {subsection}{\numberline {5.5.5}Collections Action and Self-Healing Algorithm}{41}{subsection.5.5.5}%

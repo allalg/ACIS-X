@@ -1,0 +1,56 @@
+\contentsline {chapter}{Certificate}{i}{chapter*.1}%
+\contentsline {chapter}{Declaration}{ii}{chapter*.2}%
+\contentsline {chapter}{Acknowledgements}{iii}{chapter*.3}%
+\contentsline {chapter}{Abstract}{iv}{chapter*.4}%
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Overview}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Objectives}{2}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Purpose, Scope, and Applicability}{3}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}Purpose}{3}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}Scope}{3}{subsection.1.3.2}%
+\contentsline {subsection}{\numberline {1.3.3}Applicability}{4}{subsection.1.3.3}%
+\contentsline {section}{\numberline {1.4}Organization of the Report}{5}{section.1.4}%
+\contentsline {chapter}{\numberline {2}Literature Survey}{7}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Introduction}{7}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Objective of Literature Survey}{8}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Summary of Literature Survey}{9}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Drawbacks of Existing Systems}{21}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Problem Statement}{22}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Proposed Solution}{22}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}AI-Powered Resume Parsing and Shortlisting}{23}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Integrated End-to-End Recruitment Workflow}{23}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Real-Time Candidate Evaluation}{23}{subsection.2.6.3}%
+\contentsline {subsection}{\numberline {2.6.4}Intelligent Chatbot for Interaction}{23}{subsection.2.6.4}%
+\contentsline {subsection}{\numberline {2.6.5}Cloud-Based Scalable Architecture}{23}{subsection.2.6.5}%
+\contentsline {chapter}{\numberline {3}Requirement Engineering}{24}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Software and Hardware Tools Used}{24}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Hardware Tools Used}{24}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Software Tools}{25}{subsection.3.1.2}%
+\contentsline {section}{\numberline {3.2}Software Requirement Specification}{25}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Functional Requirements}{26}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Non-Functional Requirements}{26}{subsection.3.2.2}%
+\contentsline {chapter}{\numberline {4}PROJECT PLANNING}{28}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Project Planning}{28}{section.4.1}%
+\contentsline {chapter}{\numberline {5}System Design}{31}{chapter.5}%
+\contentsline {section}{\numberline {5.1}\textbf {System Architecture}}{31}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Use-Case Diagram}{32}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Dataflow Diagram}{33}{section.5.3}%
+\contentsline {chapter}{\numberline {6}Implementation}{35}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Implementation details of the modules}{35}{section.6.1}%
+\contentsline {section}{\numberline {6.2}\textbf {Pseudo Code for Pre-Processing Techniques}}{36}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}\textbf {Frontend Program (Admin Portal)}}{36}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}\textbf {Frontend Program (Student Portal)}}{40}{subsection.6.2.2}%
+\contentsline {section}{\numberline {6.3}\textbf {Backend Program}}{42}{section.6.3}%
+\contentsline {section}{\numberline {6.4}\textbf {Database Schema}}{44}{section.6.4}%
+\contentsline {chapter}{\numberline {7}Results and Discussion}{47}{chapter.7}%
+\contentsline {section}{\numberline {7.1}\textbf {Snapshots}}{47}{section.7.1}%
+\contentsline {subsection}{\numberline {7.1.1}Student Portal}{47}{subsection.7.1.1}%
+\contentsline {subsection}{\numberline {7.1.2}Admin Portal}{48}{subsection.7.1.2}%
+\contentsline {subsection}{\numberline {7.1.3}Recruiter Portal}{48}{subsection.7.1.3}%
+\contentsline {subsection}{\numberline {7.1.4}Student Profile}{49}{subsection.7.1.4}%
+\contentsline {subsection}{\numberline {7.1.5}AI Chatbot Assistance}{50}{subsection.7.1.5}%
+\contentsline {section}{\numberline {7.2}Challenges and Limitations:}{51}{section.7.2}%
+\contentsline {section}{\numberline {7.3}Summary}{51}{section.7.3}%
+\contentsline {chapter}{CO -- PO MAPPING}{52}{chapter*.14}%
+\contentsline {chapter}{REFERENCES}{54}{chapter*.16}%
+\contentsline {chapter}{Annexure}{56}{chapter*.17}%

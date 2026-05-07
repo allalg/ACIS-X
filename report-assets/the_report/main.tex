@@ -1,143 +1,239 @@
-\documentclass[12pt,a4paper]{report}
-% chktex-file 1
-% chktex-file 44
-\usepackage[left=1.15in,right=1in,top=1in,bottom=1in]{geometry}
+\UseRawInputEncoding
+\documentclass[a4paper, 12pt]{report}
 \usepackage[T1]{fontenc}
-\usepackage{mathptmx}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, top=1in, bottom=0.75in, left=1.25in, right=1in, headheight=15pt, headsep=0.25in]{geometry}
 \usepackage{setspace}
 \usepackage{titlesec}
-\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage[labelfont=bf, textfont=normalfont, singlelinecheck=false, justification=justified]{caption}
+\usepackage{fancyhdr}
+\usepackage{indentfirst} 
+\usepackage[x11names]{xcolor}
+\usepackage{lipsum}
+\usepackage{tikz}
+\usepackage{eso-pic}
+\usepackage{etoolbox}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}
+\usepackage[colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black]{hyperref}
+\usepackage[numbers]{natbib}
+\usepackage{float}
+\usepackage{tocloft}
+\usepackage{subfig}
 \usepackage{longtable}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
 \usepackage{array}
 \usepackage{ragged2e}
 \usepackage{url}
-\usepackage[numbers]{natbib}
-\usepackage{graphicx}
-\usepackage{float}
-\usepackage{caption}
-\usepackage{indentfirst}
-\usepackage[x11names]{xcolor}
-\usepackage{tikz}
-\usepackage{fancyhdr}
-\usepackage{tocloft}
-\usepackage{eso-pic}
 
-\definecolor{red}{HTML}{FF0000}
-
-
-
-
-\onehalfspacing
-\setlength{\tabcolsep}{4pt}
-\setlength{\parindent}{0.5in}
-\setlength{\parskip}{0pt}
-\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash\hspace{0pt}}p{#1}}
-
-\renewcommand{\figurename}{Fig}
-\captionsetup{
-    font=normalsize,
-    labelfont=bf,
-    justification=centering,
-    singlelinecheck=true
-}
-
-\newif\iffrontborderpage
-\frontborderpagefalse
-
-% Match the updated sample report's top/bottom double page border.
-\AddToShipoutPictureBG{%
-    \iffrontborderpage
-    \AtPageLowerLeft{%
-        % Top Border
-        \linethickness{0.5pt}%
-        \put(0,\LenToUnit{\dimexpr\paperheight-24pt\relax}){\line(1,0){\LenToUnit{\paperwidth}}}%
-        \linethickness{1.5pt}%
-        \put(0,\LenToUnit{\dimexpr\paperheight-28pt\relax}){\line(1,0){\LenToUnit{\paperwidth}}}%
-        % Bottom Border
-        \linethickness{1.5pt}%
-        \put(0,\LenToUnit{28pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
-        \linethickness{0.5pt}%
-        \put(0,\LenToUnit{24pt}){\line(1,0){\LenToUnit{\paperwidth}}}%
-    }%
-    \fi
-}
-
-\fancypagestyle{titlepagelayout}{
-  \fancyhf{}
-  \global\frontborderpagetrue
-}
-
-\fancypagestyle{borderedpage}{
-  \fancyhf{}
-  \fancyfoot[C]{\thepage}
-  \global\frontborderpagetrue
-}
-
-% Match reference report chapter and heading format.
-\titlespacing*{\chapter}{0pt}{-30pt}{22pt}
+\renewcommand{\cftdot}{}
+\renewcommand{\figurename}{Fig.}
+\renewcommand{\cftchapfont}{\normalfont\bfseries}
+\renewcommand{\cftsecfont}{\normalfont}
+\renewcommand{\cftsubsecfont}{\normalfont}
+\renewcommand{\cftchappagefont}{\normalfont\bfseries}
+\renewcommand{\cftsecpagefont}{\normalfont}
+\renewcommand{\cftsubsecpagefont}{\normalfont}
+\renewcommand{\thefigure}{\thechapter.\arabic{figure}}
+\renewcommand{\thetable}{\thechapter.\arabic{table}}
+\captionsetup[table]{font=small, labelsep=space, position=top}
+\captionsetup[figure]{font=small, labelsep=space}
+\titlespacing*{\chapter}{0pt}{-50pt}{20pt}
+\titlespacing*{\section}{0pt}{0pt}{0pt}
+\titlespacing*{\subsection}{0pt}{0pt}{0pt}
+\setlength{\headheight}{0pt}
+\setlength{\headsep}{15pt}
+\setlength{\parindent}{50pt}
+\setlength{\cftbeforetoctitleskip}{1em}
+\setlength{\cftbeforeloftitleskip}{1em}
+\setlength{\cftbeforelottitleskip}{1em}
+\setlength{\cftbeforesecskip}{-1pt}
+\setlength{\cftbeforesubsecskip}{-1pt}
+\setlength{\cftbeforechapskip}{-1pt}
+\setlength{\cftbeforefigskip}{0pt}
+\setlength{\headheight}{15pt}
+\setlength{\footskip}{0.5in}
+\setlength{\abovecaptionskip}{10pt}
+\setlength{\belowcaptionskip}{0pt}
 \titleformat{\chapter}[display]
-    {\normalfont\fontsize{14}{18}\bfseries\centering}
-    {\MakeUppercase{\chaptername}\ \thechapter}
-    {8pt}
-    {\normalfont\fontsize{16}{20}\bfseries\centering\MakeUppercase}
+  {\normalfont\fontsize{16}{20}\bfseries\raggedright}
+  {\MakeUppercase{\chaptername}\ \thechapter}
+  {-5pt}
+  {\normalfont\fontsize{18}{22}\bfseries\centering\MakeUppercase}
 \titleformat{\section}
-    {\normalfont\fontsize{14}{18}\bfseries}
-    {\thesection}
-    {1em}
-    {}
-\titlespacing*{\section}{0pt}{14pt}{8pt}
+  {\normalfont\fontsize{14}{16}\bfseries}{\thesection}{1em}{}
 \titleformat{\subsection}
-    {\normalfont\fontsize{12}{16}\bfseries}
-    {\thesubsection}
-    {1em}
-    {}
-\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+  {\normalfont\fontsize{12}{16}\bfseries}{\thesubsection}{1em}{}
+\renewcommand{\normalsize}{\fontsize{12}{14}\selectfont}
+\renewcommand{\cfttoctitlefont}{\hfil\normalfont\fontsize{16}{20}\bfseries\MakeUppercase}
+\renewcommand{\cftloftitlefont}{\hspace{5.1cm}\normalfont\fontsize{16}{20}\bfseries\MakeUppercase}
+\renewcommand{\cftlottitlefont}{\hspace{5.4cm}\normalfont\fontsize{16}{20}\bfseries\MakeUppercase}
+\renewcommand{\cftchapfont}{\normalfont\bfseries}
+
+% Define a custom color for page borders
+\definecolor{myhexcolor}{HTML}{5B200C}  % Define a custom color using its hex code
+
+% Command to draw a page border around the document
+\newcommand\PageBorder{%
+\begin{tikzpicture}[remember picture, overlay]
+    \draw[line width=2pt, color=black]
+        ([shift={(0.5in,-0.5in)}]current page.north west) --
+        ([shift={(-0.5in,-0.5in)}]current page.north east) --
+        ([shift={(-0.5in,0.5in)}]current page.south east) --
+        ([shift={(0.5in,0.5in)}]current page.south west) --
+        cycle;  % Draw an outer border
+\end{tikzpicture}
+}
+
+% Adjust vertical space after titles in TOC, LOF, and LOT
+\renewcommand{\cftaftertoctitleskip}{0pt}
+\renewcommand{\cftafterloftitleskip}{0pt}
+\renewcommand{\cftafterlottitleskip}{0pt}
+\renewcommand{\cftbeforetoctitleskip}{0pt}
+\renewcommand{\cftbeforeloftitleskip}{0pt}
+\renewcommand{\cftbeforelottitleskip}{0pt}
+
+% Define custom page styles for various sections (plain, title page, bordered page)
+\fancypagestyle{plain}{
+  \fancyhf{}  % Clear existing header/footer
+  \fancyhead[R]{{ACIS-X: Autonomous Credit Intelligence System}}  % Custom header
+  \fancyfoot[L]{Dept. of CSE, AMCEC}  % Footer on the left
+  \fancyfoot[C]{2026-27}  % Footer in the center
+  \fancyfoot[R]{\thepage}  % Footer on the right with page number
+  \renewcommand{\headrulewidth}{2pt}  % Header line width
+  \renewcommand{\footrulewidth}{2pt}  % Footer line width
+  \global\borderpagefalse  % Set flag to false for no border on plain pages
+}
+
+% Page style for title page (no page number, border enabled)
+\fancypagestyle{titlepagelayout}{
+  \fancyhf{}  % Clear existing header/footer
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+  \global\borderpagetrue  % Enable border for title page
+  \setlength{\footskip}{0.5in}  % Adjust footer position
+}
+
+% Page style for bordered pages (with page number and border enabled)
+\fancypagestyle{borderedpage}{%
+  \fancyhf{}  % Clear existing header/footer
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+  \fancyfoot[C]{\thepage}  % Page number centered in footer
+  \global\borderpagetrue  % Enable border for these pages
+}
+
+% Adjust page layout based on the border flag
+\makeatletter
+\let\ps@plainorig\ps@plain
+\let\ps@plain\ps@titlepagelayout
+\makeatother
+
+% Add background page border if flag is set
+\newif\ifborderpage
+\borderpagefalse  % Default state: no border
+\AddToShipoutPictureBG{%
+  \ifborderpage
+    \PageBorder  % Add page border if flag is true
+  \fi
+}
+
+% For code formatting using listings package
+\lstset{
+   basicstyle=\ttfamily\small\linespread{1.0},  % Set basic style for code (small font, normal line spacing)
+   commentstyle=\color{gray},  % Comments in gray
+   keywordstyle=\color{blue},  % Keywords in blue
+   stringstyle=\color{red},  % Strings in red
+   numbers=left,  % Line numbers on the left
+   numberstyle=\tiny,  % Small line numbers
+   breaklines=true,  % Automatically break long lines
+   xleftmargin=34pt,  % Add left margin to code
+   xrightmargin=25pt,  % Add right margin to code
+   showstringspaces=false,  % Don't highlight spaces in strings
+}
+
+% Adjust spacing and layout of Table of Contents, List of Figures, and List of Tables
+\makeatletter
+\renewcommand{\@dotsep}{2}  % Increase space between dots in TOC, LOF, and LOT
+\renewcommand{\cfttabdotsep}{\@dotsep}  % Same for tables
+\renewcommand{\cftfigdotsep}{\@dotsep}  % Same for figures
+\makeatother
+
+% Adjust figure and table number widths in TOC, LOF, and LOT
+\setlength{\cftfignumwidth}{1.5cm}  % Set width for figure numbers in TOC
+\setlength{\cfttabnumwidth}{1.5cm}  % Set width for table numbers in TOC
+
+% Add space after page numbers in TOC, LOF, and LOT
+% \setlength{\cftfigpagemargin}{2em}  % Adjust figure page margin (uncomment to use)
+% \setlength{\cfttabpagemargin}{3cm}  % Adjust table page margin (uncomment to use)
+
+% For List of Figures (LOF) - Adjust indentation and add custom headers
+\setlength{\cftfigindent}{0.7cm}  % Indentation for figures in LOF
+\addtocontents{lof}{{\protect\vspace{10pt}}}  % Add space before figures in LOF
+\addtocontents{lof}{\noindent\textbf{\hspace{0.25cm}}\textbf{Fig. No.}\hfill\textbf{Figure Name}\hfill\textbf{Page No.}\hspace{-1.2cm}}  % Add custom header in LOF
+\addtocontents{lof}{{\protect\vspace{5pt}}}  % Add space after the header
+
+% For List of Tables (LOT) - Adjust indentation and add custom headers
+\renewcommand{\cfttabaftersnum}{}  % Remove extra space after table number
+\setlength{\cfttabindent}{0.7cm}  % Indentation for tables in LOT
+\addtocontents{lot}{{\protect\vspace{10pt}}}  % Add space before tables in LOT
+\addtocontents{lot}{\noindent\textbf{\hspace{0.25cm}}\textbf{Table No.}\hfill\textbf{Table Name}\hfill\textbf{Page No.}\hspace{-1.2cm}}  % Add custom header in LOT
+\addtocontents{lot}{{\protect\vspace{5pt}}}  % Add space after the header
+
+\lstset{
+  basicstyle=\small\normalfont,
+  numbers=left,
+  numberstyle=\tiny,
+  breaklines=true,
+  showstringspaces=false
+}
+
+\newcolumntype{L}[1]{>{\justifying\parindent=0pt\arraybackslash\hspace{0pt}}p{#1}}
 
 \begin{document}
 
 \begin{titlepage}
     \thispagestyle{titlepagelayout}
     \centering
-    \vspace*{0.2cm}
-    {\large \textbf{VISVESVARAYA TECHNOLOGICAL UNIVERSITY}\\[0.2cm]
-    \large \textbf{``Jnana Sangama'', Belagavi - 590014, KARNATAKA, INDIA}}
+    \vspace*{0.5cm}
+    \large \textbf{\textcolor[HTML]{6F2C0C}{VISVESVARAYA TECHNOLOGICAL UNIVERSITY\\
+    “Jnana Sangama”, Belgaum-590014, KARNATAKA, INDIA}}
+    \vspace{0.5cm}
     
-    \vspace{0.6cm}
-    \includegraphics[height=0.15\textwidth]{images/vtu-logo copy.png}
+    \includegraphics[height=0.15\textwidth]{images/vtu-logo-copy.png}
+
+    \vspace{0.3cm}
+    \textbf{\textit{A Project Report on}}
+    \vspace{0.5cm}
     
-    \vspace{0.4cm}
-    \textit{\textbf{Project Phase I -BCS685}\\[0.1cm]}
-    \textit{\textbf{On}}
+    {\LARGE \textbf{\textcolor[HTML]{FF0000}{ACIS-X: Autonomous Credit Intelligence System}}}
+\vspace{0.5cm}
+
+\textit{Submitted in Partial fulfillment of the requirements for the award of the degree of \textbf{Bachelor of Engineering in Computer Science and Engineering} of Visvesvaraya Technological University, Belgaum.}
+    \vspace{0.5cm}
     
-    \vspace{0.4cm}
-    {\Large \textit{\textbf{ACIS-X: INTELLIGENT COLLECTIONS SYSTEM}}}
-    
-    \vspace{0.6cm}
-    \textit{Submitted in Partially fulfillment of the requirement for the award of degree \\Of\\[0.1cm]}
-    \textbf{Bachelor of Engineering In}\\[0.1cm]
-    \textbf{Computer Science \& Engineering}\\[0.1cm]
-    Of Visvesvaraya Technological University, Belgaum.
-    
-    \vspace{0.6cm}
-    Submitted by:\\[0.1cm]
-    \textcolor{red}{
-    \textbf{NITIN BHARADWAJ M V S: 1AM23CS125} \\
-    \textbf{NIKHIL NAGENDRA: 1AM23CS120} \\
-    \textbf{JOHAN K GEORGE: 1AM23CS075} \\
-    \textbf{PRASANNA ACHARYA: 1AM23CS149} \\
-    }
-    
-    \vspace{0.2cm}
+    {Submitted by:}\\
+    {\textcolor[HTML]{FF0000}{\textbf{NITIN BHARADWAJ M V S(1AM23CS125)}}}\\
+    {\textcolor[HTML]{FF0000}{\textbf{NIKHIL NAGENDRA(1AM23CS120)}}}\\
+    {\textcolor[HTML]{FF0000}{\textbf{JOHAN K GEORGE(1AM23CS075)}}}\\
+    {\textcolor[HTML]{FF0000}{\textbf{PRASANNA B ACHARYA(1AM23CS149)}}}\\
+    \vspace{1.0cm}
+
     Under the Guidance of:\\[0.1cm]
     \textbf{Ms. Pallavi K V}\\[0.1cm]
     Asst Professor, Dept. of CSE
     
     \vspace{0.6cm}
-    \includegraphics[height=0.12\textwidth]{images/AMC-LOGO.png}
+    \includegraphics[height=0.12\textwidth]{images/amc-logo.jpeg}
     
-    \vspace{0.6cm}
-    {\normalsize \textbf{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING AMC ENGINEERING COLLEGE}}\\[0.1cm]
-    18th K.M. Bannerghatta Main Road, Bengaluru – 560083 Year 2025-26
+    \vspace{1.0cm}
+    {\large \textbf{\textcolor[HTML]{6F2C0C}{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING AMC ENGINEERING COLLEGE\\[0.1cm]
+    18th K.M. Bannerghatta Main Road, Bengaluru – 560083 Year 2026-27}}}
     
 \end{titlepage}
 
@@ -153,58 +249,77 @@
 \setlength{\parindent}{0pt}
 
 \chapter*{AMC Engineering College}
+\thispagestyle{borderedpage}
 \addcontentsline{toc}{chapter}{Certificate}
 
 \singlespacing
 
 \begin{center}
-    Belagavi - 560083\\
-    \textbf{Department of Computer Science \& Engineering}\\
+    18th K.M, Bannerghatta Main Road, Bangalore-560083\\2025-2026\\
+    \textbf{Department of Computer Science and Engineering}\\
     \vspace{0.2cm}
-    \includegraphics[height=0.1\textwidth]{images/AMC-LOGO.png} \\[0.5cm]
+    \includegraphics[height=0.1\textwidth]{images/amc-logo.jpeg} \\[0.5cm]
     \large{\textbf{CERTIFICATE}}
 \end{center}
 
 \doublespacing
 
-Certified that the Project work entitled \textbf{``ACIS-X: AUTOMATED CREDIT CONTROL SYSTEM''} carried out by bonafide students \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)}, \textbf{JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA ACHARYA (1AM23CS149)} of AMC Engineering College, in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of Visvesvaraya Technological University, Belgaum during the year 2025-2026. It is certified that all corrections/suggestions indicated for internal assessment have been incorporated in the report. The Project report has been approved as it satisfies the academic requirements in respect of Project Work prescribed for the said Bachelor of Engineering degree.\\
+Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: Autonomous Credit Intelligence System''}} carried out by \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)},\textbf{ JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA B ACHARYA (1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belgaum during the year 2026-27. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
 
 \vspace{1.5cm}
 \noindent
 \begin{minipage}[t]{0.32\textwidth}
     \singlespacing
     \centering
-    \textbf{Project Guide\\[0.3cm]Ms. Pallavi K V,\\Assistant Professor,\\Dept. of CSE}
+    \rule{0.8\linewidth}{0.4pt}\\
+    \textbf{Project Guide\\Ms. Pallavi K V,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}
 \end{minipage}
 \hfill
 \begin{minipage}[t]{0.32\textwidth}
     \singlespacing
     \centering
-    \textbf{HOD\\[0.3cm]Dr. V. Mareeswari,\\Prof. \& Head,\\Dept. of CSE}
+    \rule{0.8\linewidth}{0.4pt}\\
+    \textbf{HoD\\Dr. V. Mareeswari,\\Prof and Head,\\Dept. of CSE,\\AMCEC}
 \end{minipage}
 \hfill
 \begin{minipage}[t]{0.32\textwidth}
     \singlespacing
     \centering
-    \textbf{Principal\\[0.3cm]Dr. Yuvaraju B N,\\Principal,\\AMCEC}
+    \rule{0.8\linewidth}{0.4pt}\\
+    \textbf{Principal\\Dr. Yuvaraju B N,\\Principal,\\AMCEC}
 \end{minipage}
 
-\vspace{1.0cm}
-\textbf{External Viva}\\[0.2cm]
-\textbf{External Name} \hspace{7cm} \textbf{Signature with Date}\\
-1. \\
-2. 
+\vspace{0.8cm}
+
+\begin{center}
+    {\textbf{External Viva}}
+\end{center}
+
+\begin{minipage}[t]{0.32\textwidth}
+    \centering  
+    \textbf{External Name}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.32\textwidth}
+    \centering 
+    \textbf{Sign with Date}
+\end{minipage}
+\vspace{0.5cm}
+
+\noindent 1.\\
+\noindent 2.
 
 \titlespacing*{\chapter}{0pt}{20pt}{10pt}
 \setlength{\parindent}{0pt}
 \doublespacing
 
 \chapter*{DECLARATION}
+\thispagestyle{borderedpage}
 \addcontentsline{toc}{chapter}{Declaration}
 
 \doublespacing
 
-We the undersigned students of 8th semester Department of Computer Science \& Engineering, AMC Engineering College, declare that our project work entitled \textbf{``ACIS-X: INTELLIGENT COLLECTIONS SYSTEM''} is a bonafide work of ours. Our project is neither a copy nor by means a modification of any other engineering project. We also declare that this project was not entitled for submission to any other university in the past and shall remain the only submission made and will not be submitted by us to any other university in the future.\\
+We the undersigned students of 6th semester Department of Computer Science \& Engineering, AMC Engineering College, declare that our project work entitled \textbf{``ACIS-X: Autonomous Credit Intelligence System''} is a bonafide work of ours. Our project is neither a copy nor by means a modification of any other engineering project. We also declare that this project was not entitled for submission to any other university in the past and shall remain the only submission made and will not be submitted by us to any other university in the future.\\
 
 \vspace{1.5cm}
 \begin{table}[H]
@@ -215,13 +330,14 @@ We the undersigned students of 8th semester Department of Computer Science \& En
         NITIN BHARADWAJ M V S & 1AM23CS125 & \\
         NIKHIL NAGENDRA & 1AM23CS120 & \\
         JOHAN K GEORGE & 1AM23CS075 & \\
-        PRASANNA ACHARYA & 1AM23CS149 & \\
+        PRASANNA B ACHARYA & 1AM23CS149 & \\
     \end{tabular*}
 \end{table}
 
 \pagebreak
 
 \chapter*{ACKNOWLEDGEMENT}
+\thispagestyle{borderedpage}
 \addcontentsline{toc}{chapter}{Acknowledgement}
 
 \doublespacing
@@ -230,9 +346,9 @@ First and fore most we would like to thank GOD, the Almighty for being so mercif
 
 We have a great pleasure in expressing our deep sense of gratitude to founder \textbf{Chairman Dr. K.R. Paramahamsa} and Executive Vice President \textbf{Mr. Rahul Kalluri} for having provided us with a great infrastructure and well-furnished labs for successful completion of our Project.
 
-We express our special thanks and gratitude to our Academic advisor \textbf{Dr. Nagaraja R} for providing us all the necessary advice for successful completion of our project.
-
 We express our sincere thanks and gratitude to our Principal \textbf{Dr. Yuvaraju B N} for providing us all the necessary support successful completion of our project.
+
+We express our special thanks and gratitude to our Academic advisor \textbf{Dr. Nagaraja R} for providing us all the necessary advice for successful completion of our project.
 
 We would like to extend our special thanks to \textbf{Dr. V. Mareeswari} Professor and HOD, Department of CSE, for her support and encouragement and suggestions given to us in the course of our project work.
 
@@ -242,15 +358,20 @@ We are grateful to our guide \textbf{Ms. Pallavi K V} Asst. Prof., Department of
 
 Last but not the least, we wish to thank all the teaching \& non-teaching staffs of department of Computer Science and Engineering, for their support, patience and endurance shown during the preparation of this project report.\\
 
-\vspace{1.5cm}
+\vspace{1cm}
 
-\textbf{JOHAN GEORGE}\\
-\textbf{YOUR-USN}
+{\raggedleft 
+\textbf{NITIN BHARADWAJ M V S (1AM23CS125)}\\
+\textbf{NIKHIL NAGENDRA (1AM23CS120)}\\
+\textbf{JOHAN K GEORGE (1AM23CS075)}\\
+\textbf{PRASANNA B ACHARYA (1AM23CS149)} 
+\par}
 
 
 \pagebreak
 
 \chapter*{ABSTRACT}
+\thispagestyle{borderedpage}
 \addcontentsline{toc}{chapter}{Abstract}
 
 \doublespacing
@@ -265,34 +386,41 @@ The Intelligent Collections System (ACIS-X) represents a modern, data-driven app
 
 
 \tableofcontents
+\thispagestyle{titlepagelayout}
 \newpage
 
 
 {
+\makeatletter
+\renewcommand*{\addvspace}[1]{}
+\makeatother
 \newgeometry{right=3.5cm, top=2.455cm}
 \doublespacing
 \listoffigures
+\thispagestyle{titlepagelayout}
 \newpage
 \doublespacing
 \listoftables
+\thispagestyle{titlepagelayout}
 \newpage
 \restoregeometry
 }
 
-\frontborderpagefalse
 \pagenumbering{arabic}
+\setcounter{page}{1}
+
+\makeatletter
+\let\ps@plain\ps@plainorig
+\makeatother
+
 \pagestyle{plain}
-\onehalfspacing
-\setlength{\parindent}{0.5in}
-\titlespacing*{\chapter}{0pt}{-30pt}{22pt}
-\titlespacing*{\section}{0pt}{14pt}{8pt}
-\titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
+\titlespacing*{\chapter}{0pt}{-30pt}{5pt}
+\setlength{\parindent}{32pt}
+\setlist{topsep=0pt}
 
-
+% Chapter 1
 \chapter{Introduction}
-
-\thispagestyle{titlepagelayout}
 
 
 \section{Overview}
@@ -311,8 +439,6 @@ At the system level, ACIS-X combines:
 From an analytical perspective, the platform transforms a basic receivables pipeline into a feedback-driven decision system. Invoice and payment updates trigger metric recomputation; metrics trigger enrichment and predictive logic; risk outputs trigger policy and collections actions; and all stages emit telemetry for health and recovery decisions. This produces a closed-loop workflow that is continuously updated as new events arrive.
 
 A key design characteristic of ACIS-X is role separation among agents. Context-building components, such as customer profile and enrichment agents, gather and organize information, while decision-authority components, such as risk scoring and collections agents, publish final actionable outcomes. This separation improves maintainability, traceability, and operational clarity.
-
-Overall, ACIS-X is positioned as a production-oriented intelligent collections framework intended to improve timeliness of receivables decisions, strengthen risk visibility, and reduce manual coordination overhead in credit-control operations.
 
 \section{Objectives}
 The project objectives of ACIS-X are to build a reliable and extensible platform for intelligent receivables operations with real-time risk awareness and actionable outcomes. The primary objectives are:
@@ -351,16 +477,7 @@ The project objectives of ACIS-X are to build a reliable and extensible platform
 \subsection{Purpose}
 The purpose of ACIS-X is to provide a technically grounded and operationally practical framework for proactive collections intelligence. Rather than reacting after receivables have materially aged, the system is designed to surface emerging risk earlier, link that risk to customer and invoice context, and trigger consistent action paths through policy and collections workflows.
 
-This purpose is achieved through a layered architecture where each agent contributes a well-defined transformation:
-\begin{itemize}[itemsep=2pt]
-    \item raw financial events are converted into behavior metrics,
-    \item behavior metrics are enriched with external context,
-    \item enriched context is converted into aggregate and invoice-level risk outputs,
-    \item risk outputs are converted into collections actions,
-    \item platform telemetry is converted into operational recovery decisions.
-\end{itemize}
-
-As a result, ACIS-X is not only a data-processing system but also a decision-support and execution pipeline for receivables risk management.
+This purpose is achieved through a layered architecture where each agent contributes a well-defined transformation. As a result, ACIS-X acts as both a data-processing system and an execution pipeline for receivables risk management.
 
 \subsection{Scope}
 The current implementation scope of ACIS-X includes end-to-end event orchestration for intelligent collections with the following technical boundaries and capabilities:
@@ -422,10 +539,13 @@ This report follows the same major structural pattern used in the reference proj
     \item \textbf{Chapter 4: Project Planning}  
     Describes planning assumptions, execution phases, validation milestones, and development scheduling model used for ACIS-X progression.
     
-    \item \textbf{Chapter 5: Implementation}  
+    \item \textbf{Chapter 5: System Design}  
+    Outlines the architectural patterns, component interactions, and data flow mechanisms that form the foundation of the event-driven collections platform.
+    
+    \item \textbf{Chapter 6: Implementation}  
     Details the implementation of runtime orchestration, agent responsibilities, topic-level data flow, persistence design, and policy/action logic.
     
-    \item \textbf{Chapter 6: Results and Discussion}  
+    \item \textbf{Chapter 7: Results and Discussion}  
     Discusses observed system behavior, architectural outcomes, testing posture, operational strengths, limitations, and practical implications.
     
     \item \textbf{Bibliography}  
@@ -736,19 +856,7 @@ Under this design, ACIS-X provides four concrete advantages relative to fragment
     \item \textbf{Governance readiness:} reason-coded outputs and structured event histories support audit and improvement cycles.
 \end{itemize}
 
-Beyond these advantages, the architecture supports continuous learning from outcomes. As interventions succeed or fail, feedback events can be incorporated into periodic model and policy updates, closing the loop between analytics and operational execution.
-
-An indicative closed-loop operating cycle for ACIS-X is:
-\begin{enumerate}[itemsep=2pt]
-    \item ingest and normalize events,
-    \item update account state and compute features,
-    \item generate risk and policy-informed decisions,
-    \item execute prioritized actions,
-    \item capture outcome and process telemetry,
-    \item recalibrate models and thresholds on governed cadence.
-\end{enumerate}
-
-This cycle ensures that the system remains adaptive under changing behavior patterns while preserving explainability and operational control.
+Beyond these advantages, the architecture supports continuous learning from outcomes, closing the loop between analytics and operational execution. This ensures the system remains adaptive under changing behavior patterns while preserving explainability.
 
 \chapter{REQUIREMENT ENGINEERING}
 
@@ -977,11 +1085,11 @@ The schedule in Table~\ref{tab:acis_project_schedule} outlines the planned timel
     \hline
     Phase 1 & Week 3 & Core backend pipeline refinement, table/LaTeX stabilization, chapter updates. & Completed \\
     \hline
-    Phase 2 & Week 4 & Frontend planning finalization, UI wireframe selection, API binding contracts. & In Progress \\
+    Phase 2 & Week 4 & Frontend planning finalization, UI wireframe selection, API binding contracts. & Completed \\
     \hline
-    Phase 2 & Week 5 & Frontend implementation (dashboards, risk/action views, status panels). & Pending \\
+    Phase 2 & Week 5 & Frontend implementation (dashboards, risk/action views, status panels). & In Progress \\
     \hline
-    Phase 3 & Week 6 & End-to-end integration: frontend with event and persistence outputs. & Pending \\
+    Phase 3 & Week 6 & End-to-end integration: frontend with event and persistence outputs. & In Progress \\
     \hline
     Phase 3 & Week 7 & System validation, performance checks, bug fixes, UX improvements. & Pending \\
     \hline
@@ -1246,6 +1354,14 @@ The collections action algorithm converts final risk output into an operational 
     \item Apply duplicate prevention and cooldown rules to avoid repeated action for the same customer or invoice.
     \item Persist the collections action and publish it for dashboard visibility.
     \item Monitor agent heartbeats, topic lag, failed events, and runtime errors.
+    \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
+\end{enumerate}
+
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+\end{document}
+gent heartbeats, topic lag, failed events, and runtime errors.
     \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
 \end{enumerate}
 
