@@ -6,7 +6,7 @@
 \usepackage{setspace}
 \usepackage{titlesec}
 \usepackage{graphicx}
-\usepackage[labelfont=bf, textfont=normalfont, singlelinecheck=false, justification=justified]{caption}
+\usepackage[labelfont=bf, textfont=normalfont, justification=centering]{caption}
 \usepackage{fancyhdr}
 \usepackage{indentfirst} 
 \usepackage[x11names]{xcolor}
@@ -16,6 +16,7 @@
 \usepackage{etoolbox}
 \usepackage{amsmath}
 \usepackage{newtxtext,newtxmath}
+\renewcommand{\ttdefault}{cmtt}
 \usepackage[colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black]{hyperref}
 \usepackage[numbers]{natbib}
 \usepackage{float}
@@ -44,8 +45,8 @@
 \captionsetup[table]{font=small, labelsep=space, position=top}
 \captionsetup[figure]{font=small, labelsep=space}
 \titlespacing*{\chapter}{0pt}{-50pt}{20pt}
-\titlespacing*{\section}{0pt}{0pt}{0pt}
-\titlespacing*{\subsection}{0pt}{0pt}{0pt}
+\titlespacing*{\section}{0pt}{24pt}{12pt}
+\titlespacing*{\subsection}{0pt}{18pt}{6pt}
 \setlength{\headheight}{0pt}
 \setlength{\headsep}{15pt}
 \setlength{\parindent}{50pt}
@@ -76,17 +77,23 @@
 \renewcommand{\cftchapfont}{\normalfont\bfseries}
 
 % Define a custom color for page borders
-\definecolor{myhexcolor}{HTML}{5B200C}  % Define a custom color using its hex code
+\definecolor{myhexcolor}{HTML}{6F2C0C}  % Define a custom color using its hex code
 
 % Command to draw a page border around the document
 \newcommand\PageBorder{%
 \begin{tikzpicture}[remember picture, overlay]
-    \draw[line width=2pt, color=black]
+    \draw[line width=2pt, color=myhexcolor]
         ([shift={(0.5in,-0.5in)}]current page.north west) --
         ([shift={(-0.5in,-0.5in)}]current page.north east) --
         ([shift={(-0.5in,0.5in)}]current page.south east) --
         ([shift={(0.5in,0.5in)}]current page.south west) --
         cycle;  % Draw an outer border
+    \draw[line width=0.5pt, color=myhexcolor]
+        ([shift={(0.55in,-0.55in)}]current page.north west) --
+        ([shift={(-0.55in,-0.55in)}]current page.north east) --
+        ([shift={(-0.55in,0.55in)}]current page.south east) --
+        ([shift={(0.55in,0.55in)}]current page.south west) --
+        cycle;  % Draw an inner thin border
 \end{tikzpicture}
 }
 
@@ -103,7 +110,7 @@
   \fancyhf{}  % Clear existing header/footer
   \fancyhead[R]{{ACIS-X: Autonomous Credit Intelligence System}}  % Custom header
   \fancyfoot[L]{Dept. of CSE, AMCEC}  % Footer on the left
-  \fancyfoot[C]{2026-27}  % Footer in the center
+  \fancyfoot[C]{2025-26}  % Footer in the center
   \fancyfoot[R]{\thepage}  % Footer on the right with page number
   \renewcommand{\headrulewidth}{2pt}  % Header line width
   \renewcommand{\footrulewidth}{2pt}  % Footer line width
@@ -202,7 +209,7 @@
     \centering
     \vspace*{0.5cm}
     \large \textbf{\textcolor[HTML]{6F2C0C}{VISVESVARAYA TECHNOLOGICAL UNIVERSITY\\
-    “Jnana Sangama”, Belgaum-590014, KARNATAKA, INDIA}}
+    “Jnana Sangama”, Belagavi-590014, KARNATAKA, INDIA}}
     \vspace{0.5cm}
     
     \includegraphics[height=0.15\textwidth]{images/vtu-logo-copy.png}
@@ -214,7 +221,7 @@
     {\LARGE \textbf{\textcolor[HTML]{FF0000}{ACIS-X: Autonomous Credit Intelligence System}}}
 \vspace{0.5cm}
 
-\textit{Submitted in Partial fulfillment of the requirements for the award of the degree of \textbf{Bachelor of Engineering in Computer Science and Engineering} of Visvesvaraya Technological University, Belgaum.}
+\textit{Submitted in Partial fulfillment of the requirements for the award of the degree of \textbf{Bachelor of Engineering in Computer Science and Engineering} of Visvesvaraya Technological University, Belagavi.}
     \vspace{0.5cm}
     
     {Submitted by:}\\
@@ -225,7 +232,7 @@
     \vspace{1.0cm}
 
     Under the Guidance of:\\[0.1cm]
-    \textbf{Ms. Pallavi K V}\\[0.1cm]
+    \textbf{Prof. Pallavi K V}\\[0.1cm]
     Asst Professor, Dept. of CSE
     
     \vspace{0.6cm}
@@ -233,7 +240,7 @@
     
     \vspace{1.0cm}
     {\large \textbf{\textcolor[HTML]{6F2C0C}{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING AMC ENGINEERING COLLEGE\\[0.1cm]
-    18th K.M. Bannerghatta Main Road, Bengaluru – 560083 Year 2026-27}}}
+    18th K.M. Bannerghatta Main Road,\\[0.1cm] Bengaluru – 560083\\[0.1cm] Year 2025-26}}}
     
 \end{titlepage}
 
@@ -255,7 +262,7 @@
 \singlespacing
 
 \begin{center}
-    18th K.M, Bannerghatta Main Road, Bangalore-560083\\2025-2026\\
+    18th K.M, Bannerghatta Main Road, Bangalore-560083\\2025-26\\
     \textbf{Department of Computer Science and Engineering}\\
     \vspace{0.2cm}
     \includegraphics[height=0.1\textwidth]{images/amc-logo.jpeg} \\[0.5cm]
@@ -264,7 +271,7 @@
 
 \doublespacing
 
-Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: Autonomous Credit Intelligence System''}} carried out by \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)},\textbf{ JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA B ACHARYA (1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belgaum during the year 2026-27. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
+Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: Autonomous Credit Intelligence System''}} carried out by \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)},\textbf{ JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA B ACHARYA (1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belagavi during the year 2025-26. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
 
 \vspace{1.5cm}
 \noindent
@@ -272,7 +279,7 @@ Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``AC
     \singlespacing
     \centering
     \rule{0.8\linewidth}{0.4pt}\\
-    \textbf{Project Guide\\Ms. Pallavi K V,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}
+    \textbf{Project Guide\\Prof. Pallavi K V,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}
 \end{minipage}
 \hfill
 \begin{minipage}[t]{0.32\textwidth}
@@ -324,14 +331,15 @@ We the undersigned students of 6th semester Department of Computer Science \& En
 \vspace{1.5cm}
 \begin{table}[H]
     \centering
-    \renewcommand{\arraystretch}{2}
-    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll}
+    \renewcommand{\arraystretch}{1.3}
+    \setlength{\tabcolsep}{20pt} % Increases space between columns
+    \begin{tabular}{ccc}
         \textbf{Name} & \textbf{USN} & \textbf{Signature} \\[0.5cm]
-        NITIN BHARADWAJ M V S & 1AM23CS125 & \\
-        NIKHIL NAGENDRA & 1AM23CS120 & \\
-        JOHAN K GEORGE & 1AM23CS075 & \\
-        PRASANNA B ACHARYA & 1AM23CS149 & \\
-    \end{tabular*}
+        \textbf{NITIN BHARADWAJ M V S} & \textbf{1AM23CS125} & \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \\
+        \textbf{NIKHIL NAGENDRA} & \textbf{1AM23CS120} & \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \\
+        \textbf{JOHAN K GEORGE} & \textbf{1AM23CS075} & \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \\
+        \textbf{PRASANNA B ACHARYA} & \textbf{1AM23CS149} & \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \\
+    \end{tabular}
 \end{table}
 
 \pagebreak
@@ -354,7 +362,7 @@ We would like to extend our special thanks to \textbf{Dr. V. Mareeswari} Profess
 
 We would like to extend our special thanks to Project coordinators \textbf{Prof. Velvizhi Ramya R} and \textbf{Prof Snigdha Kesh}, Department of CSE, for their support and encouragement and suggestions given to us in the course of our project work.
 
-We are grateful to our guide \textbf{Ms. Pallavi K V} Asst. Prof., Department of CSE, AMC Engineering College, Bengaluru for her constant motivation \& timely help, encouragement and suggestion.
+We are grateful to our guide \textbf{Prof. Pallavi K V} Asst. Prof., Department of CSE, AMC Engineering College, Bengaluru for her constant motivation \& timely help, encouragement and suggestion.
 
 Last but not the least, we wish to thank all the teaching \& non-teaching staffs of department of Computer Science and Engineering, for their support, patience and endurance shown during the preparation of this project report.\\
 
@@ -874,7 +882,7 @@ Primary evidence inputs for this chapter include:
 \section{Software and Hardware Tools Used}
 
 \subsection{Software Requirements}
-ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for persistence, and pytest for verification. The selected tools prioritize fast iteration, explicit event contracts, and practical production transition.
+ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for persistence, and pytest for verification. The selected tools prioritize fast iteration, explicit event contracts, and practical production transition. Table \ref{tab:acis_software_tools} maps the software tools required for building the platform.
 
 \begin{longtable}{|L{0.40\textwidth}|L{0.50\textwidth}|}
     \caption{Software Requirements}\label{tab:acis_software_tools} \\
@@ -893,7 +901,7 @@ ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for pe
 \end{longtable}
 
 \subsection{Hardware Requirements}
-The current ACIS-X implementation supports local and production-like deployment using lightweight infrastructure. Since the system is event-driven and includes external enrichment calls, the hardware baseline must satisfy both message-processing throughput and stable I/O for persistence and logging.
+The current ACIS-X implementation supports local and production-like deployment using lightweight infrastructure. Table \ref{tab:acis_hardware_tools} maps the minimum and recommended hardware specifications.
 
 \begin{longtable}{|L{0.40\textwidth}|L{0.50\textwidth}|}
     \caption{Hardware Requirements}\label{tab:acis_hardware_tools} \\
@@ -912,17 +920,21 @@ The baseline above is aligned with stated system targets in deployment documenta
 \section{Conceptual/Analysis Modeling}
 
 \subsection{Use Case Diagram}
-The Use Case diagram identifies the primary actors (such as event producers, the orchestration runtime, external enrichment services, and collections managers) interacting with the core usage scenarios of the system.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{images/use-case-diag.png}
+    \includegraphics[width=0.6\textwidth]{images/use-case-diag.png}
     \caption{Use case diagram for ACIS-X}
     \label{fig:use_case}
 \end{figure}
 
+Fig \ref{fig:use_case} maps the interactions between various actors and the ACIS-X system during normal operational scenarios.
+
+The Use Case diagram identifies the primary actors (such as event producers, the orchestration runtime, external enrichment services, and collections managers) interacting with the core usage scenarios of the system.
+
 \subsection{Sequence Diagram}
-The Sequence Diagram visualizes the asynchronous, topic-based communication flowing between dedicated agents (e.g., ScenarioGenerator, ExternalData, RiskScoring) and their centralized exchange via the Kafka Event Bus.
+
+The Sequence Diagram visualizes the asynchronous, topic-based communication flowing between dedicated agents (e.g., ScenarioGenerator, ExternalData, RiskScoring) and their centralized exchange via the Kafka Event Bus. Fig \ref{fig:sequence_diagram} maps the temporal message exchanges between these agents.
 
 \begin{figure}[H]
     \centering
@@ -931,18 +943,20 @@ The Sequence Diagram visualizes the asynchronous, topic-based communication flow
     \label{fig:sequence_diagram}
 \end{figure}
 
+\vspace{32em}
+
 \subsection{Activity Diagram}
-The Activity Diagram details the step-by-step workflow for the data processing pipeline starting from raw invoice ingestion, progressing to metrics computation and enrichment, and culminating in collections escalations.
+The Activity Diagram details the step-by-step workflow for the data processing pipeline starting from raw invoice ingestion, progressing to metrics computation and enrichment, and culminating in collections escalations. Fig \ref{fig:activity_diagram} maps the sequence of activities that form the core decision pipeline.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.45\textwidth]{images/activity-diag.png}
+    \includegraphics[width=0.4\textwidth]{images/activity-diag.png}
     \caption{Activity diagram mapping out the decision pipeline}
     \label{fig:activity_diagram}
 \end{figure}
 
 \subsection{State Chart Diagram}
-The State Chart Diagram maps the lifecycle of an account's state within ACIS-X, transitioning between normal operations, an early warning status during overdue detection, and a high-risk state triggering immediate policy/collections interventions.
+The State Chart Diagram maps the lifecycle of an account's state within ACIS-X, transitioning between normal operations, an early warning status during overdue detection, and a high-risk state triggering immediate policy/collections interventions. Fig \ref{fig:state_chart} maps the valid state transitions an account can undergo.
 
 \begin{figure}[H]
     \centering
@@ -950,6 +964,7 @@ The State Chart Diagram maps the lifecycle of an account's state within ACIS-X, 
     \caption{State chart diagram specifying account state transitions}
     \label{fig:state_chart}
 \end{figure}
+
 
 \section{Software Requirement Specification}
 The Software Requirement Specification (SRS) defines what ACIS-X must do and how well it must do it under realistic operational conditions. Requirements are grouped into functional, non-functional, interface/data, and governance-oriented validation requirements.
@@ -1055,45 +1070,45 @@ Project planning is a critical phase for ACIS-X because the system combines even
 \subsection{Scheduling}
 Scheduling for ACIS-X is based on an 8-week execution window, with approximately the first 3 weeks already completed. The schedule emphasizes backend-first completion, then frontend implementation, integration, and final validation/documentation.
 
-The schedule in Table~\ref{tab:acis_project_schedule} outlines the planned timeline and current progress state.
+Table \ref{tab:acis_project_schedule} maps the planned timeline and current progress state over an 8-week period.
 
 \vspace{-4pt}
-\begin{longtable}{|L{0.12\textwidth}|L{0.16\textwidth}|L{0.50\textwidth}|L{0.14\textwidth}|}
+\begin{longtable}{|L{0.18\textwidth}|L{0.60\textwidth}|L{0.14\textwidth}|}
     \caption{ACIS-X Project Schedule (8-Week Plan)}\label{tab:acis_project_schedule} \\
 
     \hline
-    \textbf{Phase} & \textbf{Week} & \textbf{Task} & \textbf{Status} \\
+    \textbf{Week} & \textbf{Task} & \textbf{Status} \\
     \hline
     \endfirsthead
 
-    \multicolumn{4}{c}%
+    \multicolumn{3}{c}%
     {\tablename\ \thetable\: \textit{Continued from previous page}} \\
     \hline
-    \textbf{Phase} & \textbf{Week} & \textbf{Task} & \textbf{Status} \\
+    \textbf{Week} & \textbf{Task} & \textbf{Status} \\
     \hline
     \endhead
 
-    \hline \multicolumn{4}{r}{\textit{Continued on next page}} \\
+    \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
     \endfoot
 
     \hline
     \endlastfoot
 
-    Phase 1 & Week 1 & Literature alignment, architecture review, scope definition, environment setup. & Completed \\
+    Week 1 & Literature alignment, architecture review, scope definition, environment setup. & Completed \\
     \hline
-    Phase 1 & Week 2 & Requirement engineering draft, chapter structuring, runtime/dependency mapping. & Completed \\
+    Week 2 & Requirement engineering draft, chapter structuring, runtime/dependency mapping. & Completed \\
     \hline
-    Phase 1 & Week 3 & Core backend pipeline refinement, table/LaTeX stabilization, chapter updates. & Completed \\
+    Week 3 & Core backend pipeline refinement, table/LaTeX stabilization, chapter updates. & Completed \\
     \hline
-    Phase 2 & Week 4 & Frontend planning finalization, UI wireframe selection, API binding contracts. & Completed \\
+    Week 4 & Frontend planning finalization, UI wireframe selection, API binding contracts. & Completed \\
     \hline
-    Phase 2 & Week 5 & Frontend implementation (dashboards, risk/action views, status panels). & In Progress \\
+    Week 5 & Frontend implementation (dashboards, risk/action views, status panels). & In Progress \\
     \hline
-    Phase 3 & Week 6 & End-to-end integration: frontend with event and persistence outputs. & In Progress \\
+    Week 6 & End-to-end integration: frontend with event and persistence outputs. & In Progress \\
     \hline
-    Phase 3 & Week 7 & System validation, performance checks, bug fixes, UX improvements. & Pending \\
+    Week 7 & System validation, performance checks, bug fixes, UX improvements. & Pending \\
     \hline
-    Phase 4 & Week 8 & Final report polishing, consolidated testing evidence, final submission prep. & Pending \\
+    Week 8 & Final report polishing, consolidated testing evidence, final submission prep. & Pending \\
 \end{longtable}
 
 \chapter{SYSTEM DESIGN}
@@ -1110,7 +1125,7 @@ At the center of the architecture is a Kafka-based event backbone. Each major bu
     \label{fig:system_architecture}
 \end{figure}
 
-As shown in Fig~\ref{fig:system_architecture}, ACIS-X consists of five major architectural layers. The input layer provides customer, invoice, payment, and external source information. The event bus layer routes this information through Kafka topics. The agent layer performs state computation, enrichment, aggregation, prediction, risk scoring, and collections actioning. The storage and query layer persists events and derived records using SQLite, while QueryAgent and MemoryAgent provide structured access to state. The user and operations layer exposes the processed outputs through the FastAPI backend-for-frontend, React dashboard, monitoring services, registry services, and self-healing runtime modules.
+Fig \ref{fig:system_architecture} maps the five major architectural layers of ACIS-X. The input layer provides customer, invoice, payment, and external source information. The event bus layer routes this information through Kafka topics. The agent layer performs state computation, enrichment, aggregation, prediction, risk scoring, and collections actioning. The storage and query layer persists events and derived records using SQLite, while QueryAgent and MemoryAgent provide structured access to state. The user and operations layer exposes the processed outputs through the FastAPI backend-for-frontend, React dashboard, monitoring services, registry services, and self-healing runtime modules.
 
 The architecture is intentionally modular. Business agents focus on receivables intelligence, while runtime agents focus on operational reliability. This separation ensures that failures in monitoring, recovery, or placement logic do not directly alter the business decision rules, and business logic can evolve without rewriting the runtime orchestration layer.
 
@@ -1124,9 +1139,9 @@ The component design of ACIS-X decomposes the platform into specialized agents a
     \label{fig:component_design}
 \end{figure}
 
-Fig~\ref{fig:component_design} shows the main functional modules of the system. ScenarioGeneratorAgent produces simulated operational events. CustomerStateAgent converts invoice and payment behavior into customer metrics. ExternalDataAgent and ExternalScrapingAgent enrich customer context with external signals. AggregatorAgent combines internal and external evidence into a broader customer profile. PaymentPredictionAgent estimates payment risk for open invoices, and RiskScoringAgent converts prediction and context into final risk decisions. CollectionsAgent uses those decisions to recommend appropriate collections actions.
+Fig \ref{fig:component_design} maps the main functional modules and internal components of the system. ScenarioGeneratorAgent produces simulated operational events. CustomerStateAgent converts invoice and payment behavior into customer metrics. ExternalDataAgent and ExternalScrapingAgent enrich customer context with external signals. AggregatorAgent combines internal and external evidence into a broader customer profile. PaymentPredictionAgent estimates payment risk for open invoices, and RiskScoringAgent converts prediction and context into final risk decisions. CollectionsAgent uses those decisions to recommend appropriate collections actions.
 
-The persistence and query components support the business agents. DBAgent stores events, customer records, invoices, payments, metrics, risk profiles, and collections actions. QueryAgent responds to structured read requests, while MemoryAgent maintains fast runtime context for frequently used customer state. Operational components such as RegistryService, RuntimeManager, MonitoringAgent, PlacementEngine, SelfHealingAgent, and DLQMonitorAgent supervise agent health, recovery, placement, and failed-event handling.
+The persistence and query components support the business agents. DBAgent stores events, customer records, invoices, payments, metrics, risk profiles, and collections actions. QueryAgent responds to structured read requests, while MemoryAgent maintains fast runtime context for frequently used customer state. Operational components such as RegistryService, RuntimeManager, MonitoringAgent, PlacementEngine, SelfHealingAgent, and DLQMonitorAgent supervise agent health, recovery, placement, and failed-event handling. Table \ref{tab:acis_components} maps the responsibilities, inputs, and outputs of these core components.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.23\textwidth}|L{0.33\textwidth}|L{0.20\textwidth}|L{0.16\textwidth}|}
@@ -1180,7 +1195,7 @@ The persistence and query components support the business agents. DBAgent stores
 \end{longtable}
 
 \section{Interface Design}
-The interface design of ACIS-X defines how agents, storage, external sources, and the user-facing dashboard communicate with each other. Since the system is event-driven, most internal interfaces are asynchronous Kafka topics. Each topic represents a specific type of event and allows producers and consumers to remain loosely coupled.
+The interface design of ACIS-X defines how agents, storage, external sources, and the user-facing dashboard communicate with each other. Since the system is event-driven, most internal interfaces are asynchronous Kafka topics. Each topic represents a specific type of event and allows producers and consumers to remain loosely coupled. Fig \ref{fig:interface_design} maps the external and internal interfaces of the system.
 
 \begin{figure}[H]
     \centering
@@ -1189,9 +1204,9 @@ The interface design of ACIS-X defines how agents, storage, external sources, an
     \label{fig:interface_design}
 \end{figure}
 
-As represented in Fig~\ref{fig:interface_design}, ACIS-X uses four primary interface categories. Internal interfaces connect agents through Kafka topics. External interfaces allow enrichment agents to access financial, litigation, news, or company-related data. Persistence interfaces connect DBAgent and QueryAgent with the SQLite database. User-facing interfaces expose risk profiles, collections actions, metrics, and runtime status through the FastAPI backend and React dashboard.
+ACIS-X uses four primary interface categories. Internal interfaces connect agents through Kafka topics. External interfaces allow enrichment agents to access financial, litigation, news, or company-related data. Persistence interfaces connect DBAgent and QueryAgent with the SQLite database. User-facing interfaces expose risk profiles, collections actions, metrics, and runtime status through the FastAPI backend and React dashboard.
 
-The topic interface is the most important internal communication mechanism. It allows the system to process events incrementally and supports future scaling by adding more producers or consumers without changing the entire architecture.
+The topic interface is the most important internal communication mechanism. It allows the system to process events incrementally and supports future scaling by adding more producers or consumers without changing the entire architecture. Table \ref{tab:kafka_topic_interfaces} maps the Kafka topics used for communication between various agents.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.22\textwidth}|L{0.23\textwidth}|L{0.25\textwidth}|L{0.22\textwidth}|}
@@ -1241,7 +1256,7 @@ The topic interface is the most important internal communication mechanism. It a
 \section{Data Structure Design}
 The data structure design of ACIS-X is centered on structured events and persistent domain records. Events are used for communication between agents, while database records are used for durable storage and later query. This separation allows the system to process live data in real time while still preserving historical evidence for audit, replay, and report generation.
 
-The event schema is designed to provide traceability. Each event contains an identifier, event type, source, timestamp, entity reference, and payload. Derived structures such as customer metrics, risk profiles, and collections actions include reason fields so downstream modules can explain how a decision was produced.
+The event schema is designed to provide traceability. Each event contains an identifier, event type, source, timestamp, entity reference, and payload. Derived structures such as customer metrics, risk profiles, and collections actions include reason fields so downstream modules can explain how a decision was produced. Table \ref{tab:acis_data_structures} maps the primary data structures used across the ACIS-X platform.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.28\textwidth}|L{0.62\textwidth}|}
@@ -1296,7 +1311,7 @@ Algorithm design in ACIS-X focuses on converting event streams into operational 
 \subsection{Event Ingestion and Persistence Algorithm}
 The event ingestion and persistence algorithm ensures that incoming business events are validated, stored, and made available to downstream agents.
 
-\begin{enumerate}[itemsep=2pt]
+\begin{itemize}[itemsep=2pt]
     \item Receive customer, invoice, payment, metric, risk, or collections event from the relevant Kafka topic.
     \item Validate the event structure, mandatory fields, event type, and entity reference.
     \item Check the event identifier to reduce duplicate processing during retries or replay.
@@ -1304,24 +1319,24 @@ The event ingestion and persistence algorithm ensures that incoming business eve
     \item Store the raw event and derived domain record through DBAgent.
     \item Publish or expose stored state for later access through QueryAgent and MemoryAgent.
     \item Route invalid or failed events to dead-letter handling for inspection and recovery.
-\end{enumerate}
+\end{itemize}
 
 \subsection{Customer Metrics Computation Algorithm}
 The customer metrics computation algorithm converts invoice and payment history into useful receivables indicators.
 
-\begin{enumerate}[itemsep=2pt]
+\begin{itemize}[itemsep=2pt]
     \item Consume invoice and payment events for a customer.
     \item Retrieve related invoice and payment history from local state or QueryAgent.
     \item Calculate outstanding balance, overdue balance, paid amount, and unpaid amount.
     \item Calculate behavioral features such as average payment delay, on-time payment ratio, and overdue frequency.
     \item Generate a customer metrics payload with computed values and timestamp.
     \item Publish the metrics event for aggregation, prediction, storage, and dashboard use.
-\end{enumerate}
+\end{itemize}
 
 \subsection{External Enrichment and Risk Aggregation Algorithm}
 The external enrichment and aggregation algorithm expands customer evaluation beyond internal payment behavior.
 
-\begin{enumerate}[itemsep=2pt]
+\begin{itemize}[itemsep=2pt]
     \item Identify customers requiring external enrichment using customer profile or metric events.
     \item Resolve the company or customer reference needed for external lookup.
     \item Collect financial, litigation, news, or web-based indicators through enrichment agents.
@@ -1329,12 +1344,12 @@ The external enrichment and aggregation algorithm expands customer evaluation be
     \item Combine internal receivables metrics and external risk indicators.
     \item Produce an aggregated customer risk profile with score, reasons, and evidence references.
     \item Publish the aggregated profile for prediction, risk scoring, persistence, and visualization.
-\end{enumerate}
+\end{itemize}
 
 \subsection{Payment Prediction and Final Risk Scoring Algorithm}
 The prediction and risk scoring algorithm determines the likelihood and severity of payment risk for customers and invoices.
 
-\begin{enumerate}[itemsep=2pt]
+\begin{itemize}[itemsep=2pt]
     \item Select active or open invoices that require risk evaluation.
     \item Read current customer metrics, invoice attributes, and aggregated external profile.
     \item Estimate payment delay or non-payment likelihood using available behavioral and contextual indicators.
@@ -1342,12 +1357,12 @@ The prediction and risk scoring algorithm determines the likelihood and severity
     \item Refine the prediction using business rules, risk thresholds, and customer-level context.
     \item Assign the final risk band, such as low, medium, high, or critical.
     \item Publish the final risk score event for collections actioning, storage, and dashboard display.
-\end{enumerate}
+\end{itemize}
 
 \subsection{Collections Action and Self-Healing Algorithm}
 The collections action algorithm converts final risk output into an operational recommendation, while the self-healing algorithm maintains runtime reliability.
 
-\begin{enumerate}[itemsep=2pt]
+\begin{itemize}[itemsep=2pt]
     \item Consume high-risk or updated risk-score events from the risk topic.
     \item Determine action severity using risk band, overdue amount, payment behavior, and policy conditions.
     \item Select the recommended collections action, such as reminder, follow-up, escalation, or manual review.
@@ -1355,15 +1370,160 @@ The collections action algorithm converts final risk output into an operational 
     \item Persist the collections action and publish it for dashboard visibility.
     \item Monitor agent heartbeats, topic lag, failed events, and runtime errors.
     \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
-\end{enumerate}
+\end{itemize}
 
-\bibliographystyle{ieeetr}
-\bibliography{references}
 
-\end{document}
-gent heartbeats, topic lag, failed events, and runtime errors.
-    \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
-\end{enumerate}
+\chapter*{MAJOR PROJECT Mapping with CO and PO}
+\addcontentsline{toc}{chapter}{MAJOR PROJECT Mapping with CO and PO}
+
+Table \ref{tab:co_statements} maps the course outcomes required for the major project.
+
+\begin{table}[H]
+    \centering
+    \caption{Course Outcomes (CO) Statements}\label{tab:co_statements}
+    \renewcommand{\arraystretch}{1.2}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|c|p{12cm}|}
+        \hline
+        \textbf{CO No.} & \textbf{Statement} \\
+        \hline
+        CO1 & To develop student's knowledge for solving technical problems \\
+        \hline
+        CO2 & To provide an opportunity to learn about new ideas and concepts \\
+        \hline
+        CO3 & To improve written and verbal communication skills. \\
+        \hline
+        CO4 & To Analyze, Design and Evaluate Engineering System \\
+        \hline
+        CO5 & To Develop the working products model or prototypes and applications with ethics \\
+        \hline
+        CO6 & To provide an opportunity to work in team \\
+        \hline
+    \end{tabular}
+    }
+\end{table}
+
+\vspace{0.5cm}
+\textbf{Strength of CO Mapping to PO/PSOs with Justification:}
+
+Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcomes and Program Outcomes.
+
+\vspace{0.5cm}
+
+\begin{table}[H]
+    \centering
+    \caption{CO-PO/PSO Mapping Matrix}\label{tab:co_po_matrix}
+    \renewcommand{\arraystretch}{1.3}
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
+        \hline
+        \textbf{COs} & \textbf{PO1} & \textbf{PO2} & \textbf{PO3} & \textbf{PO4} & \textbf{PO5} & \textbf{PO6} & \textbf{PO7} & \textbf{PO8} & \textbf{PO9} & \textbf{PO10} & \textbf{PO11} & \textbf{PSO1} & \textbf{PSO2} \\
+        \hline
+        CO1 & 3 & 2 & - & - & 2 & - & - & - & - & - & - & 2 & - \\
+        \hline
+        CO2 & 2 & 3 & - & 2 & 2 & - & - & - & - & - & - & 2 & - \\
+        \hline
+        CO3 & - & - & - & - & - & - & - & - & 3 & 3 & - & - & - \\
+        \hline
+        CO4 & 3 & 3 & 3 & 3 & 3 & - & - & - & - & - & - & 3 & 2 \\
+        \hline
+        CO5 & 3 & 2 & 3 & 2 & 3 & 2 & 1 & 2 & - & - & - & 3 & 2 \\
+        \hline
+        CO6 & - & - & - & - & - & - & - & - & 3 & 2 & - & - & - \\
+        \hline
+        \textbf{Average} & 2.75 & 2.5 & 3 & 2.3 & 2.5 & 2 & 1 & 2 & 3 & 2.5 & - & 2.5 & 2 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Table \ref{tab:co_po_justification} maps the justification for each mapping between Course Outcomes and Program Outcomes.
+
+\begin{table}[H]
+    \centering
+    \caption{Justification for CO-PO/PSO Mapping}\label{tab:co_po_justification}
+    \renewcommand{\arraystretch}{1.5}
+    \begin{tabular}{|c|c|p{10cm}|}
+        \hline
+        \textbf{CO} & \textbf{PO/PSO} & \textbf{Justification} \\
+        \hline
+        CO1 & PO1, PO5 & Applies engineering knowledge to define event-driven architecture, Kafka-based orchestration, and multi-agent system design as detailed in the Introduction and System Design chapters. \\
+        \hline
+        CO2 & PO2, PO4 & Analyzes existing credit-risk models and stream-processing frameworks in the Literature Survey, formulating risk-scoring and behavioral metric logic for the proposed solution. \\
+        \hline
+        CO3 & PO10 & Communicates system objectives, design rationale, and structured requirements through the report chapters, including the Introduction and Requirement Engineering documentation. \\
+        \hline
+        CO4 & PO3, PO5 & Designs and evaluates system architecture, component decomposition, interface contracts, data structures, and algorithm specifications as covered in the System Design chapter. \\
+        \hline
+        CO5 & PO6, PO8 & Addresses ethical considerations in automated collections and responsible handling of sensitive financial data, reflected in the proposed solution design and requirement constraints. \\
+        \hline
+        CO6 & PO9, PO10 & Collaborates within the project team through structured Project Planning, milestone scheduling, and coordinated requirement consolidation across all chapters. \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\vspace{1cm}
+\begin{center}
+\textbf{SDG -- Sustainable Development Goals mapping with project}
+\end{center}
+
+Table \ref{tab:sdg_mapping} maps the relevance of the project to the United Nations Sustainable Development Goals.
+
+\vspace{0.5cm}
+
+\begin{table}[H]
+    \centering
+    \caption{Sustainable Development Goals (SDG) Mapping}\label{tab:sdg_mapping}
+    \renewcommand{\arraystretch}{1.5}
+    \begin{tabular}{|c|p{4cm}|p{9cm}|}
+        \hline
+        \textbf{SDG No.} & \textbf{Goal} & \textbf{Relevance to Project} \\
+        \hline
+        SDG 8 & Decent Work and Economic Growth & Enhances business productivity and financial stability by optimizing accounts receivable and mitigating credit defaults. \\
+        \hline
+        SDG 9 & Industry, Innovation and Infrastructure & Utilizes distributed streaming, scalable microservices, and AI models to develop an innovative financial tracking infrastructure. \\
+        \hline
+        SDG 12 & Responsible Consumption and Production & Promotes responsible and transparent collection practices by avoiding blind outreach and utilizing targeted, risk-aware escalation. \\
+        \hline
+        SDG 4 & Quality Education & Helps in understanding complex topics such as event-driven architecture, data engineering, and applied AI through practical implementation. \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\chapter*{SWOT -- Strengths, Weaknesses, Opportunities, Threats of the project}
+\thispagestyle{plain}
+\addcontentsline{toc}{chapter}{SWOT Analysis}
+
+\textbf{Strengths}
+\begin{itemize}[itemsep=2pt]
+    \item Highly scalable and decoupled event-driven architecture using Apache Kafka.
+    \item Real-time computation of customer risk profiles and continuous longitudinal monitoring.
+    \item Seamless integration of internal metrics and external enrichment data (e.g., market/litigation signals).
+    \item Robust fault tolerance with explicit dead-letter queues and self-healing agent pipelines.
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Weaknesses}
+\begin{itemize}[itemsep=2pt]
+    \item High dependency on simulated scenarios during testing phases rather than direct live commercial ERP streams.
+    \item Cold start challenges where newly acquired business clients lack historical invoice depth for confident initial risk baselines.
+    \item Complex deployment architecture requiring careful orchestration across multiple interconnected heuristic nodes.
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Opportunities}
+\begin{itemize}[itemsep=2pt]
+    \item Native API integration into major enterprise ERP systems (SAP, Oracle, NetSuite) for direct data ingestion.
+    \item Expansion of the analytical layer to incorporate more sophisticated deep-learning architectures for dynamic payment prediction.
+    \item Autonomous triggering of external communication gateways (e.g., automated email, SMS reminders) based directly on policy thresholds.
+\end{itemize}
+
+\vspace{0.5cm}
+\textbf{Threats}
+\begin{itemize}[itemsep=2pt]
+    \item Strict data privacy laws and compliance regulations concerning the handling of external litigation and core financial data.
+    \item Structural API changes in external enrichment providers causing parsing degradation in the intelligence agents.
+    \item Heightened latency and message synchronization issues in constrained, unstable network environments.
+\end{itemize}
 
 \bibliographystyle{ieeetr}
 \bibliography{references}
