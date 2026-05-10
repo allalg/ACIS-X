@@ -52,6 +52,11 @@ class AggregatorAgent(BaseAgent):
     # Idempotency: keep last N processed event IDs to prevent re-processing
     MAX_PROCESSED_IDS = 10000
 
+    # Consumer auto_offset_reset for this agent type.
+    # "earliest" ensures AggregatorAgent replays all events after a restart so no
+    # external data events are missed.
+    OFFSET_RESET = "earliest"
+
     def __init__(self, kafka_client: Any):
         super().__init__(
             agent_name="AggregatorAgent",

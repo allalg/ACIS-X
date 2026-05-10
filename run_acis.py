@@ -73,7 +73,7 @@ logging.basicConfig(
     level=os.getenv("ACIS_LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler("acis.log", mode="w", encoding="utf-8"),
+        logging.FileHandler("acis.log", mode="a", encoding="utf-8"),
         logging.StreamHandler(sys.stdout)
     ]
 )
