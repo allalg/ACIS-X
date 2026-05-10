@@ -674,12 +674,14 @@ class ExternalDataAgent(BaseAgent):
                 # Compute risk score
                 data["risk"] = self._compute_risk(data)
 
+                risk_val = data['risk']
+                risk_str = f"{risk_val:.2f}" if risk_val is not None else "None"
                 logger.info(
                     f"[ExternalDataAgent] Scraped Screener data for {slug}: "
                     f"PE={data['pe']}, ROE={data['roe']}, ROCE={data['roce']}, "
                     f"Debt={data['debt']}, SalesG={data['sales_growth']}, "
                     f"ProfitG={data['profit_growth']}, IntCov={data['interest_coverage']}, "
-                    f"Risk={data['risk']:.2f}"
+                    f"Risk={risk_str}"
                 )
                 return data
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Kafka topic management utilities for ACIS-X.
 
 Provides topic creation, configuration, and admin operations.
@@ -21,12 +21,15 @@ class TopicConfig:
 
     name: str
     partitions: int = 3
-    replication_factor: int = 1
+    # replication_factor=3: tolerates loss of 1 broker in the 3-node KRaft cluster.
+    # Set to 1 for single-broker local dev (override via env var ACIS_REPLICATION_FACTOR).
+    replication_factor: int = 3
     retention_ms: Optional[int] = None  # None = infinite
     retention_bytes: Optional[int] = None
     cleanup_policy: str = "delete"  # delete or compact
     compression_type: str = "gzip"
-    min_insync_replicas: int = 1
+    # min_insync_replicas=2: writes succeed if at least 2/3 brokers acknowledge.
+    min_insync_replicas: int = 2
 
     # Additional topic configs
     segment_ms: Optional[int] = None
@@ -65,42 +68,42 @@ ACIS_TOPIC_CONFIGS = {
     "acis.invoices": TopicConfig(
         name="acis.invoices",
         partitions=6,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=7 * 24 * 3600 * 1000,  # 7 days
         cleanup_policy="delete",
     ),
     "acis.payments": TopicConfig(
         name="acis.payments",
         partitions=6,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=7 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.customers": TopicConfig(
         name="acis.customers",
         partitions=3,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=30 * 24 * 3600 * 1000,  # 30 days
         cleanup_policy="compact",  # Latest customer state only
     ),
     "acis.risk": TopicConfig(
         name="acis.risk",
         partitions=4,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=14 * 24 * 3600 * 1000,  # 14 days
         cleanup_policy="delete",
     ),
     "acis.policy": TopicConfig(
         name="acis.policy",
         partitions=2,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=30 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.commands": TopicConfig(
         name="acis.commands",
         partitions=3,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=1 * 24 * 3600 * 1000,  # 1 day (commands are ephemeral)
         cleanup_policy="delete",
     ),
@@ -109,28 +112,28 @@ ACIS_TOPIC_CONFIGS = {
     "acis.system": TopicConfig(
         name="acis.system",
         partitions=4,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=30 * 24 * 3600 * 1000,  # 30 days
         cleanup_policy="delete",
     ),
     "acis.time": TopicConfig(
         name="acis.time",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=1 * 60 * 1000,  # 1 minute (time ticks are ephemeral)
         cleanup_policy="delete",
     ),
     "acis.agent.health": TopicConfig(
         name="acis.agent.health",
         partitions=2,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=7 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.registry": TopicConfig(
         name="acis.registry",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=-1,  # Infinite retention
         cleanup_policy="compact",  # Keep latest agent state
     ),
@@ -139,70 +142,70 @@ ACIS_TOPIC_CONFIGS = {
     "acis.invoices.dlq": TopicConfig(
         name="acis.invoices.dlq",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=90 * 24 * 3600 * 1000,  # 90 days
         cleanup_policy="delete",
     ),
     "acis.payments.dlq": TopicConfig(
         name="acis.payments.dlq",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.risk.dlq": TopicConfig(
         name="acis.risk.dlq",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.system.dlq": TopicConfig(
         name="acis.system.dlq",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=90 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
     "acis.dlq": TopicConfig(
         name="acis.dlq",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=604800000,  # 7 days
         cleanup_policy="delete",
     ),
     "acis.alerts": TopicConfig(
         name="acis.alerts",
         partitions=1,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=86400000,  # 24h
         cleanup_policy="delete",
     ),
     "acis.placement.requests": TopicConfig(
         name="acis.placement.requests",
         partitions=2,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=86400000,
         cleanup_policy="delete",
     ),
     "acis.placement.assignments": TopicConfig(
         name="acis.placement.assignments",
         partitions=2,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=86400000,
         cleanup_policy="delete",
     ),
     "acis.query.request": TopicConfig(
         name="acis.query.request",
         partitions=2,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=3600000,  # 1 hour
         cleanup_policy="delete",
     ),
     "acis.query.response": TopicConfig(
         name="acis.query.response",
         partitions=2,
-        replication_factor=1,
+        replication_factor=3,
         retention_ms=3600000,  # 1 hour
         cleanup_policy="delete",
     ),

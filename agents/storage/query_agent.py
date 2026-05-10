@@ -241,6 +241,13 @@ class QueryAgent(BaseAgent):
                             "total_outstanding": memory_state.get("total_outstanding", 0.0),
                             "avg_delay": memory_state.get("avg_delay", 0.0),
                             "on_time_ratio": memory_state.get("on_time_ratio", 0.5),
+                            "aging_buckets": memory_state.get("aging_buckets", {
+                                "current": 0.0,
+                                "1_30_days": 0.0,
+                                "31_60_days": 0.0,
+                                "61_90_days": 0.0,
+                                "90_plus_days": 0.0,
+                            }),
                             "overdue_count": memory_state.get("overdue_count", 0),
                         }
             except Exception as e:
@@ -264,6 +271,11 @@ class QueryAgent(BaseAgent):
                         COALESCE(m.total_outstanding, 0.0) as total_outstanding,
                         COALESCE(m.avg_delay, 0.0) as avg_delay,
                         COALESCE(m.on_time_ratio, 0.5) as on_time_ratio,
+                        COALESCE(m.aging_current, 0.0) as aging_current,
+                        COALESCE(m.aging_1_30, 0.0) as aging_1_30_days,
+                        COALESCE(m.aging_31_60, 0.0) as aging_31_60_days,
+                        COALESCE(m.aging_61_90, 0.0) as aging_61_90_days,
+                        COALESCE(m.aging_90_plus, 0.0) as aging_90_plus_days,
                         m.last_payment_date,
                         m.updated_at
                     FROM customers c
@@ -277,6 +289,15 @@ class QueryAgent(BaseAgent):
                     return None
 
                 result = dict(row)
+                
+                # Format aging buckets
+                result["aging_buckets"] = {
+                    "current": result.pop("aging_current", 0.0),
+                    "1_30_days": result.pop("aging_1_30_days", 0.0),
+                    "31_60_days": result.pop("aging_31_60_days", 0.0),
+                    "61_90_days": result.pop("aging_61_90_days", 0.0),
+                    "90_plus_days": result.pop("aging_90_plus_days", 0.0),
+                }
 
                 # Compute overdue_count from invoices
                 cursor.execute("""

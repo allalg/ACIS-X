@@ -268,11 +268,26 @@ class DBAgent(BaseAgent):
                         total_outstanding REAL DEFAULT 0,
                         avg_delay REAL DEFAULT 0,
                         on_time_ratio REAL DEFAULT 0,
+                        aging_current REAL DEFAULT 0,
+                        aging_1_30 REAL DEFAULT 0,
+                        aging_31_60 REAL DEFAULT 0,
+                        aging_61_90 REAL DEFAULT 0,
+                        aging_90_plus REAL DEFAULT 0,
                         last_payment_date TEXT,
                         updated_at TEXT,
                         FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
                     )
                 """)
+
+                # Safely add columns if they don't exist
+                try:
+                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_current REAL DEFAULT 0")
+                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_1_30 REAL DEFAULT 0")
+                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_31_60 REAL DEFAULT 0")
+                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_61_90 REAL DEFAULT 0")
+                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_90_plus REAL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass  # Columns already exist
 
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS external_financials (
@@ -346,13 +361,45 @@ class DBAgent(BaseAgent):
                     )
                 """)
 
+                # risk_explanations: per-invoice SHAP attribution audit trail.
+                # Written by _handle_risk_scored() from every risk.scored event.
+                # Supports regulatory explainability queries:
+                #   SELECT customer_id, shap_top_driver, shap_values
+                #   FROM risk_explanations ORDER BY risk_score DESC LIMIT 10;
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS risk_explanations (
+                        invoice_id              TEXT PRIMARY KEY,
+                        customer_id             TEXT NOT NULL,
+                        risk_score              REAL NOT NULL,
+                        risk_level              TEXT,
+                        shap_top_driver         TEXT,
+                        shap_values             TEXT,   -- JSON: {feature: phi_i}
+                        shap_sum                REAL,   -- sum(phi_i) ≈ base risk_score
+                        shap_baseline           REAL DEFAULT 0.0,
+                        shap_rating_adjustment  REAL DEFAULT 0.0,
+                        shap_litigation_adjustment REAL DEFAULT 0.0,
+                        reasons                 TEXT,   -- JSON: human-readable list
+                        created_at              TEXT NOT NULL,
+                        updated_at              TEXT NOT NULL,
+                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+                    )
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_risk_exp_customer
+                    ON risk_explanations (customer_id)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_risk_exp_score
+                    ON risk_explanations (risk_score DESC)
+                """)
+
                 self._cleanup_legacy_company_names(conn)
                 self._repair_payment_integrity(conn)
                 # Single authoritative commit — covers schema DDL, legacy name
                 # cleanup, and payment integrity repair in one atomic transaction.
                 conn.commit()
                 logger.info(f"Database initialized at {self._db_path}")
-                logger.info("Upgraded database schema to v5 (customer risk profile ready)")
+                logger.info("Upgraded database schema to v6 (SHAP risk_explanations ready)")
             finally:
                 conn.close()
 
@@ -615,17 +662,26 @@ class DBAgent(BaseAgent):
                     data.get("company_name") or data.get("customer_name") or data.get("name"),
                 )
 
+                aging_buckets = data.get("aging_buckets", {})
+                
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO customer_metrics
-                    (customer_id, total_outstanding, avg_delay, on_time_ratio, last_payment_date, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (customer_id, total_outstanding, avg_delay, on_time_ratio, 
+                     aging_current, aging_1_30, aging_31_60, aging_61_90, aging_90_plus,
+                     last_payment_date, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         customer_id,
                         float(data.get("total_outstanding", 0.0)),
                         float(data.get("avg_delay", 0.0)),
                         float(data.get("on_time_ratio", 0.0)),
+                        float(aging_buckets.get("current", 0.0)),
+                        float(aging_buckets.get("1_30_days", 0.0)),
+                        float(aging_buckets.get("31_60_days", 0.0)),
+                        float(aging_buckets.get("61_90_days", 0.0)),
+                        float(aging_buckets.get("90_plus_days", 0.0)),
                         data.get("last_payment_date"),
                         now,
                     ),
@@ -1365,9 +1421,15 @@ class DBAgent(BaseAgent):
                 self._finalize_handler_connection(conn)
 
     def _handle_risk_scored(self, event: Event) -> None:
-        """Persist invoice-level risk scores onto the customer row and event log."""
+        """Persist invoice-level risk scores and SHAP explanations.
+
+        Writes to two tables:
+        1. customers.risk_score  — scalar for downstream use (unchanged).
+        2. risk_explanations     — full SHAP attribution for regulatory audit.
+        """
         data = event.payload or {}
         customer_id = data.get("customer_id")
+        invoice_id  = data.get("invoice_id")
         if not customer_id:
             logger.warning("risk.scored event missing customer_id, skipping")
             return
@@ -1377,6 +1439,16 @@ class DBAgent(BaseAgent):
         except (TypeError, ValueError):
             logger.warning("[DBAgent] Invalid risk_score for %s: %r", customer_id, data.get("risk_score"))
             return
+
+        # ── SHAP fields (present when emitted by PaymentPredictionAgent v1.1+) ──
+        shap_values  = data.get("shap_values")   # dict or None
+        shap_top_driver = data.get("shap_top_driver")
+        shap_sum     = data.get("shap_sum")
+        shap_baseline = float(data.get("shap_baseline") or 0.0)
+        shap_rating_adj   = float(data.get("shap_rating_adjustment") or 0.0)
+        shap_litig_adj    = float(data.get("shap_litigation_adjustment") or 0.0)
+        risk_level   = data.get("risk_level")
+        reasons      = data.get("reasons")  # list or None
 
         now = datetime.utcnow().isoformat()
         with self._db_lock:
@@ -1393,10 +1465,63 @@ class DBAgent(BaseAgent):
                     customer_id,
                     data.get("customer_name") or data.get("company_name") or data.get("name"),
                 )
+
+                # 1. Update scalar risk_score on the customer row
                 cursor.execute(
                     "UPDATE customers SET risk_score = ?, updated_at = ? WHERE customer_id = ?",
                     (risk_score, now, customer_id),
                 )
+
+                # 2. Upsert SHAP explanation into risk_explanations (if invoice_id present)
+                if invoice_id:
+                    cursor.execute("""
+                        INSERT INTO risk_explanations (
+                            invoice_id,
+                            customer_id,
+                            risk_score,
+                            risk_level,
+                            shap_top_driver,
+                            shap_values,
+                            shap_sum,
+                            shap_baseline,
+                            shap_rating_adjustment,
+                            shap_litigation_adjustment,
+                            reasons,
+                            created_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(invoice_id) DO UPDATE SET
+                            risk_score              = excluded.risk_score,
+                            risk_level              = excluded.risk_level,
+                            shap_top_driver         = excluded.shap_top_driver,
+                            shap_values             = excluded.shap_values,
+                            shap_sum                = excluded.shap_sum,
+                            shap_baseline           = excluded.shap_baseline,
+                            shap_rating_adjustment  = excluded.shap_rating_adjustment,
+                            shap_litigation_adjustment = excluded.shap_litigation_adjustment,
+                            reasons                 = excluded.reasons,
+                            updated_at              = excluded.updated_at
+                    """, (
+                        invoice_id,
+                        customer_id,
+                        risk_score,
+                        risk_level,
+                        shap_top_driver,
+                        json.dumps(shap_values)  if shap_values is not None else None,
+                        shap_sum,
+                        shap_baseline,
+                        shap_rating_adj,
+                        shap_litig_adj,
+                        json.dumps(reasons) if reasons is not None else None,
+                        now,
+                        now,
+                    ))
+                    logger.info(
+                        "[DBAgent] SHAP explanation stored: invoice=%s customer=%s "
+                        "risk=%.4f top_driver=%s",
+                        invoice_id, customer_id, risk_score, shap_top_driver,
+                    )
+
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
                     (event.event_id, event.event_type, now),
