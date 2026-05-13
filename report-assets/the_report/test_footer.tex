@@ -1,0 +1,13 @@
+\documentclass[a4paper, 12pt]{report}
+\usepackage{zref-savepos}
+\usepackage{fancyhdr}
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\zsaveposy{foot-\thepage}Foot \thepage}
+}
+\pagestyle{plain}
+\begin{document}
+Chapter 1 page 1
+\newpage
+Chapter 1 page 2
+\end{document}

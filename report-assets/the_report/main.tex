@@ -117,6 +117,20 @@
   \global\borderpagefalse  % Set flag to false for no border on plain pages
 }
 
+% Chapter opening pages inherit a taller frontmatter footer area; lower the
+% footer rule and footer text to align with the regular content pages.
+\fancypagestyle{chapterfirstpage}{
+  \fancyhf{}
+  \fancyhead[R]{{ACIS-X: Autonomous Credit Intelligence System}}
+  \fancyfoot[L]{\raisebox{-44.6pt}{Dept. of CSE, AMCEC}}
+  \fancyfoot[C]{\raisebox{-44.6pt}{2025-26}}
+  \fancyfoot[R]{\raisebox{-44.6pt}{\thepage}}
+  \renewcommand{\headrulewidth}{2pt}
+  \renewcommand{\footrulewidth}{0pt}
+  \renewcommand{\footrule}{\vskip 42.8pt\hrule width\headwidth height 2pt\vskip -44.8pt}
+  \global\borderpagefalse  % Set flag to false for no border on chapter first pages
+}
+
 % Page style for title page (no page number, border enabled)
 \fancypagestyle{titlepagelayout}{
   \fancyhf{}  % Clear existing header/footer
@@ -410,8 +424,8 @@ The Intelligent Collections System (ACIS-X) represents a modern, data-driven app
 \doublespacing
 \listoftables
 \thispagestyle{titlepagelayout}
-\newpage
 \restoregeometry
+\newpage
 }
 
 \pagenumbering{arabic}
@@ -428,7 +442,8 @@ The Intelligent Collections System (ACIS-X) represents a modern, data-driven app
 \setlist{topsep=0pt}
 
 % Chapter 1
-\chapter{Introduction}
+\chapter{INTRODUCTION}
+\thispagestyle{chapterfirstpage}
 
 
 \section{Overview}
@@ -562,7 +577,7 @@ This report follows the same major structural pattern used in the reference proj
 
 
 
-\chapter{Literature Survey}
+\chapter{LITERATURE SURVEY}
 
 \section{Introduction}
 The design of intelligent collections systems has shifted from periodic scorecard workflows to continuously updated, event-driven decision pipelines. In enterprise receivables environments, late payments are not isolated events; they are outcomes of evolving customer behavior, changing macro conditions, policy execution timing, data quality variation, and process latency. As a result, any practical platform must combine accurate risk estimation with low-latency orchestration and actionable governance.
