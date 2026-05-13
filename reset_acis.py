@@ -132,7 +132,7 @@ def step0_kill_zombie_processes():
                 if 'python' not in name:
                     continue
                 cmd_str = ' '.join(p.info.get('cmdline') or []).lower()
-                if 'acis' in cmd_str and 'reset_acis' not in cmd_str:
+                if ('acis' in cmd_str and 'reset_acis' not in cmd_str) or 'multiprocessing.spawn' in cmd_str:
                     p.kill()
                     stragglers += 1
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -266,18 +266,32 @@ def step2_purge_kafka_topics():
             "acis.risk.dlq":       {"partitions": 1,  "retention_ms": 86400000},
         }
 
+        # Detect the number of brokers to set replication_factor correctly.
+        # The cluster runs 3 brokers with min.insync.replicas=2 by default;
+        # creating topics with replication_factor=1 causes NotEnoughReplicasError.
+        try:
+            broker_count = len(admin.describe_cluster()["brokers"])
+        except Exception:
+            broker_count = 1
+        replication_factor = min(3, broker_count)
+        logger.info(f"  Detected {broker_count} broker(s) — using replication_factor={replication_factor}")
+
         new_topics = []
         for topic_name, cfg in topic_configs.items():
             new_topics.append(NewTopic(
                 name=topic_name,
                 num_partitions=cfg["partitions"],
-                replication_factor=1,
-                topic_configs={"retention.ms": str(cfg["retention_ms"]), "compression.type": "gzip"},
+                replication_factor=replication_factor,
+                topic_configs={
+                    "retention.ms": str(cfg["retention_ms"]),
+                    "compression.type": "gzip",
+                    "min.insync.replicas": str(max(1, replication_factor - 1)),
+                },
             ))
 
         try:
             admin.create_topics(new_topics, timeout_ms=15000)
-            logger.info(f"  [OK] Created {len(new_topics)} topics fresh.")
+            logger.info(f"  [OK] Created {len(new_topics)} topics fresh (rf={replication_factor}).")
         except Exception as e:
             logger.warning(f"  Topic creation warning: {e}")
 
