@@ -229,7 +229,7 @@
     \includegraphics[height=0.15\textwidth]{images/vtu-logo-copy.png}
 
     \vspace{0.3cm}
-    \textbf{\textit{A Project Report on}}
+    \textbf{\textit{Project Phase I - BCS685}}
     \vspace{0.5cm}
     
     {\LARGE \textbf{\textcolor[HTML]{FF0000}{ACIS-X: Autonomous Credit Intelligence System}}}
@@ -897,7 +897,7 @@ Primary evidence inputs for this chapter include:
 \section{Software and Hardware Tools Used}
 
 \subsection{Software Requirements}
-ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for persistence, and pytest for verification. The selected tools prioritize fast iteration, explicit event contracts, and practical production transition. Table \ref{tab:acis_software_tools} maps the software tools required for building the platform.
+Table \ref{tab:acis_software_tools} maps the software tools required for building the platform. ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for persistence, and pytest for verification. The selected tools prioritize fast iteration, explicit event contracts, and practical production transition.
 
 \begin{longtable}{|L{0.40\textwidth}|L{0.50\textwidth}|}
     \caption{Software Requirements}\label{tab:acis_software_tools} \\
@@ -916,9 +916,9 @@ ACIS-X uses a Python-centric stack with Kafka for event transport, SQLite for pe
 \end{longtable}
 
 \subsection{Hardware Requirements}
-The current ACIS-X implementation supports local and production-like deployment using lightweight infrastructure. Table \ref{tab:acis_hardware_tools} maps the minimum and recommended hardware specifications.
+Table \ref{tab:acis_hardware_tools} maps the minimum and recommended hardware specifications. The current ACIS-X implementation supports local and production-like deployment using lightweight infrastructure. 
 
-\begin{longtable}{|L{0.40\textwidth}|L{0.50\textwidth}|}
+\begin{longtable}{|L{0.30\textwidth}|L{0.55\textwidth}|}
     \caption{Hardware Requirements}\label{tab:acis_hardware_tools} \\
 
     \hline
@@ -953,12 +953,14 @@ The Sequence Diagram visualizes the asynchronous, topic-based communication flow
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\textwidth]{images/sequence-diag.png}
+    \includegraphics[width=1.0\textwidth]{images/sequence-diag.png}
     \caption{Sequence diagram illustrating event communication flows}
     \label{fig:sequence_diagram}
 \end{figure}
 
-\vspace{32em}
+As depicted in the sequence diagram above, the event-driven architecture heavily relies on asynchronous message passing to ensure robust separation of concerns. Rather than invoking services through direct synchronous calls, which can lead to cascading failures and tight coupling, agents publish their state changes and analytical results directly to designated Kafka topics. For instance, the Scenario Generator emits initial simulation events that act as the catalyst for the workflow. These raw events are subsequently consumed and augmented by the External Data agent, which appends crucial market or litigation context. 
+
+\vspace{5em}
 
 \subsection{Activity Diagram}
 The Activity Diagram details the step-by-step workflow for the data processing pipeline starting from raw invoice ingestion, progressing to metrics computation and enrichment, and culminating in collections escalations. Fig \ref{fig:activity_diagram} maps the sequence of activities that form the core decision pipeline.
@@ -1083,9 +1085,8 @@ Project planning is a critical phase for ACIS-X because the system combines even
 \end{enumerate}
 
 \subsection{Scheduling}
-Scheduling for ACIS-X is based on an 8-week execution window, with approximately the first 3 weeks already completed. The schedule emphasizes backend-first completion, then frontend implementation, integration, and final validation/documentation.
+Table \ref{tab:acis_project_schedule} shows the scheduling for ACIS-X is based on an 8-week execution window, with approximately the first 3 weeks already completed. The schedule emphasizes backend-first completion, then frontend implementation, integration, and final validation/documentation.
 
-Table \ref{tab:acis_project_schedule} maps the planned timeline and current progress state over an 8-week period.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.18\textwidth}|L{0.60\textwidth}|L{0.14\textwidth}|}
@@ -1156,7 +1157,7 @@ The component design of ACIS-X decomposes the platform into specialized agents a
 
 Fig \ref{fig:component_design} maps the main functional modules and internal components of the system. ScenarioGeneratorAgent produces simulated operational events. CustomerStateAgent converts invoice and payment behavior into customer metrics. ExternalDataAgent and ExternalScrapingAgent enrich customer context with external signals. AggregatorAgent combines internal and external evidence into a broader customer profile. PaymentPredictionAgent estimates payment risk for open invoices, and RiskScoringAgent converts prediction and context into final risk decisions. CollectionsAgent uses those decisions to recommend appropriate collections actions.
 
-The persistence and query components support the business agents. DBAgent stores events, customer records, invoices, payments, metrics, risk profiles, and collections actions. QueryAgent responds to structured read requests, while MemoryAgent maintains fast runtime context for frequently used customer state. Operational components such as RegistryService, RuntimeManager, MonitoringAgent, PlacementEngine, SelfHealingAgent, and DLQMonitorAgent supervise agent health, recovery, placement, and failed-event handling. Table \ref{tab:acis_components} maps the responsibilities, inputs, and outputs of these core components.
+The persistence and query components support the business agents. DBAgent stores events, customer records, invoices, payments, metrics, risk profiles, and collections actions. QueryAgent responds to structured read requests, while MemoryAgent maintains fast runtime context for frequently used customer state. Table \ref{tab:acis_components} maps the responsibilities, inputs, and outputs of these core components. Operational components such as RegistryService, RuntimeManager, MonitoringAgent, PlacementEngine, SelfHealingAgent, and DLQMonitorAgent supervise agent health, recovery, placement, and failed-event handling. 
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.23\textwidth}|L{0.33\textwidth}|L{0.20\textwidth}|L{0.16\textwidth}|}
@@ -1210,7 +1211,7 @@ The persistence and query components support the business agents. DBAgent stores
 \end{longtable}
 
 \section{Interface Design}
-The interface design of ACIS-X defines how agents, storage, external sources, and the user-facing dashboard communicate with each other. Since the system is event-driven, most internal interfaces are asynchronous Kafka topics. Each topic represents a specific type of event and allows producers and consumers to remain loosely coupled. Fig \ref{fig:interface_design} maps the external and internal interfaces of the system.
+The interface design of ACIS-X defines how agents, storage, external sources, and the user-facing dashboard communicate with each other. Since the system is event-driven, most internal interfaces are asynchronous Kafka topics. Fig \ref{fig:interface_design} maps the external and internal interfaces of the system. Each topic represents a specific type of event and allows producers and consumers to remain loosely coupled. 
 
 \begin{figure}[H]
     \centering
@@ -1222,6 +1223,8 @@ The interface design of ACIS-X defines how agents, storage, external sources, an
 ACIS-X uses four primary interface categories. Internal interfaces connect agents through Kafka topics. External interfaces allow enrichment agents to access financial, litigation, news, or company-related data. Persistence interfaces connect DBAgent and QueryAgent with the SQLite database. User-facing interfaces expose risk profiles, collections actions, metrics, and runtime status through the FastAPI backend and React dashboard.
 
 The topic interface is the most important internal communication mechanism. It allows the system to process events incrementally and supports future scaling by adding more producers or consumers without changing the entire architecture. Table \ref{tab:kafka_topic_interfaces} maps the Kafka topics used for communication between various agents.
+
+By standardizing these asynchronous boundaries, ACIS-X isolates failure domains and ensures that new analytical models, monitoring tools, or external integrations can be introduced seamlessly. This interface-driven decoupling is fundamental to maintaining a resilient and adaptable collections intelligence platform under evolving business requirements.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.22\textwidth}|L{0.23\textwidth}|L{0.25\textwidth}|L{0.22\textwidth}|}
@@ -1271,7 +1274,7 @@ The topic interface is the most important internal communication mechanism. It a
 \section{Data Structure Design}
 The data structure design of ACIS-X is centered on structured events and persistent domain records. Events are used for communication between agents, while database records are used for durable storage and later query. This separation allows the system to process live data in real time while still preserving historical evidence for audit, replay, and report generation.
 
-The event schema is designed to provide traceability. Each event contains an identifier, event type, source, timestamp, entity reference, and payload. Derived structures such as customer metrics, risk profiles, and collections actions include reason fields so downstream modules can explain how a decision was produced. Table \ref{tab:acis_data_structures} maps the primary data structures used across the ACIS-X platform.
+The event schema is designed to provide traceability. Each event contains an identifier, event type, source, timestamp, entity reference, and payload. Table \ref{tab:acis_data_structures} maps the primary data structures used across the ACIS-X platform. Derived structures such as customer metrics, risk profiles, and collections actions include reason fields so downstream modules can explain how a decision was produced. 
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.28\textwidth}|L{0.62\textwidth}|}
@@ -1388,8 +1391,15 @@ The collections action algorithm converts final risk output into an operational 
 \end{itemize}
 
 
-\chapter*{MAJOR PROJECT Mapping with CO and PO}
-\addcontentsline{toc}{chapter}{MAJOR PROJECT Mapping with CO and PO}
+\appendix
+\chapter*{ANNEXURE}
+\addcontentsline{toc}{chapter}{ANNEXURE}
+\renewcommand{\thesection}{A.\arabic{section}}
+\renewcommand{\thetable}{A.\arabic{table}}
+\setcounter{table}{0}
+\setcounter{section}{0}
+
+\section{MAJOR PROJECT Mapping with CO and PO}
 
 Table \ref{tab:co_statements} maps the course outcomes required for the major project.
 
@@ -1418,7 +1428,6 @@ Table \ref{tab:co_statements} maps the course outcomes required for the major pr
     }
 \end{table}
 
-\vspace{0.5cm}
 \textbf{Strength of CO Mapping to PO/PSOs with Justification:}
 
 Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcomes and Program Outcomes.
@@ -1452,6 +1461,7 @@ Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcom
 \end{table}
 
 Table \ref{tab:co_po_justification} maps the justification for each mapping between Course Outcomes and Program Outcomes.
+This ensures compliance with engineering and professional standards.
 
 \begin{table}[H]
     \centering
@@ -1482,6 +1492,7 @@ Table \ref{tab:co_po_justification} maps the justification for each mapping betw
 \end{center}
 
 Table \ref{tab:sdg_mapping} maps the relevance of the project to the United Nations Sustainable Development Goals.
+This alignment underscores our commitment to building technology that fosters economic growth and sustainable infrastructure.
 
 \vspace{0.5cm}
 
@@ -1504,9 +1515,7 @@ Table \ref{tab:sdg_mapping} maps the relevance of the project to the United Nati
     \end{tabular}
 \end{table}
 
-\chapter*{SWOT -- Strengths, Weaknesses, Opportunities, Threats of the project}
-\thispagestyle{plain}
-\addcontentsline{toc}{chapter}{SWOT Analysis}
+\section{SWOT -- Strengths, Weaknesses, Opportunities, Threats of the project}
 
 \textbf{Strengths}
 \begin{itemize}[itemsep=2pt]

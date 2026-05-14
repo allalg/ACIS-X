@@ -30,7 +30,7 @@
 \contentsline {subsection}{\numberline {3.2.2}Sequence Diagram}{25}{subsection.3.2.2}%
 \contentsline {subsection}{\numberline {3.2.3}Activity Diagram}{26}{subsection.3.2.3}%
 \contentsline {subsection}{\numberline {3.2.4}State Chart Diagram}{27}{subsection.3.2.4}%
-\contentsline {section}{\numberline {3.3}Software Requirement Specification}{27}{section.3.3}%
+\contentsline {section}{\numberline {3.3}Software Requirement Specification}{28}{section.3.3}%
 \contentsline {subsection}{\numberline {3.3.1}Functional Requirements}{28}{subsection.3.3.1}%
 \contentsline {subsection}{\numberline {3.3.2}Non-Functional Requirements}{28}{subsection.3.3.2}%
 \contentsline {chapter}{\numberline {4}PROJECT PLANNING}{29}{chapter.4}%
@@ -47,5 +47,6 @@
 \contentsline {subsection}{\numberline {5.5.3}External Enrichment and Risk Aggregation Algorithm}{40}{subsection.5.5.3}%
 \contentsline {subsection}{\numberline {5.5.4}Payment Prediction and Final Risk Scoring Algorithm}{40}{subsection.5.5.4}%
 \contentsline {subsection}{\numberline {5.5.5}Collections Action and Self-Healing Algorithm}{41}{subsection.5.5.5}%
-\contentsline {chapter}{MAJOR PROJECT Mapping with CO and PO}{42}{chapter*.13}%
-\contentsline {chapter}{SWOT Analysis}{45}{chapter*.18}%
+\contentsline {chapter}{ANNEXURE}{42}{appendix*.13}%
+\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{42}{section.Alph0.1}%
+\contentsline {section}{\numberline {A.2}SWOT -- Strengths, Weaknesses, Opportunities, Threats of the project}{44}{section.Alph0.2}%
