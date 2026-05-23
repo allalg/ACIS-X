@@ -580,6 +580,17 @@ This report follows the same major structural pattern used in the reference proj
 
 \chapter{LITERATURE SURVEY}
 
+% Force bibliography numbering to match the [1]–[16] order used in the survey summaries.
+% ieeetr numbers references by first-citation order, so citing them here first locks the order.
+% The citations are hidden in a zero-width, zero-height box so they don't produce visible output.
+\leavevmode\smash{\makebox[0pt][l]{\color{white}\fontsize{1}{1}\selectfont%
+\cite{falconer2025eventdriven}\cite{hand1997credit}\cite{thomas2000survey}%
+\cite{baesens2003benchmarking}\cite{crook2007recent}\cite{bellotti2009svm}%
+\cite{khandani2010ml}\cite{finlay2011multiple}\cite{wang2011ensemble}%
+\cite{brown2012imbalanced}\cite{kruppa2013individual}\cite{verbraken2014profit}%
+\cite{lessmann2015update}\cite{zaharia2013discretized}\cite{akidau2015dataflow}%
+\cite{chen2016xgboost}}}
+
 \section{Introduction}
 The design of intelligent collections systems has shifted from periodic scorecard workflows to continuously updated, event-driven decision pipelines. In enterprise receivables environments, late payments are not isolated events; they are outcomes of evolving customer behavior, changing macro conditions, policy execution timing, data quality variation, and process latency. As a result, any practical platform must combine accurate risk estimation with low-latency orchestration and actionable governance.
 
@@ -690,7 +701,7 @@ The tradeoff is additional computational and governance complexity. ACIS-X shoul
 \textbf{AUTHORS:} Iain Brown and Christophe Mues\\
 The study focuses on the imbalanced nature of credit datasets where adverse outcomes are rare but high-impact. It compares algorithm behavior under skewed classes and demonstrates that imbalance treatment strongly affects operational usefulness. This is directly relevant to ACIS-X, where high-risk delinquency classes are sparse and must still be prioritized correctly for collections action.
 
-This work supports threshold strategies that optimize intervention efficiency rather than overall accuracy alone. ACIS-X can embed this logic in risk-to-action policy mappings.
+This work supports threshold strategies that optimize intervention efficiency rather than overall accuracy alone. ACIS-X can embed this logic in risk-to-action policy mappings. By explicitly tuning these thresholds, the system minimizes false positives and prevents unnecessary outreach to reliable customers.
 
 \noindent \textbf{[11] Consumer Credit Risk: Individual Probability Estimates Using Machine Learning}\\
 \textbf{AUTHORS:} Jochen Kruppa, Alexandra Schwarz, Gerhard Arminger, and Andreas Ziegler\\
@@ -879,7 +890,7 @@ Under this design, ACIS-X provides four concrete advantages relative to fragment
     \item \textbf{Governance readiness:} reason-coded outputs and structured event histories support audit and improvement cycles.
 \end{itemize}
 
-Beyond these advantages, the architecture supports continuous learning from outcomes, closing the loop between analytics and operational execution. This ensures the system remains adaptive under changing behavior patterns while preserving explainability.
+Beyond these advantages, the architecture supports continuous learning from outcomes, closing the loop between analytics and operational execution. By establishing this unified, event-driven foundation, the proposed solution directly addresses the operational gaps—such as decision latency and weak lifecycle governance—identified in existing systems. This architectural paradigm essentially restructures how both functional capabilities and non-functional constraints are formulated, ensuring that subsequent design phases are deeply grounded in practical deployment realities.
 
 \chapter{REQUIREMENT ENGINEERING}
 
@@ -943,13 +954,13 @@ The baseline above is aligned with stated system targets in deployment documenta
     \label{fig:use_case}
 \end{figure}
 
-Fig \ref{fig:use_case} maps the interactions between various actors and the ACIS-X system during normal operational scenarios.
+Fig \ref{fig:use_case} maps the interactions between various actors and the ACIS-X system and separates external data and human supervision from its internal workflows during runtime. 
 
 The Use Case diagram identifies the primary actors (such as event producers, the orchestration runtime, external enrichment services, and collections managers) interacting with the core usage scenarios of the system.
 
 \subsection{Sequence Diagram}
 
-The Sequence Diagram visualizes the asynchronous, topic-based communication flowing between dedicated agents (e.g., ScenarioGenerator, ExternalData, RiskScoring) and their centralized exchange via the Kafka Event Bus. Fig \ref{fig:sequence_diagram} maps the temporal message exchanges between these agents.
+Fig \ref{fig:sequence_diagram} visualizes the asynchronous, topic-based communication flowing between dedicated agents (e.g., ScenarioGenerator, ExternalData, RiskScoring) and their centralized exchange via the Kafka Event Bus. It maps the temporal message exchanges between these agents.
 
 \begin{figure}[H]
     \centering
@@ -960,10 +971,12 @@ The Sequence Diagram visualizes the asynchronous, topic-based communication flow
 
 As depicted in the sequence diagram above, the event-driven architecture heavily relies on asynchronous message passing to ensure robust separation of concerns. Rather than invoking services through direct synchronous calls, which can lead to cascading failures and tight coupling, agents publish their state changes and analytical results directly to designated Kafka topics. For instance, the Scenario Generator emits initial simulation events that act as the catalyst for the workflow. These raw events are subsequently consumed and augmented by the External Data agent, which appends crucial market or litigation context. 
 
+Furthermore, this sequence of topic-based publications protects the system from cascading delays. If the Risk Scoring component goes offline momentarily, the upstream events simply remain intact within their respective Kafka partitions until the agent recovers. 
+
 \vspace{5em}
 
 \subsection{Activity Diagram}
-The Activity Diagram details the step-by-step workflow for the data processing pipeline starting from raw invoice ingestion, progressing to metrics computation and enrichment, and culminating in collections escalations. Fig \ref{fig:activity_diagram} maps the sequence of activities that form the core decision pipeline.
+Fig \ref{fig:activity_diagram} details the step-by-step workflow for the data processing pipeline starting from raw invoice ingestion, progressing to metrics computation and enrichment, and culminating in collections escalations. 
 
 \begin{figure}[H]
     \centering
@@ -971,6 +984,8 @@ The Activity Diagram details the step-by-step workflow for the data processing p
     \caption{Activity diagram mapping out the decision pipeline}
     \label{fig:activity_diagram}
 \end{figure}
+
+As an invoice progresses through its lifecycle, the workflow dynamically adjusts its trajectory based on ongoing risk scoring, effectively deciding in real-time whether to pause for more data, alert an operator, or immediately escalate to collections.
 
 \subsection{State Chart Diagram}
 The State Chart Diagram maps the lifecycle of an account's state within ACIS-X, transitioning between normal operations, an early warning status during overdue detection, and a high-risk state triggering immediate policy/collections interventions. Fig \ref{fig:state_chart} maps the valid state transitions an account can undergo.
@@ -982,9 +997,10 @@ The State Chart Diagram maps the lifecycle of an account's state within ACIS-X, 
     \label{fig:state_chart}
 \end{figure}
 
+This explicit modeling of states prevents the system from generating redundant or oscillating collection actions. An account must cross specific risk thresholds and satisfy temporal policy criteria before transitioning into a higher escalation tier, thereby ensuring that automated interventions remain economically justified and compliant with customer treatment guidelines.
 
 \section{Software Requirement Specification}
-The Software Requirement Specification (SRS) defines what ACIS-X must do and how well it must do it under realistic operational conditions. Requirements are grouped into functional, non-functional, interface/data, and governance-oriented validation requirements.
+This defines what ACIS-X must do and how well it must do it under practical conditions. Requirements are grouped into functional, non-functional, interface/data, and governance-oriented validation requirements. These specifications serve as the baseline against which system implementation and subsequent integration tests are evaluated.
 
 \subsection{Functional Requirements}
 \begin{enumerate}[label=\textbf{\roman*.}, itemsep=\parskip, parsep=0pt]
@@ -1004,7 +1020,6 @@ The Software Requirement Specification (SRS) defines what ACIS-X must do and how
     \item \textbf{Observability:} The system should emit continuous logs, heartbeats, and metrics to ensure clear diagnostic visibility.
 \end{enumerate}
 
-The functional and non-functional requirements above define the SRS baseline for ACIS-X in the same subsection structure used in the reference report.
 
 \chapter{PROJECT PLANNING}
 
@@ -1088,7 +1103,6 @@ Project planning is a critical phase for ACIS-X because the system combines even
 Table \ref{tab:acis_project_schedule} shows the scheduling for ACIS-X is based on an 8-week execution window, with approximately the first 3 weeks already completed. The schedule emphasizes backend-first completion, then frontend implementation, integration, and final validation/documentation.
 
 
-\vspace{-4pt}
 \begin{longtable}{|L{0.18\textwidth}|L{0.60\textwidth}|L{0.14\textwidth}|}
     \caption{ACIS-X Project Schedule (8-Week Plan)}\label{tab:acis_project_schedule} \\
 
@@ -1126,6 +1140,8 @@ Table \ref{tab:acis_project_schedule} shows the scheduling for ACIS-X is based o
     \hline
     Week 8 & Final report polishing, consolidated testing evidence, final submission prep. & Pending \\
 \end{longtable}
+
+The scheduled progression reflects a deliberate methodology to de-risk the most complex backend mechanics—such as event orchestration and state management—early in the lifecycle. By front-loading architecture refinement and pipeline stabilization in the initial weeks, the project guarantees that downstream dependencies do not inherit hidden architectural flaws. Moving forward, the critical focus transitions into the ongoing end-to-end integration and the impending system validation stages. These final weeks are instrumental for fine-tuning predictive latencies, ironing out frontend component linkages, and comprehensively evaluating whether the resulting prototype successfully fulfills the overarching resilience and scalability goals of intelligent collections.
 
 \chapter{SYSTEM DESIGN}
 
@@ -1401,7 +1417,7 @@ The collections action algorithm converts final risk output into an operational 
 
 \section{MAJOR PROJECT Mapping with CO and PO}
 
-Table \ref{tab:co_statements} maps the course outcomes required for the major project.
+Table \ref{tab:co_statements} maps the course outcomes required for the major project. These outcomes are carefully structured to build both theoretical knowledge and hands-on engineering capabilities. By actively addressing complex technical challenges, the project fosters a deep understanding of modern distributed software architectures. Furthermore, the outcomes emphasize the critical importance of effective team collaboration and ethical considerations in software product development. Collectively, these objectives ensure that the final technical deliverable strictly adheres to the rigorous standards expected of a capstone engineering endeavor.
 
 \begin{table}[H]
     \centering
@@ -1428,17 +1444,17 @@ Table \ref{tab:co_statements} maps the course outcomes required for the major pr
     }
 \end{table}
 
-\textbf{Strength of CO Mapping to PO/PSOs with Justification:}
+\subsection{Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}
 
-Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcomes and Program Outcomes.
+Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcomes and Program Outcomes. This comprehensive mapping highlights how the project's technical execution fulfills the broader educational and professional engineering criteria. The numeric values indicate the degree to which each course outcome contributes to specific program goals, with a higher value representing a stronger correlation. By quantifying these relationships, the matrix provides a structured overview of the project's academic and practical alignment. This analytical approach ensures that the project not only solves complex architectural problems but also adheres strictly to established engineering guidelines.
 
-\vspace{0.5cm}
 
 \begin{table}[H]
     \centering
     \caption{CO-PO/PSO Mapping Matrix}\label{tab:co_po_matrix}
     \renewcommand{\arraystretch}{1.3}
     \setlength{\tabcolsep}{4pt}
+    \makebox[\textwidth][c]{
     \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
         \hline
         \textbf{COs} & \textbf{PO1} & \textbf{PO2} & \textbf{PO3} & \textbf{PO4} & \textbf{PO5} & \textbf{PO6} & \textbf{PO7} & \textbf{PO8} & \textbf{PO9} & \textbf{PO10} & \textbf{PO11} & \textbf{PSO1} & \textbf{PSO2} \\
@@ -1458,10 +1474,15 @@ Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcom
         \textbf{Average} & 2.75 & 2.5 & 3 & 2.3 & 2.5 & 2 & 1 & 2 & 3 & 2.5 & - & 2.5 & 2 \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
 Table \ref{tab:co_po_justification} maps the justification for each mapping between Course Outcomes and Program Outcomes.
 This ensures compliance with engineering and professional standards.
+
+The justification matrix below illustrates how the implementation of ACIS-X systematically maps to core engineering competencies. In particular, the design of a decoupled, Kafka-driven architecture directly aligns with the program's requirement to analyze and construct complex, scalable systems. By decomposing the overarching problem into discrete, manageable layers—spanning from raw event ingestion to real-time collections actioning—the project demonstrates a rigorous translation of theoretical computer science principles into practical engineering solutions. This methodical approach not only validates the technical rigor of the system but also provides a clear trace from academic learning to industry-applicable skills in distributed computing and data streaming.
+
+Beyond the strictly technical achievements, the project fundamentally satisfies programmatic goals related to professional ethics, targeted communication, and collaborative teamwork. The implementation of transparent, reason-coded risk models explicitly addresses the ethical mandate for fairness and explainability in automated financial decisions. Furthermore, the meticulous project planning, continuous milestone tracking, and exhaustive documentation required to deliver this multi-agent prototype underscore the team's capacity to communicate complex architectural concepts effectively. 
 
 \begin{table}[H]
     \centering
@@ -1486,10 +1507,7 @@ This ensures compliance with engineering and professional standards.
     \end{tabular}
 \end{table}
 
-\vspace{1cm}
-\begin{center}
-\textbf{SDG -- Sustainable Development Goals mapping with project}
-\end{center}
+\section{SDG -- Sustainable Development Goals mapping with project}
 
 Table \ref{tab:sdg_mapping} maps the relevance of the project to the United Nations Sustainable Development Goals.
 This alignment underscores our commitment to building technology that fosters economic growth and sustainable infrastructure.
@@ -1515,9 +1533,9 @@ This alignment underscores our commitment to building technology that fosters ec
     \end{tabular}
 \end{table}
 
-\section{SWOT -- Strengths, Weaknesses, Opportunities, Threats of the project}
+\section{SWOT Analysis}
 
-\textbf{Strengths}
+\subsection{Strengths}
 \begin{itemize}[itemsep=2pt]
     \item Highly scalable and decoupled event-driven architecture using Apache Kafka.
     \item Real-time computation of customer risk profiles and continuous longitudinal monitoring.
@@ -1525,30 +1543,31 @@ This alignment underscores our commitment to building technology that fosters ec
     \item Robust fault tolerance with explicit dead-letter queues and self-healing agent pipelines.
 \end{itemize}
 
-\vspace{0.5cm}
-\textbf{Weaknesses}
+\subsection{Weaknesses}
 \begin{itemize}[itemsep=2pt]
     \item High dependency on simulated scenarios during testing phases rather than direct live commercial ERP streams.
     \item Cold start challenges where newly acquired business clients lack historical invoice depth for confident initial risk baselines.
     \item Complex deployment architecture requiring careful orchestration across multiple interconnected heuristic nodes.
 \end{itemize}
 
-\vspace{0.5cm}
-\textbf{Opportunities}
+\subsection{Opportunities}
 \begin{itemize}[itemsep=2pt]
     \item Native API integration into major enterprise ERP systems (SAP, Oracle, NetSuite) for direct data ingestion.
     \item Expansion of the analytical layer to incorporate more sophisticated deep-learning architectures for dynamic payment prediction.
     \item Autonomous triggering of external communication gateways (e.g., automated email, SMS reminders) based directly on policy thresholds.
 \end{itemize}
 
-\vspace{0.5cm}
-\textbf{Threats}
+\subsection{Threats}
 \begin{itemize}[itemsep=2pt]
     \item Strict data privacy laws and compliance regulations concerning the handling of external litigation and core financial data.
     \item Structural API changes in external enrichment providers causing parsing degradation in the intelligence agents.
     \item Heightened latency and message synchronization issues in constrained, unstable network environments.
 \end{itemize}
 
+\clearpage
+\renewcommand{\bibname}{REFERENCES}
+\renewcommand{\refname}{REFERENCES}
+\addcontentsline{toc}{chapter}{REFERENCES}
 \bibliographystyle{ieeetr}
 \bibliography{references}
 
