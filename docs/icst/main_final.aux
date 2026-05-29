@@ -1,0 +1,60 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {title}{ACIS-X: An Event-Driven Multi-Agent Framework for Real-Time Credit Intelligence with Dynamic Discovery and Self-Healing Recovery}{1}{chapter.1}\protected@file@percent }
+\@writefile{toc}{\authcount {5}}
+\@writefile{toc}{\contentsline {author}{Nikhil Nagendra \and Pallavi K V \and Johan K George \and Nitin Bharadwaj MVS \and Prasanna B Acharya}{1}{chapter.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{altman1968financial}
+\citation{breiman2001random}
+\citation{kleppmann2017designing}
+\citation{tesfatsion2006handbook}
+\citation{tanenbaum2023distributed}
+\citation{lundberg2017unified}
+\citation{wang2023explainable}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Problem Statement}{3}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Proposed Methodology}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}System Architecture}{4}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces ACIS-X Architecture. The system decomposes into distinct functional layers communicating exclusively via Kafka topics, with the self-healing orchestrator operating cross-sectionally.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:arch}{{1}{4}{ACIS-X Architecture. The system decomposes into distinct functional layers communicating exclusively via Kafka topics, with the self-healing orchestrator operating cross-sectionally}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Distributed Intelligence Agents}{4}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Adaptive Recovery Layer}{5}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Algorithms and Mathematical Model}{5}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Self-Healing Protocol}{5}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Ensemble Inference and Policy Adjustment}{5}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Recovery Latency Model}{5}{subsection.6.3}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Self-Healing Adaptive Pipeline Execution}}{6}{algorithm.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Implementation Details}{6}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Experimental Setup}{7}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Results and Analysis}{7}{section.9}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces System Throughput vs. Partition Count (Horizontal Scaling)}}{7}{table.1}\protected@file@percent }
+\newlabel{tab:scaling}{{1}{7}{System Throughput vs. Partition Count (Horizontal Scaling)}{table.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Pipeline throughput across a single recovery cycle. At $t{=}10.5$s the scoring agent is killed; throughput drops to zero while the MAPE-K recovery process detects the silence, starts a replacement, and waits for the partition rebalance to complete. Processing resumes at $t{=}35.7$s. The post-recovery burst clears the backlog that accumulated during the outage window.}}{8}{figure.2}\protected@file@percent }
+\newlabel{fig:recovery}{{2}{8}{Pipeline throughput across a single recovery cycle. At $t{=}10.5$s the scoring agent is killed; throughput drops to zero while the MAPE-K recovery process detects the silence, starts a replacement, and waits for the partition rebalance to complete. Processing resumes at $t{=}35.7$s. The post-recovery burst clears the backlog that accumulated during the outage window}{figure.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Self-Healing Recovery Timeline Breakdown}}{8}{table.2}\protected@file@percent }
+\newlabel{tab:recovery}{{2}{8}{Self-Healing Recovery Timeline Breakdown}{table.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {10}Comparative Evaluation}{9}{section.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.1}Architectural Benchmarks}{9}{subsection.10.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces System Resilience and Predictive Comparison}}{9}{table.3}\protected@file@percent }
+\newlabel{tab:comparison}{{3}{9}{System Resilience and Predictive Comparison}{table.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.2}Ablation Study}{9}{subsection.10.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Architectural Ablation Analysis}}{9}{table.4}\protected@file@percent }
+\newlabel{tab:ablation}{{4}{9}{Architectural Ablation Analysis}{table.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {11}Discussion}{10}{section.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12}Limitations}{10}{section.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13}Conclusion and Future Work}{10}{section.13}\protected@file@percent }
+\bibcite{altman1968financial}{1}
+\bibcite{kreps2011kafka}{2}
+\bibcite{kephart2003vision}{3}
+\bibcite{breiman2001random}{4}
+\bibcite{kleppmann2017designing}{5}
+\bibcite{lundberg2017unified}{6}
+\bibcite{wang2023explainable}{7}
+\bibcite{szabo2022architecting}{8}
+\bibcite{zhang2023event}{9}
+\bibcite{bussmann2021explainable}{10}
+\bibcite{tesfatsion2006handbook}{11}
+\bibcite{tanenbaum2023distributed}{12}
+\gdef \@abspage@last{11}
