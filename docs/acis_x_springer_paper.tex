@@ -46,22 +46,22 @@ Real-time risk analysis of credit for enterprises using financial systems requir
 \label{sec:intro}
 %% ============================================================
 
-Enterprise credit risk management requires continuous assessment of customer payment health, external financial standing, and litigation exposure. Traditional systems operate on daily or weekly batch cycles, introducing latencies that prevent timely intervention when risk deteriorates intraday. The proliferation of event streaming platforms such as Apache Kafka~\cite{kreps2011kafka} and advances in multi-agent software engineering~\cite{zhang2024event} create an opportunity to fundamentally re-architect credit intelligence as a real-time, resilient, autonomous pipeline.
+Management of enterprise credit risks calls for constant evaluation of payment status, financial position, and potential litigations. The traditional model works with daily or weekly cycles that introduce delays which do not enable immediate action in case of increased risk throughout the day. With the emergence of event streaming technologies like Apache Kafka~\cite{kreps2011kafka} and new developments in multi-agent software development~\cite{zhang2024event}, there is a possibility of changing the architecture of credit intelligence fundamentally.
 
-This paper presents ACIS-X (Autonomous Credit Intelligence System, Extended), a production-grade system implemented in Python~3.10 with Apache Kafka~3.6 as its event backbone. The system addresses three principal limitations of existing approaches:
+This work introduces ACIS-X (Autonomous Credit Intelligence System, Extended), which is a fully developed system written in Python~3.10 and uses Apache Kafka~3.6 as its event foundation. ACIS-X tackles the following three main limitations of prior work:
 
 \begin{enumerate}
-    \item \textbf{Temporal latency}: Batch systems miss intraday risk signal evolution critical for proactive collections.
-    \item \textbf{Signal siloing}: Financial, behavioral, and litigation risk signals are assessed in isolation, preventing holistic risk fusion.
-    \item \textbf{Operational fragility}: Single-process pipelines lack autonomous recovery, creating outage risk during agent failures.
+    \item \textbf{Latency}: The batch systems do not capture the evolution of risk signals within a day essential for preemptive collections.
+    \item \textbf{Siloed Signals}: Financial, behavioral, and litigation risk signals are independently evaluated, and therefore risk fusion is impossible.
+    \item \textbf{Fragility}: The single-process pipeline does not have autonomous fail-over capabilities, leading to outages upon agent crashes.
 \end{enumerate}
 
-The principal contributions of this work are:
+The primary contributions of this work include:
 \begin{itemize}
-    \item A twelve-agent distributed architecture decomposed across five functional layers, all communicating exclusively through Kafka topics.
-    \item A three-tier signal fusion model combining on-time payment ratios, accounts-receivable aging, external financial indicators (debt/equity, ROE, PE ratio), and litigation severity into a composite risk score using validated weighting schemes.
-    \item An autonomous self-healing orchestration layer with heartbeat-driven failure detection and Kafka offset-based zero-loss agent restart.
-    \item Empirical validation through 162 automated tests: P95 pipeline latency $<500$\,ms, MTTR $<30$\,s under fault-injection cycles, exact-once deduplication over 10,000 events, and $\geq2.5\times$ horizontal throughput scaling.
+    \item A distributed 12-agents architecture partitioned in five functional layers, where all layers communicate solely through Kafka topics.
+    \item A three-layer signal fusion system that takes on-time payments rate, age of receivables, outside financial metrics (debt/eq, ROE, PE) and litigation impact into account to form a risk score using validated weights.
+    \item An autonomous self-healing orchestration layer with heartbeat-based failure discovery and Kafka offset based zero loss agent recovery.
+    \item Experimental proof by running 162 automatic tests: P95 latency of pipeline $<500$\,ms, mean time to repair $<30$\,s in a fault injection cycle, perfect-once deduplication for 10k events and $\geq2.5\times$ horizontal scalability.
 \end{itemize}
 
 %% ============================================================
@@ -129,7 +129,7 @@ SelfHealingAgent (MAPE-K restart)\\
 RuntimeManager $\leftrightarrow$ Apache Kafka (3 partitions/group)}
 }
 }
-\caption{ACIS-X five-layer multi-agent architecture. All inter-layer communication is mediated by Apache Kafka topics. The System Layer operates orthogonally across all processing layers.}
+\caption{ACIS-X five-layer multi-agent architecture.All communication between layers takes place through Apache Kafka topics. The System Layer works perpendicularly to all layers of processing.}
 \label{fig:arch}
 \end{figure}
 
@@ -160,11 +160,11 @@ QueryAgent / MemoryAgent & 5 & (synchronous calls) & (in-memory cache) \\
 \end{tabular}
 }
 \end{table}
-Table~\ref{tab:agents} summarizes the twelve agents, their Kafka subscriptions, and publications, derived directly from the implemented codebase.
+Table~\ref{tab:agents} is a summary of the twelve agents, Kafka subscription, and publications based on the actual implementation codebase.
 
-\subsection{Kafka Partitioning and Consumer Groups}
+\subsection{Kafka Partitioning and Consumer Group}
 
-Messages are keyed by \texttt{customer\_id} hash, preserving per-customer ordering. Each agent type operates within its own dedicated consumer group (e.g., \texttt{customer-state-group}, \texttt{external-data-group}, \texttt{risk-scoring-group}, \texttt{collections-group}), enabling independent horizontal scaling per agent. Three partitions per topic allow up to three replicas of each agent to share a consumer group for load-balanced processing.
+Message keys are based on the \texttt{customer\_id} hash such that messages are delivered to individual customers in order. Different types of agents run independently in their own dedicated consumer groups (\texttt{customer-state-group}, \texttt{external-data-group}, \texttt{risk-scoring-group}, \texttt{collections-group}). There are three partitions per topic, and thus three replicas of each agent can reside in the same consumer group.
 
 \subsection{Persistence Layer}
 
@@ -209,25 +209,25 @@ r_{ml} = P(\text{Default}|X) = \frac{1}{M} \sum_{m=1}^{M} h_m(X)
 
 where $M=50$ is the number of decision trees, and the feature vector $X$ incorporates both continuous behavioral metrics and context variables (e.g., $s_{\text{delay}}$, credit utilization, on-time ratio, litigation risk, and financial health). 
 
-To ensure systemic reliability, ACIS-X enforces this two-stage pipeline. The ML layer detects subtle shifts in continuous behavioral patterns, while the policy layer ($r_{policy}$) enforces non-negotiable risk penalties for catastrophic events (such as severe litigation or sudden credit rating drops):
+To achieve systematic reliability, ACIS-X follows this dual-pipeline approach. The machine learning part can sense any changes in the continuous behavioral patterns, whereas the policy part ($r_{policy}$) penalizes the risk associated with any critical events (for example, lawsuits or  sudden credit rating drops):
 
 \begin{equation}
 r_{final} = \max(0, \min(1, r_{ml} + r_{policy}))
 \label{eq:twostage}
 \end{equation}
 
-To ensure regulatory compliance and algorithmic transparency, ACIS-X computes exact Shapley Additive Explanations (SHAP) using TreeExplainer \cite{lundberg2020local} for every prediction. The model decomposes the final risk score into an expected baseline value $E[f(X)]$ and additive feature attributions $\phi_i$:
+To meet regulatory standards and keep the algorithm completely transparent, ACIS-X calculates exact SHAP values using the TreeExplainer method \cite{lundberg2020local}. The model works by breaking down the final risk score into a baseline expected value, $E[f(X)]$, and individual feature attributions, $\phi_i$:
 
 \begin{equation}
 f(X) = E[f(X)] + \sum_{i=1}^{N} \phi_i
 \label{eq:shap}
 \end{equation}
 
-For example, a high-risk prediction ($0.80$) might be transparently decomposed as: \textit{Baseline (0.45) + Payment Delay (+0.20) + High Utilization (+0.10) + Active Litigation (+0.05)}. These SHAP values are persisted to the \texttt{risk\allowbreak \_explanations} table, enabling auditors to trace exactly why a specific invoice was flagged for collections.
+For example, a high-risk prediction ($0.80$) might be broken down transparently as: \textit{Baseline (0.45) + Payment Delay (+0.20) + High Utilization (+0.10) + Active Litigation (+0.05)}. The system saves these SHAP values directly to the \texttt{risk\allowbreak \_explanations} table, allowing auditors to trace exactly why it flagged a specific invoice for collections.
 
 \subsection{Risk Refinement and Final Scoring}
 
-RiskScoringAgent refines the base prediction using five normalized behavioral factors and an external context boost:
+The \texttt{RiskScoringAgent} refines the base prediction by analyzing five normalized behavioral factors alongside an external context boost:
 
 \begin{equation}
 r_{\text{adj}} = r_{\text{pred}} + 0.85\cdot\Delta_{\text{behavioral}} + 0.30\cdot\Delta_{\text{temporal}}
@@ -241,7 +241,7 @@ where $\Delta_{\text{behavioral}}$ is defined as:
 &+ 0.15\cdot a_{\text{delay}} + 0.15\cdot a_{\text{outstanding}} + 0.10\cdot a_{\text{exposure}}
 \end{split}
 \end{equation}
-with each factor normalized to $[0,1]$. The external context boost blends aggregated, financial, and litigation risks (weights 0.40, 0.30, 0.20, 0.10) and applies up to a 20\% multiplicative boost to $\Delta_{\text{behavioral}}$. Temporal trend signals (velocity, stability, volatility) contribute $\Delta_{\text{temporal}}$, detected via a \texttt{get\_risk\_velocity} query. The final score is clamped to $[0,1]$ and classified: high $>0.75$, medium $>0.40$, low otherwise.
+Here, each individual factor is normalized to $[0,1]$.To calculate the external context boost, the system blends aggregated, financial and litigation risks using structured weighting schemes (weights 0.40, 0.30, 0.20, 0.10), which applies up to a 20\% multiplicative boost to $\Delta_{\text{behavioral}}$. Meanwhile, temporal trend signals—specifically velocity, stability, and volatility—contribute $\Delta_{\text{temporal}}$,which the system detects via a \texttt{get\_risk\_velocity} query. The final score is clamped to $[0,1]$ and classified: high $>0.75$, medium $>0.40$, low otherwise.
 
 \subsection{Self-Healing Protocol}
 
@@ -355,7 +355,7 @@ In-memory dedup cache bound & 50,000 entries & AggregatorAgent \\
 
 We evaluated predictive performance by benchmarking our Random Forest model against Logistic Regression (LR) and XGBoost baselines on synthetic data. The Enriched Random Forest achieved an F1-score of 0.89, outperforming LR (0.76) and un-enriched XGBoost (0.82), validating that external signals improve recall without sacrificing precision.
 
-Table~\ref{tab:comparison} compares ACIS-X against representative approaches on key architectural dimensions.
+In Table~\ref{tab:comparison} we compare ACIS-X with representative approaches in several key architectural dimensions.
 
 \begin{table}[H]
 \caption{Architectural Comparison with Related Systems}
@@ -383,21 +383,20 @@ Offline test coverage & $\times$ & $\times$ & $\times$ & 162 tests \\
 \label{sec:discussion}
 %% ============================================================
 
-\textbf{Signal fusion contribution}: Ablation tests confirm external signals are critical for accuracy. AggregatorAgent's freshness guard ensures stale cached values never overwrite recent scores, verified via null-safety tests.
+\textbf{Fusion of signals contribution}: Ablation studies prove that external signals are important for performance. The freshness feature in \texttt{AggregatorAgent} prevents old cache values from overwriting fresh scores through null safety testing.
 
-\textbf{Architectural trade-offs}: Choreography removes single points of failure but complicates tracing, requiring OpenTelemetry. SQLite suffices locally; production requires PostgreSQL, supported by DBAgent.
+\textbf{Trade-offs of the architecture}: Choreography eliminates SPOFs, but it makes tracing complex and requires OpenTelemetry. SQLite works fine for local environment; production needs PostgreSQL using \texttt{DBAgent}.
 
-\textbf{Self-healing correctness}: Tests confirm SelfHealingAgent avoids cascading restarts during simultaneous failures, and health routing correctly escalates across all agent states.
-
+\textbf{Self-healing of correctness}: Test proves that \texttt{SelfHealingAgent} avoids cascading restarts when agents fail simultaneously, and health routing works correctly across any agent state.
 
 %% ============================================================
 \section{Conclusion and Future Work}
 \label{sec:conclusion}
 %% ============================================================
 
-ACIS-X demonstrates real-time credit intelligence via multi-agent decomposition over Kafka. Its twelve-agent architecture, signal fusion, SHAP explainability, and MAPE-K self-healing overcome latency and fragility of batch systems. Testing confirms sub-500\,ms P95 latency, sub-30\,s MTTR, exactly-once deduplication, and near-linear scaling.
+ACIS-X achieves credit intelligence in real time through multi-agent decomposition on Kafka. The twelve-agent system, signal fusion, SHAP interpretability, and MAPE-K self-healing solve the problem of latencies and fragilities of batch systems. Our testing shows sub-500\,ms P95 latency, sub-30\,s MTTR, exactly-once deduplication, and near-linear scalability.
 
-Future work includes LSTM sequence modeling, federated learning, and graph-based supply chain risk modeling.
+Our future work will include LSTM sequence modeling, federated learning, and graph-based supply chain risk modeling.
 
 \section*{Acknowledgement}
 The authors thank the faculty and laboratory infrastructure of the Department of Computer Science and Engineering, AMC Engineering College, Bengaluru, for supporting this research.
