@@ -49,7 +49,8 @@ class PaymentPredictionAgent(BaseAgent):
 
     def __init__(
         self,
-        kafka_client: Any,
+        kafka_client: Any = None,
+        instance_id: str = None,
     ):
         super().__init__(
             agent_name="PaymentPredictionAgent",
@@ -63,6 +64,7 @@ class PaymentPredictionAgent(BaseAgent):
             ],
             kafka_client=kafka_client,
             agent_type="PaymentPredictionAgent",
+            instance_id=instance_id,
         )
         self._last_prediction_time: Dict[str, float] = {}
         self.external_cache = {}

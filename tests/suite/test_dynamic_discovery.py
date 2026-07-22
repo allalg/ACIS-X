@@ -5,6 +5,7 @@ import threading
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
+from runtime.kafka_client import KafkaClient, KafkaConfig
 
 class TestDynamicDiscovery:
     """
@@ -32,7 +33,9 @@ class TestDynamicDiscovery:
         without hardcoded topologies.
         """
         agent_id = f"test-agent-{uuid.uuid4().hex[:6]}"
-        agent = PaymentPredictionAgent(agent_id=agent_id)
+        config = KafkaConfig(client_id=agent_id, bootstrap_servers="localhost:9092")
+        client = KafkaClient(config)
+        agent = PaymentPredictionAgent(instance_id=agent_id, kafka_client=client)
         
         # Override topics for test safety
         agent.consume_topic = "acis.discovery.test"
@@ -47,13 +50,13 @@ class TestDynamicDiscovery:
         
         # Validate that the agent successfully initialized its consumer and producer
         # indicating it dynamically discovered the Kafka metadata
-        assert agent.consumer is not None, "Agent failed to dynamically discover and bind consumer."
-        assert agent.producer is not None, "Agent failed to dynamically discover and bind producer."
+        assert agent.kafka_client._consumer is not None, "Agent failed to dynamically discover and bind consumer."
+        assert agent.kafka_client._producer is not None, "Agent failed to dynamically discover and bind producer."
         
         # Terminate gracefully
         agent.stop()
         agent_thread.join(timeout=2)
-        assert not agent.running, "Agent failed to terminate correctly post-discovery."
+        assert not agent.is_running, "Agent failed to terminate correctly post-discovery."
 
     def test_multi_agent_concurrent_discovery(self):
         """
@@ -64,7 +67,10 @@ class TestDynamicDiscovery:
         threads = []
         
         for i in range(3):
-            agent = PaymentPredictionAgent(agent_id=f"concurrent-agent-{i}")
+            aid = f"concurrent-agent-{i}"
+            config = KafkaConfig(client_id=aid, bootstrap_servers="localhost:9092")
+            client = KafkaClient(config)
+            agent = PaymentPredictionAgent(instance_id=aid, kafka_client=client)
             agent.consume_topic = "acis.discovery.test"
             agents.append(agent)
             
@@ -75,7 +81,7 @@ class TestDynamicDiscovery:
         time.sleep(5) # Wait for Kafka group rebalance and dynamic discovery
         
         for agent in agents:
-            assert agent.consumer is not None, f"Agent {agent.agent_id} failed dynamic discovery."
+            assert agent.kafka_client._consumer is not None, f"Agent {agent.agent_id} failed dynamic discovery."
             agent.stop()
             
         for thread in threads:
