@@ -712,10 +712,18 @@ class KafkaClient:
                     # partition) are never accidentally skipped.
                     from kafka import TopicPartition, OffsetAndMetadata
                     tp = TopicPartition(message.topic, message.partition)
-                    try:
+                    
+                    # Cache the feature check to avoid exception handling overhead on every commit
+                    if not hasattr(self, '_supports_leader_epoch'):
+                        try:
+                            OffsetAndMetadata(0, None, -1)
+                            self._supports_leader_epoch = True
+                        except TypeError:
+                            self._supports_leader_epoch = False
+
+                    if self._supports_leader_epoch:
                         offsets = {tp: OffsetAndMetadata(message.offset + 1, None, -1)}
-                    except TypeError:
-                        # Fallback for older kafka-python or kafka-python-ng where leader_epoch is not supported
+                    else:
                         offsets = {tp: OffsetAndMetadata(message.offset + 1, None)}
                     self._consumer.commit(offsets=offsets)
                 else:

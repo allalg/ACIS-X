@@ -598,7 +598,14 @@ class ScenarioGeneratorAgent(BaseAgent):
             return ""
         customer_id = random.choice(invoiceable)
         # Prefer in-memory data for rich invoice fields; fall back to DB-only dict
-        customer = self._customers.get(customer_id, {"customer_id": customer_id, "credit_limit": 100000.0})
+        customer = self._customers.get(customer_id, {
+            "customer_id": customer_id, 
+            "credit_limit": 100000.0,
+            "currency": "INR",
+            "country": "IN",
+            "industry": "unknown",
+            "risk_level": "low"
+        })
 
         amount = self._generate_invoice_amount(customer["credit_limit"])
 
