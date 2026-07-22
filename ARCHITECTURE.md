@@ -8,10 +8,10 @@
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────── EXTERNAL INTEGRATIONS ──────────────────────┐
-│  Screener.in API  │  Google News API  │  Indian Kanoon API  │ ML    │
-└────────────┬───────────────┬───────────────┬──────────────────┬──────┘
-             │               │               │                  │
-       ┌─────▼───────────────▼───────────────▼──────────────────▼─┐
+│    Screener.in API    │    Google News API    │      ML Models      │
+└─────────────┬─────────────────┬─────────────────────────┬───────────┘
+              │                 │                         │
+       ┌──────▼─────────────────▼─────────────────────────▼─────────┐
        │            ENRICHMENT LAYER (Intelligence)                 │
        ├──────────────────────────────────────────────────────────┤
        │                                                            │
@@ -125,8 +125,8 @@
                     │ ├─ payments                │
                     │ ├─ customer_risk_profile   │
                     │ ├─ financial_data          │
-                    │ ├─ litigation_data         │
                     │ ├─ external_data_cache     │
+                    │ ├─ litigation_data         │
                     │ └─ collections_actions     │
                     └────────────────────────────┘
 
@@ -227,22 +227,21 @@
    └────────────┬───────────────────────────────┘
                 │
                 ├──────────────────────────────────────┐
-                │                                      │
-   4a. SCRAPING                        4b. LITIGATION
-                │                                      │
-                ▼                                      ▼
-   ┌───────────────────────────────┐  ┌───────────────────────────┐
-   │ ExternalScrapingAgent         │  │ (Could be separate source)│
-   │ - Queries: Google News        │  │ - Indian Kanoon API       │
-   │ - Publishes: litigation_risk  │  │ - Litigation patterns     │
-   └────────────┬──────────────────┘  └───────────────┬───────────┘
-                │                                     │
+                │
+   4a. SCRAPING (LLM extraction)
+                │
+                ▼
+   ┌───────────────────────────────┐
+   │ ExternalScrapingAgent         │
+   │ - Queries: Google News        │
+   │ - Publishes: litigation_risk  │
+   └────────────┬──────────────────┘
+                │
    5. AGGREGATION & SIGNAL FUSION
-                │                                     │
-                └──────────────────┬──────────────────┘
-                                   ▼
-                   ┌──────────────────────────────────┐
-                   │ AggregatorAgent                  │
+                │
+                ▼
+   ┌──────────────────────────────────┐
+   │ AggregatorAgent                  │
                    │ - Fuses: financial + litigation  │
                    │ - Dedup: last_published tracking │
                    │ - Publishes: aggregated_risk     │
