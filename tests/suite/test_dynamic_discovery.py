@@ -7,6 +7,9 @@ from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
 from runtime.kafka_client import KafkaClient, KafkaConfig
 
+pytestmark = pytest.mark.integration
+
+
 class TestDynamicDiscovery:
     """
     Test suite validating the dynamic discovery protocol 
@@ -16,15 +19,19 @@ class TestDynamicDiscovery:
     @pytest.fixture(autouse=True)
     def setup_topics(self):
         """Ensure test topics exist for dynamic discovery"""
-        admin = KafkaAdminClient(bootstrap_servers='localhost:9092')
+        from kafka.errors import NoBrokersAvailable
         try:
-            admin.create_topics([
-                NewTopic(name="acis.discovery.test", num_partitions=3, replication_factor=1)
-            ])
-        except TopicAlreadyExistsError:
-            pass
-        finally:
-            admin.close()
+            admin = KafkaAdminClient(bootstrap_servers='localhost:9092')
+            try:
+                admin.create_topics([
+                    NewTopic(name="acis.discovery.test", num_partitions=3, replication_factor=1)
+                ])
+            except TopicAlreadyExistsError:
+                pass
+            finally:
+                admin.close()
+        except NoBrokersAvailable:
+            pytest.skip("Kafka broker is not available. Skipping integration test.")
 
     def test_agent_dynamic_registration(self):
         """

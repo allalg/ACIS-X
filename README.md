@@ -29,6 +29,7 @@ ACIS-X monitors payments, enriches customer data with external signals (financia
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
+cp .env.example .env       # Configure your API keys in .env
 
 # 2. Fresh start (clean database)
 rm -f .acis_consumer_groups_initialized acis.db acis.db-wal acis.db-shm
@@ -56,7 +57,7 @@ is via Docker Desktop and the bundled `docker-compose.yml`.
 ### 2. Start Kafka
 
 ```bash
-# Launch Kafka + ZooKeeper in the background
+# Launch Kafka Cluster in the background (KRaft mode, no ZooKeeper needed)
 docker-compose up -d
 
 # To stop Kafka later:
