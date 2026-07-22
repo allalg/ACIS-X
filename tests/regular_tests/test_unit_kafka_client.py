@@ -61,7 +61,10 @@ class TestKafkaClientCommitOffset:
         from kafka import TopicPartition, OffsetAndMetadata
 
         tp = TopicPartition("acis.invoices", 0)
-        expected_offsets = {tp: OffsetAndMetadata(100, None, -1)}   # offset + 1 = 100
+        try:
+            expected_offsets = {tp: OffsetAndMetadata(100, None, -1)}   # offset + 1 = 100
+        except TypeError:
+            expected_offsets = {tp: OffsetAndMetadata(100, None)}
 
         client._consumer.commit.assert_called_once_with(offsets=expected_offsets)
 
@@ -97,7 +100,10 @@ class TestKafkaClientCommitOffset:
 
             from kafka import TopicPartition, OffsetAndMetadata
             tp = TopicPartition(msg.topic, msg.partition)
-            expected = {tp: OffsetAndMetadata(offset + 1, None, -1)}
+            try:
+                expected = {tp: OffsetAndMetadata(offset + 1, None, -1)}
+            except TypeError:
+                expected = {tp: OffsetAndMetadata(offset + 1, None)}
             client._consumer.commit.assert_called_once_with(offsets=expected)
 
     def test_commit_only_touches_correct_partition(self):

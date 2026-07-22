@@ -712,9 +712,11 @@ class KafkaClient:
                     # partition) are never accidentally skipped.
                     from kafka import TopicPartition, OffsetAndMetadata
                     tp = TopicPartition(message.topic, message.partition)
-                    # leader_epoch=-1 is the conventional sentinel meaning
-                    # "not provided" (matches kafka-python ≥ 2.0 signature).
-                    offsets = {tp: OffsetAndMetadata(message.offset + 1, None, -1)}
+                    try:
+                        offsets = {tp: OffsetAndMetadata(message.offset + 1, None, -1)}
+                    except TypeError:
+                        # Fallback for older kafka-python or kafka-python-ng where leader_epoch is not supported
+                        offsets = {tp: OffsetAndMetadata(message.offset + 1, None)}
                     self._consumer.commit(offsets=offsets)
                 else:
                     # message is None → caller wants to commit all current positions
