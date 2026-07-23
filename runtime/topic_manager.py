@@ -138,6 +138,34 @@ ACIS_TOPIC_CONFIGS = {
         retention_ms=-1,  # Infinite retention
         cleanup_policy="compact",  # Keep latest agent state
     ),
+    "acis.memory": TopicConfig(
+        name="acis.memory",
+        partitions=3,
+        replication_factor=3,
+        retention_ms=7 * 24 * 3600 * 1000,
+        cleanup_policy="delete",
+    ),
+    "acis.metrics": TopicConfig(
+        name="acis.metrics",
+        partitions=3,
+        replication_factor=3,
+        retention_ms=7 * 24 * 3600 * 1000,
+        cleanup_policy="delete",
+    ),
+    "acis.collections": TopicConfig(
+        name="acis.collections",
+        partitions=3,
+        replication_factor=3,
+        retention_ms=7 * 24 * 3600 * 1000,
+        cleanup_policy="delete",
+    ),
+    "acis.monitoring": TopicConfig(
+        name="acis.monitoring",
+        partitions=3,
+        replication_factor=3,
+        retention_ms=7 * 24 * 3600 * 1000,
+        cleanup_policy="delete",
+    ),
 
     # DLQ topics (very long retention)
     "acis.invoices.dlq": TopicConfig(
