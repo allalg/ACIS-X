@@ -1,3 +1,4 @@
+from datetime import timezone
 import pytest
 from unittest.mock import patch, MagicMock
 from runtime.placement_engine import PlacementEngine
@@ -41,7 +42,7 @@ def test_placement_routing_round_robin(mock_kafka_client):
                 event_id=f"req_{i}",
                 event_type="placement.routing.request",
                 event_source="test",
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(timezone.utc).replace(tzinfo=None),
                 entity_id="test",
                 payload={"required_capability": "risk_scoring", "message_key": f"key_{i}", "original_topic": "input_topic"}
             )
@@ -69,7 +70,7 @@ def test_placement_routing_no_capable_agent(mock_kafka_client):
             event_id="req_empty",
             event_type="placement.routing.request",
             event_source="test",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="test",
             payload={"required_capability": "risk_scoring", "message_key": "key_empty", "original_topic": "input_topic"}
         )
@@ -113,7 +114,7 @@ def test_placement_routing_registry_update(mock_kafka_client):
             event_id="req_upd",
             event_type="placement.routing.request",
             event_source="test",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="test",
             payload={"required_capability": "risk_scoring", "message_key": "key", "original_topic": "t"}
         )

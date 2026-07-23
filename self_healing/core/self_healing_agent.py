@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 SelfHealingAgent - Event-driven recovery decision agent for ACIS-X.
 
@@ -391,7 +392,7 @@ class SelfHealingAgent(BaseAgent):
 
     def _evaluate_all_states(self) -> None:
         """Re-run decision logic across all tracked agents using HYBRID approach."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         with self._state_lock:
             states_snapshot = {}
@@ -454,7 +455,7 @@ class SelfHealingAgent(BaseAgent):
                 s_dict["candidate_fallbacks"] = list(s_dict["candidate_fallbacks"])
             snapshot = AgentRecoveryState(**s_dict)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if snapshot.status == AgentStatus.STOPPED.value:
             return
@@ -615,7 +616,7 @@ class SelfHealingAgent(BaseAgent):
 
         logger.info(f"[SelfHealing] agent={agent_id} score={score:.2f} action={action}")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         replicas, max_replicas = self._get_replica_info(state.agent_name)
 
         if action == "restart":
@@ -739,7 +740,7 @@ class SelfHealingAgent(BaseAgent):
         (_publish_restart, _publish_scale, _publish_spawn_and_placement) keep
         their own cooldowns to prevent command storms.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         payload = {
             "agent_id": state.agent_id,
@@ -795,7 +796,7 @@ class SelfHealingAgent(BaseAgent):
         with self._state_lock:
             current = self._states.get(state.agent_id)
             if current is not None:
-                current.last_restart_requested = datetime.utcnow()
+                current.last_restart_requested = datetime.now(timezone.utc).replace(tzinfo=None)
 
     def _publish_scale(self, state: AgentRecoveryState, reason: str, decision_rule: str, trigger_value: float) -> None:
         """Publish agent.scale.requested."""
@@ -826,11 +827,11 @@ class SelfHealingAgent(BaseAgent):
         with self._state_lock:
             current = self._states.get(state.agent_id)
             if current is not None:
-                current.last_scale_requested = datetime.utcnow()
+                current.last_scale_requested = datetime.now(timezone.utc).replace(tzinfo=None)
 
     def _publish_spawn_and_placement(self, state: AgentRecoveryState, reason: str, decision_rule: str) -> None:
         """Publish a single spawn request and let RuntimeManager request placement."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if not self._can_spawn(state, now):
             return
 
@@ -885,7 +886,7 @@ class SelfHealingAgent(BaseAgent):
 
     def _maybe_publish_fallback(self, state: AgentRecoveryState, decision_rule: str) -> None:
         """Publish fallback.agent.selected when a fallback is configured."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if not self._can_select_fallback(state, now):
             return
 

@@ -1,3 +1,4 @@
+from datetime import timezone
 import logging
 import random
 import threading
@@ -126,7 +127,7 @@ class CustomerStateAgent(BaseAgent):
                 "90_plus_days": 0.0,
             }
             
-            now_utc = datetime.utcnow()
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
             for inv in invoice_list:
                 status = inv.get("status")
                 # Both "paid" and "completed" (from scenario generator) mean fully paid.
@@ -179,7 +180,7 @@ class CustomerStateAgent(BaseAgent):
                 "on_time_ratio": on_time_ratio,
                 "aging_buckets": aging_buckets,
                 "last_payment_date": last_payment_date,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             }
 
             # Publish metrics
@@ -224,7 +225,7 @@ class CustomerStateAgent(BaseAgent):
             "61_90_days": 0.0,
             "90_plus_days": 0.0,
         }
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         for inv in invoice_list:
             if inv.get("status") not in ("paid", "completed", "cancelled"):
                 amount = float(inv.get("remaining_amount") or inv.get("total_amount") or inv.get("amount") or 0.0)
@@ -277,7 +278,7 @@ class CustomerStateAgent(BaseAgent):
         payload = {
             "customer_id": customer_id,
             **metrics_snapshot,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
         self.publish_event(
             topic=self.TOPIC_METRICS,

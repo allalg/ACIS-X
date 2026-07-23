@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/suite/test_intelligence_comparison.py
 
@@ -345,7 +346,7 @@ class TestExternalEnrichmentAblation:
                 event_id=f"evt_fin_{cid}",
                 event_type="external.data.enriched",
                 event_source="ExternalDataAgent",
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(timezone.utc).replace(tzinfo=None),
                 entity_id=cid,
                 correlation_id=f"corr_fin_{cid}",
                 schema_version="1.1",
@@ -364,7 +365,7 @@ class TestExternalEnrichmentAblation:
                 event_id=f"evt_lit_{cid}",
                 event_type="external.litigation.updated",
                 event_source="ExternalScrapingAgent",
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(timezone.utc).replace(tzinfo=None),
                 entity_id=cid,
                 correlation_id=f"corr_lit_{cid}",
                 schema_version="1.1",

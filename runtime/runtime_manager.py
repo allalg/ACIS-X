@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 RuntimeManager - Simulated runtime orchestrator for ACIS-X.
 
@@ -451,7 +452,7 @@ class RuntimeManager(BaseAgent):
             "capabilities": instance.capabilities,
             "subscribed_topics": instance.subscribed_topics,
             "produced_topics": instance.produced_topics,
-            "spawned_at": datetime.utcnow().isoformat(),
+            "spawned_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "spawn_duration_ms": 0,
             "replica_index": instance.replica_index,
             "replica_count": instance.replica_count,
@@ -479,7 +480,7 @@ class RuntimeManager(BaseAgent):
             "instance_id": instance.instance_id,
             "host": instance.host,
             "version": instance.version,
-            "restarted_at": datetime.utcnow().isoformat(),
+            "restarted_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "restart_duration_ms": 0,
             "restart_count": instance.restart_count,
             "previous_error": None,
@@ -522,7 +523,7 @@ class RuntimeManager(BaseAgent):
             "current_replicas": current_replicas,
             "max_replicas": max_replicas,
             "scale_direction": scale_direction,
-            "scaled_at": datetime.utcnow().isoformat(),
+            "scaled_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "scale_duration_ms": 0,
             "instances": instances,
             "status": "completed",
@@ -563,7 +564,7 @@ class RuntimeManager(BaseAgent):
             "instance_id": instance.instance_id,
             "host": instance.host,
             "status": AgentStatus.STOPPED.value,
-            "stopped_at": datetime.utcnow().isoformat(),
+            "stopped_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "group_id": instance.group_id,
             "replica_index": instance.replica_index,
             "replica_count": instance.replica_count,

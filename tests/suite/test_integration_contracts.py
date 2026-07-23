@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/suite/test_integration_contracts.py
 
@@ -76,14 +77,14 @@ class TestRiskProfilePersistence:
             "confidence": 0.85,
             "financial_source": "NSE",
             "litigation_source": "NCLT",
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
         payload.update(payload_overrides)
         return Event(
             event_id=f"evt_{uuid.uuid4()}",
             event_type="risk.profile.updated",
             event_source="AggregatorAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id=customer_id,
             schema_version="1.1",
             correlation_id=f"corr_{uuid.uuid4()}",
@@ -96,7 +97,7 @@ class TestRiskProfilePersistence:
         cid = "cust_integ_001"
 
         conn = sqlite3.connect(db_path)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
             "INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at) VALUES (?,?,?,?)",
             (cid, "Integration Corp", now, now),
@@ -127,7 +128,7 @@ class TestRiskProfilePersistence:
         fixed_event_id = f"evt_{uuid.uuid4()}"
 
         conn = sqlite3.connect(db_path)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
             "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?,?,?)",
             (cid, now, now),
@@ -191,7 +192,7 @@ class TestCSAtoPPAContract:
         kafka._consumer.poll.return_value = {}
 
         csa = CustomerStateAgent(kafka_client=kafka)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         inv_event = Event(
             event_id="evt_contract_inv",
@@ -261,7 +262,7 @@ class TestRSAtoCollectionsContract:
             event_id="evt_contract_pred",
             event_type="payment.risk.predicted",
             event_source="PaymentPredictionAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="cust_rsa_contract",
             correlation_id="corr_rsa_contract",
             schema_version="1.1",
@@ -336,7 +337,7 @@ class TestCorrelationIdPropagation:
                         "total_amount": 50_000.0,
                         "amount": 50_000.0,
                         "remaining_amount": 50_000.0,
-                        "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                        "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
                         "status": "pending",
                     }]
                 }
@@ -360,7 +361,7 @@ class TestCorrelationIdPropagation:
         ppa = PaymentPredictionAgent(kafka_client=kafka)
         rsa = RiskScoringAgent(kafka_client=kafka)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         inv_event = Event(
             event_id="evt_corr_prop",
             event_type="invoice.created",

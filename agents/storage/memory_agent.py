@@ -1,3 +1,4 @@
+from datetime import timezone
 import logging
 import threading
 import sqlite3
@@ -158,7 +159,7 @@ class MemoryAgent(BaseAgent):
                         "avg_delay": 0.0,  # Will be updated by metrics event
                         "on_time_ratio": 0.0,  # Safe default; updated on first customer.metrics.updated
                         "risk_score": cust.get("risk_score", 0.0),
-                        "last_updated": datetime.utcnow().isoformat(),
+                        "last_updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                         # CRITICAL FIX: Initialize invoice details storage
                         "invoice_details": [],
                         "risks": [],
@@ -307,7 +308,7 @@ class MemoryAgent(BaseAgent):
                 "avg_delay": 0.0,
                 "on_time_ratio": 0.0,  # Safe default, consistent with CustomerStateAgent
                 "risk_score": 0.0,
-                "last_updated": datetime.utcnow().isoformat(),
+                "last_updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 # CRITICAL FIX: Add structured invoice details storage
                 "invoice_details": [],
                 "risks": [],
@@ -339,7 +340,7 @@ class MemoryAgent(BaseAgent):
             recomputed = self._recompute_state(customer_id)
             state["total_outstanding"] = recomputed.get("total_outstanding", 0.0)
             state["overdue_count"] = recomputed.get("overdue_count", 0)
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["last_updated"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
             # ONLY publish if state actually changed
             if state["total_outstanding"] != previous_outstanding or state["overdue_count"] != previous_overdue:
@@ -381,7 +382,7 @@ class MemoryAgent(BaseAgent):
             recomputed = self._recompute_state(customer_id)
             state["total_outstanding"] = recomputed.get("total_outstanding", 0.0)
             state["overdue_count"] = recomputed.get("overdue_count", 0)
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["last_updated"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
             # ONLY publish if state actually changed
             if state["total_outstanding"] != previous_outstanding or state["overdue_count"] != previous_overdue:
@@ -432,7 +433,7 @@ class MemoryAgent(BaseAgent):
             state = self._get_or_create_customer_state(customer_id)
             previous_risk = state["risk_score"]
             state["risk_score"] = risk_score
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["last_updated"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
             # CRITICAL FIX: Store structured invoice data
             # Initialize invoice_details if not present
@@ -492,7 +493,7 @@ class MemoryAgent(BaseAgent):
             # Update metrics directly from event
             state["avg_delay"] = data.get("avg_delay", state.get("avg_delay", 0.0))
             state["on_time_ratio"] = data.get("on_time_ratio", state.get("on_time_ratio", 0.5))
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["last_updated"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
             # ONLY publish if metrics actually changed
             if state["avg_delay"] != previous_delay or state["on_time_ratio"] != previous_ratio:
@@ -555,7 +556,7 @@ class MemoryAgent(BaseAgent):
                 conn = self._get_persistent_conn()
                 cursor = conn.cursor()
 
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
@@ -645,7 +646,7 @@ class MemoryAgent(BaseAgent):
             if customer_id not in self.risk_history:
                 self.risk_history[customer_id] = deque(maxlen=20)
             self.risk_history[customer_id].append({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "risk_score": risk_score
             })
 

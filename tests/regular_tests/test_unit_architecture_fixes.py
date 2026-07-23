@@ -1,3 +1,4 @@
+from datetime import timezone
 """Unit tests for Phase 1 & 2 architecture fixes and data contracts."""
 
 import pytest
@@ -54,7 +55,7 @@ def test_metrics_enrichment_with_company_name():
         "total_outstanding": 50000,
         "avg_delay": 10.5,
         "on_time_ratio": 0.95,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     }
 
     # Verify that the enriched metrics have the correct fields
@@ -220,7 +221,7 @@ def test_runtime_manager_spawn_request_requests_single_placement_with_incremente
         event_id="evt_spawn_001",
         event_type="agent.spawn.requested",
         event_source="SelfHealingAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="ScenarioGeneratorAgent",
         payload={
             "agent_name": "ScenarioGeneratorAgent",
@@ -253,7 +254,7 @@ def test_placement_engine_preserves_restart_context(mock_kafka_client):
         event_id="evt_place_001",
         event_type="placement.requested",
         event_source="RuntimeManager",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="RuntimeManager",
         payload={
             "agent_name": "RuntimeManager",
@@ -304,13 +305,13 @@ def test_db_agent_preserves_existing_invoice_total_when_status_update_omits_amou
     from agents.storage.db_agent import DBAgent
 
     agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     created = Event(
         event_id="evt_invoice_created",
         event_type="invoice.created",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="inv_001",
         payload={
             "invoice_id": "inv_001",
@@ -325,7 +326,7 @@ def test_db_agent_preserves_existing_invoice_total_when_status_update_omits_amou
         event_id="evt_invoice_overdue",
         event_type="invoice.overdue",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="inv_001",
         payload={
             "invoice_id": "inv_001",
@@ -426,7 +427,7 @@ def test_query_agent_clamps_negative_remaining_amounts(mock_kafka_client, temp_d
 
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     cursor.execute(
         """
         INSERT INTO customers (customer_id, created_at, updated_at)
@@ -522,13 +523,13 @@ def test_db_agent_handles_payment_partial_with_string_amount(mock_kafka_client, 
     from agents.storage.db_agent import DBAgent
 
     agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     created = Event(
         event_id="evt_invoice_for_partial",
         event_type="invoice.created",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="inv_partial_001",
         payload={
             "invoice_id": "inv_partial_001",
@@ -543,7 +544,7 @@ def test_db_agent_handles_payment_partial_with_string_amount(mock_kafka_client, 
         event_id="evt_payment_partial",
         event_type="payment.partial",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="inv_partial_001",
         payload={
             "payment_id": "pay_partial_001",
@@ -586,13 +587,13 @@ def test_db_agent_rejects_non_numeric_payment_amount(mock_kafka_client, temp_db_
     from agents.storage.db_agent import DBAgent
 
     agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     created = Event(
         event_id="evt_invoice_for_bad_payment",
         event_type="invoice.created",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="inv_bad_001",
         payload={
             "invoice_id": "inv_bad_001",
@@ -607,7 +608,7 @@ def test_db_agent_rejects_non_numeric_payment_amount(mock_kafka_client, temp_db_
         event_id="evt_payment_bad",
         event_type="payment.received",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id="inv_bad_001",
         payload={
             "payment_id": "pay_bad_001",
@@ -695,7 +696,7 @@ def test_db_agent_repair_payment_integrity_backfills_orphans_and_clamps_paid(
     from agents.storage.db_agent import DBAgent
 
     agent = DBAgent(kafka_client=mock_kafka_client, db_path=temp_db_path)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
@@ -754,7 +755,7 @@ def test_external_scraping_news_analysis_uses_description_keywords(mock_kafka_cl
         {
             "title": "Company updates quarterly filing",
             "description": "ACME Corp SEBI investigation launched into alleged violations and penalty exposure",
-            "pubDate": datetime.utcnow().isoformat(),
+            "pubDate": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "source": "test",
         }
     ]

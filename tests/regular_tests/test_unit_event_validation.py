@@ -1,3 +1,4 @@
+from datetime import timezone
 import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
@@ -20,7 +21,7 @@ def test_valid_event_passes_validation(mock_kafka_client):
         "event_id": "123",
         "event_type": "customer.created",
         "event_source": "test_agent",
-        "event_time": datetime.utcnow().isoformat(),
+        "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "entity_id": "cust_1",
         "schema_version": "1.1",
         "payload": {},
@@ -38,7 +39,7 @@ def test_wrong_schema_version_goes_to_dlq(mock_kafka_client):
         "event_id": "123",
         "event_type": "customer.created",
         "event_source": "test_agent",
-        "event_time": datetime.utcnow().isoformat(),
+        "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "entity_id": "cust_1",
         "schema_version": "1.0",  # Invalid
         "payload": {}
@@ -55,7 +56,7 @@ def test_invalid_event_type_goes_to_dlq(mock_kafka_client):
         "event_id": "123",
         "event_type": "INVALID_FORMAT",  # Invalid format
         "event_source": "test_agent",
-        "event_time": datetime.utcnow().isoformat(),
+        "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "entity_id": "cust_1",
         "schema_version": "1.1",
         "payload": {}
@@ -70,7 +71,7 @@ def test_missing_required_field_goes_to_dlq(mock_kafka_client):
     event = {
         "event_type": "customer.created",
         "event_source": "test_agent",
-        "event_time": datetime.utcnow().isoformat(),
+        "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "entity_id": "cust_1",
         "schema_version": "1.1",
         "payload": {}

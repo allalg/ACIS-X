@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/suite/test_self_healing_proof.py
 
@@ -64,7 +65,7 @@ def _make_kafka() -> MagicMock:
 def _make_sha(kafka) -> SelfHealingAgent:
     """Create a SelfHealingAgent with suppressed startup staleness filter."""
     sha = SelfHealingAgent(kafka_client=kafka)
-    sha._start_time = datetime.utcnow() - timedelta(hours=1)  # treat all events as fresh
+    sha._start_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)  # treat all events as fresh
     return sha
 
 
@@ -73,7 +74,7 @@ def _make_timeout_event(agent_name: str, agent_id: str) -> Event:
         event_id=f"evt_{uuid.uuid4().hex[:8]}",
         event_type=SystemEventType.AGENT_TIMEOUT.value,
         event_source="MonitoringAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=agent_id,
         schema_version="1.1",
         payload={
@@ -97,7 +98,7 @@ def _make_overloaded_event(
         event_id=f"evt_{uuid.uuid4().hex[:8]}",
         event_type=SystemEventType.AGENT_OVERLOADED.value,
         event_source="MonitoringAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=agent_id,
         schema_version="1.1",
         payload={
@@ -136,7 +137,7 @@ def _reset_agent_state(sha: SelfHealingAgent, agent_id: str) -> None:
         state = sha._states.get(agent_id)
         if state:
             state.status = AgentStatus.HEALTHY.value
-            state.last_heartbeat = datetime.utcnow()
+            state.last_heartbeat = datetime.now(timezone.utc).replace(tzinfo=None)
             state.last_restart_requested = None
             state.last_recovery_triggered = None
             state.last_timeout_at = None
@@ -225,7 +226,7 @@ class TestLatencySpike:
         sha = _make_sha(kafka)
 
         # Pre-seed state: OVERLOADED, well past the grace period
-        overloaded_ts = datetime.utcnow() - timedelta(
+        overloaded_ts = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
             seconds=sha.DEGRADED_RESTART_DELAY_SECONDS + 5
         )
         sha._states[self.AGENT_ID] = AgentRecoveryState(
@@ -439,7 +440,7 @@ class TestRecoveryTimeDistribution:
         # Set overloaded_at far in the past so grace period is cleared
         if failure_type == "LATENCY":
             sha._states[agent_id].last_overloaded_at = (
-                datetime.utcnow() - timedelta(seconds=sha.DEGRADED_RESTART_DELAY_SECONDS + 5)
+                datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=sha.DEGRADED_RESTART_DELAY_SECONDS + 5)
             )
 
         latencies: List[float] = []
@@ -460,7 +461,7 @@ class TestRecoveryTimeDistribution:
                     state = sha._states.get(agent_id)
                     if state:
                         state.last_overloaded_at = (
-                            datetime.utcnow()
+                            datetime.now(timezone.utc).replace(tzinfo=None)
                             - timedelta(seconds=sha.DEGRADED_RESTART_DELAY_SECONDS + 5)
                         )
 

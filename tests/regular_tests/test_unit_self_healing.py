@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_unit_self_healing.py
 
@@ -37,7 +38,7 @@ def _make_degraded_event(
         event_id="evt_degraded_001",
         event_type="agent.health.degraded",
         event_source="MonitoringAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=agent_id,
         schema_version="1.1",
         payload={
@@ -65,7 +66,7 @@ class TestSelfHealingLockSafety:
             agent_id="agent_TestWorker",
             agent_name="TestWorker",
             status=AgentStatus.DEGRADED.value,
-            last_degraded_at=datetime.utcnow() - timedelta(seconds=999),
+            last_degraded_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=999),
         )
         agent._states["agent_TestWorker"] = state
 
@@ -123,7 +124,7 @@ class TestSelfHealingLockSafety:
             agent_id="agent_Beta",
             agent_name="Beta",
             status=AgentStatus.ERROR.value,
-            last_event_at=datetime.utcnow(),
+            last_event_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         agent._states["agent_Beta"] = state
 
@@ -142,8 +143,8 @@ class TestSelfHealingLockSafety:
             agent_id="agent_Gamma",
             agent_name="Gamma",
             status=AgentStatus.DEGRADED.value,
-            last_degraded_at=datetime.utcnow() - timedelta(seconds=1),
-            last_event_at=datetime.utcnow(),
+            last_degraded_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1),
+            last_event_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         agent._states["agent_Gamma"] = state
 

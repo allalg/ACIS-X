@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_query_client_thread_isolation.py
 

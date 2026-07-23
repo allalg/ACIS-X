@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 Diagnostic script to trace customer name persistence issue.
 

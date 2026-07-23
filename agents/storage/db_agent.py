@@ -1,3 +1,4 @@
+from datetime import timezone
 import json
 import logging
 import re
@@ -79,7 +80,7 @@ class DBAgent(BaseAgent):
         self._processed_risk_events: OrderedDict = OrderedDict()
 
         # Housekeeping: prune old event_log rows periodically (at most once/hour)
-        self._last_event_log_cleanup = datetime.utcnow()
+        self._last_event_log_cleanup = datetime.now(timezone.utc).replace(tzinfo=None)
 
         self._init_database()
         logger.info("QueryAgent reference set for cache invalidation")
@@ -110,7 +111,7 @@ class DBAgent(BaseAgent):
         if not customer_id:
             return
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         safe_name = self._sanitize_company_name(name) or customer_id
         conn.execute(
             """
@@ -422,7 +423,7 @@ class DBAgent(BaseAgent):
           drift.
         """
         cursor = conn.cursor()
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         # Ensure all customers referenced by payments exist before any invoice backfill.
         # Use a SELECT-based approach to avoid creating stub rows for customers
@@ -546,7 +547,7 @@ class DBAgent(BaseAgent):
                     conn.execute(
                         "UPDATE customers SET name = ?, updated_at = ? "
                         "WHERE customer_id = ? AND (name IS NULL OR name = ?)",
-                        (sanitized, datetime.utcnow().isoformat(), customer_id, customer_id),
+                        (sanitized, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), customer_id, customer_id),
                     )
                     logger.info(
                         "[DBAgent] Backfilled name '%s' for customer %s from risk profile",
@@ -574,7 +575,7 @@ class DBAgent(BaseAgent):
             if sanitized != name:
                 cursor.execute(
                     "UPDATE customers SET name=?, updated_at=? WHERE customer_id=?",
-                    (sanitized, datetime.utcnow().isoformat(), customer_id),
+                    (sanitized, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), customer_id),
                 )
                 cleaned_customers += 1
 
@@ -593,7 +594,7 @@ class DBAgent(BaseAgent):
             if sanitized != company_name:
                 cursor.execute(
                     "UPDATE customer_risk_profile SET company_name=?, updated_at=? WHERE customer_id=?",
-                    (sanitized, datetime.utcnow().isoformat(), customer_id),
+                    (sanitized, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), customer_id),
                 )
                 cleaned_risk_profiles += 1
 
@@ -646,7 +647,7 @@ class DBAgent(BaseAgent):
             logger.warning("customer.metrics.updated event missing customer_id, skipping")
             return
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         with self._db_lock:
             conn = self._get_connection()
             try:
@@ -716,7 +717,7 @@ class DBAgent(BaseAgent):
         due_date = data.get("due_date")
         status = data.get("status", "pending")
         issued_date = data.get("created_at") or data.get("issued_date")
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         total_amount = None
         if raw_total_amount is not None:
@@ -802,7 +803,7 @@ class DBAgent(BaseAgent):
                 )
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
                 )
                 conn.commit()
                 logger.info(
@@ -834,8 +835,8 @@ class DBAgent(BaseAgent):
         payment_id = data.get("payment_id")
         invoice_id = data.get("invoice_id")
         raw_amount = data.get("amount")
-        payment_date = data.get("payment_date") or datetime.utcnow().isoformat()
-        now = datetime.utcnow().isoformat()
+        payment_date = data.get("payment_date") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         if not payment_id:
             logger.warning("payment.received event missing payment_id, skipping")
@@ -968,7 +969,7 @@ class DBAgent(BaseAgent):
                     logger.debug(f"[DBAgent] Payment {payment_id} already exists, skipped")
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
                 )
                 conn.commit()
 
@@ -999,7 +1000,7 @@ class DBAgent(BaseAgent):
         # New fields for analytics
         priority = data.get("priority")
         reason = data.get("reason")
-        timestamp = data.get("timestamp") or datetime.utcnow().isoformat()
+        timestamp = data.get("timestamp") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         if not collection_id:
             logger.warning(f"{event.event_type} event missing id, skipping")
@@ -1028,7 +1029,7 @@ class DBAgent(BaseAgent):
                 """, (collection_id, customer_id, invoice_id, action, stage, priority, reason, timestamp))
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
                 )
                 conn.commit()
 
@@ -1064,7 +1065,7 @@ class DBAgent(BaseAgent):
             logger.warning("customer.profile.updated event missing customer_id, skipping")
             return
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         # Only extract fields that are genuinely present in this event's payload
         name         = self._sanitize_company_name(data.get("customer_name") or data.get("name"))
@@ -1152,7 +1153,7 @@ class DBAgent(BaseAgent):
                     )
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
                 )
                 conn.commit()
                 logger.info(
@@ -1184,7 +1185,7 @@ class DBAgent(BaseAgent):
         evidence = data.get("evidence", "")
         source = data.get("source")
         confidence = data.get("confidence", 0.0)
-        created_at = datetime.utcnow().isoformat()
+        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         if not customer_id:
             logger.warning("LitigationRiskUpdated event missing customer_id, skipping")
@@ -1239,7 +1240,7 @@ class DBAgent(BaseAgent):
                 ))
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
                 )
                 conn.commit()
 
@@ -1315,7 +1316,7 @@ class DBAgent(BaseAgent):
         litigation_source = data.get("litigation_source")
 
         confidence = data.get("confidence", 0.0)
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         # Parse the event's generated_at for the freshness guard
         incoming_generated_at = data.get("generated_at")
@@ -1398,7 +1399,7 @@ class DBAgent(BaseAgent):
                 ))
                 cursor.execute(
                     "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.utcnow().isoformat())
+                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
                 )
                 conn.commit()
 
@@ -1450,7 +1451,7 @@ class DBAgent(BaseAgent):
         risk_level   = data.get("risk_level")
         reasons      = data.get("reasons")  # list or None
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         with self._db_lock:
             conn = self._get_connection()
             try:
@@ -1538,7 +1539,7 @@ class DBAgent(BaseAgent):
         amortised across normal write operations.  The check is fast (one
         datetime comparison) on the common path.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if (now - self._last_event_log_cleanup).total_seconds() < 3600:
             return
         try:

@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 KafkaClient - Production-ready Kafka abstraction for ACIS-X.
 
@@ -828,7 +829,7 @@ class KafkaClient:
             "error": {
                 "code": type(error).__name__,
                 "message": str(error),
-                "failed_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "retry_count": retry_count,
                 "max_retries": self.config.max_retries,
                 "agent_name": agent_name,
@@ -844,7 +845,7 @@ class KafkaClient:
             "event_id": f"dlq_{uuid.uuid4()}",
             "event_type": "dlq.event.failed",
             "event_source": agent_name,
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": event.correlation_id if hasattr(event, "correlation_id") else None,
             "entity_id": event.entity_id if hasattr(event, "entity_id") else "unknown",
             "schema_version": "1.1",

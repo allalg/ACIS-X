@@ -1,3 +1,4 @@
+from datetime import timezone
 import logging
 import re
 import sqlite3
@@ -168,7 +169,7 @@ class ExternalDataAgent(BaseAgent):
 
             if row:
                 updated_at = datetime.fromisoformat(row["updated_at"])
-                if datetime.utcnow() - updated_at < timedelta(hours=self.CACHE_TTL_HOURS):
+                if datetime.now(timezone.utc).replace(tzinfo=None) - updated_at < timedelta(hours=self.CACHE_TTL_HOURS):
                     logger.info(f"[ExternalDataAgent] Cache hit for {company_name}")
                     d = dict(row)
                     # Remap from DB column names to internal dict keys
@@ -610,7 +611,7 @@ class ExternalDataAgent(BaseAgent):
             "interest_coverage": None,
             "risk": 0.3,  # default risk
             "source": "screener.in",
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
         # Retry logic: max 2 attempts
@@ -857,7 +858,7 @@ class ExternalDataAgent(BaseAgent):
             data[key] = val_nse if val_nse is not None else val_bse
             
         # FIX: Always include updated_at timestamp so cache TTL logic works
-        data["updated_at"] = datetime.utcnow().isoformat()
+        data["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             
         return data
 
@@ -1206,7 +1207,7 @@ class ExternalDataAgent(BaseAgent):
                 "external_risk": round(external_risk, 4) if external_risk is not None else None,
                 "source": source,
                 "confidence": round(confidence, 4),
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             }
 
             last_risk = self._last_published_risk.get(customer_id)

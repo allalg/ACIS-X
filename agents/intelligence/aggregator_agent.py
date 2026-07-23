@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 Aggregator Agent for ACIS-X.
 
@@ -148,7 +149,7 @@ class AggregatorAgent(BaseAgent):
             self._cache[customer_id] = {
                 "financial": None,
                 "litigation": None,
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None),
             }
 
         existing_fin: Dict[str, Any] = self._cache[customer_id].get("financial") or {}
@@ -190,7 +191,7 @@ class AggregatorAgent(BaseAgent):
             if effective_risk is None and not existing_fin:
                 return
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         self._cache[customer_id]["financial"] = {
             "risk": effective_risk,
             "source": source if financial_risk is not None else existing_fin.get("source", source),
@@ -233,7 +234,7 @@ class AggregatorAgent(BaseAgent):
             self._cache[customer_id] = {
                 "financial": None,
                 "litigation": None,
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None),
             }
 
         existing_lit: Dict[str, Any] = self._cache[customer_id].get("litigation") or {}
@@ -251,7 +252,7 @@ class AggregatorAgent(BaseAgent):
             except Exception:
                 pass
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         # Update litigation data
         self._cache[customer_id]["litigation"] = {
             "risk": litigation_risk,
@@ -283,7 +284,7 @@ class AggregatorAgent(BaseAgent):
 
         This prevents unbounded memory growth from accumulating customer data.
         """
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc).replace(tzinfo=None)
         expired_customers = []
 
         # Find expired entries
@@ -302,7 +303,7 @@ class AggregatorAgent(BaseAgent):
         if len(self._cache) > self.MAX_CACHE_SIZE:
             sorted_customers = sorted(
                 self._cache.items(),
-                key=lambda x: x[1].get("timestamp", datetime.utcnow())
+                key=lambda x: x[1].get("timestamp", datetime.now(timezone.utc).replace(tzinfo=None))
             )
             remove_count = len(self._cache) - self.MAX_CACHE_SIZE
             for customer_id, _ in sorted_customers[:remove_count]:
@@ -425,7 +426,7 @@ class AggregatorAgent(BaseAgent):
         confidence = sum(valid_confidences) / len(valid_confidences) if valid_confidences else 0.5
 
         # Build payload — include financial_confidence for DB-layer transparency
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         payload = {
             "customer_id": customer_id,
             "company_name": company_name,

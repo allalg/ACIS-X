@@ -1,3 +1,4 @@
+from datetime import timezone
 import random
 import threading
 import logging
@@ -511,7 +512,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             )[0],
             "status": "active",
             "company_type": company_type,  # "listed" or "unlisted"
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
         # Store customer
@@ -553,7 +554,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             new_idx = max(0, min(len(self.RATINGS) - 1, current_idx + random.randint(-2, 2)))
             customer["rating"] = self.RATINGS[new_idx]
 
-        customer["updated_at"] = datetime.utcnow().isoformat()
+        customer["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         customer["previous_values"] = previous_values
 
         # Update stored customer
@@ -611,7 +612,7 @@ class ScenarioGeneratorAgent(BaseAgent):
 
         # IMPROVEMENT: Generate invoices from the past (0-120 days ago) for realism
         # Instead of creating all invoices today, spread them across time
-        created_at = datetime.utcnow() - timedelta(days=random.randint(0, 120))
+        created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=random.randint(0, 120))
 
         # IMPROVEMENT: Use realistic payment terms (15, 30, 45, or 60 days)
         payment_terms_days = random.choice([15, 30, 45, 60])
@@ -619,7 +620,7 @@ class ScenarioGeneratorAgent(BaseAgent):
 
         # IMPROVEMENT: Determine status based on actual due date vs now
         # Invoices past due date have 50% chance of being "overdue", 50% "pending" (not yet collected)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if now > due_date:
             # Invoice is past due date
             status = "overdue" if random.random() < 0.5 else "pending"
@@ -677,7 +678,7 @@ class ScenarioGeneratorAgent(BaseAgent):
         )[0]
 
         invoice["status"] = status_choice
-        invoice["updated_at"] = datetime.utcnow().isoformat()
+        invoice["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         if status_choice == "overdue":
             invoice["days_overdue"] = random.randint(1, 30)
@@ -732,7 +733,7 @@ class ScenarioGeneratorAgent(BaseAgent):
         customer_id = random.choice(available_customers)
 
         # Find invoices that can receive payments for this customer
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         payable_invoices = [
             inv_id for inv_id, inv in self._invoices.items()
             if (inv["customer_id"] == customer_id and
@@ -821,11 +822,11 @@ class ScenarioGeneratorAgent(BaseAgent):
             payment_data["remaining_balance"] = remaining
             # Track remaining amount in internal state
             self._invoices[invoice_id]["remaining_amount"] = remaining
-            self._invoices[invoice_id]["updated_at"] = datetime.utcnow().isoformat()
+            self._invoices[invoice_id]["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         else:
             # Update invoice status if fully paid
             self._invoices[invoice_id]["status"] = "paid"
-            self._invoices[invoice_id]["updated_at"] = datetime.utcnow().isoformat()
+            self._invoices[invoice_id]["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         # Publish event
         event_type = "payment.partial" if is_partial else "payment.received"
@@ -880,7 +881,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             "risk_level": "medium",
             "rating": "BB",
         }
-        customer["updated_at"] = datetime.utcnow().isoformat()
+        customer["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         self._customers[customer_id] = customer
 
@@ -897,8 +898,8 @@ class ScenarioGeneratorAgent(BaseAgent):
             self._invoice_counter += 1
             invoice_id = f"inv_{self._invoice_counter:05d}"
 
-            created_at = datetime.utcnow() - timedelta(days=random.randint(45, 90))
-            due_date = datetime.utcnow() - timedelta(days=random.randint(5, 30))
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=random.randint(45, 90))
+            due_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=random.randint(5, 30))
 
             amount = self._generate_invoice_amount(customer["credit_limit"])
             invoice_data = {
@@ -939,8 +940,8 @@ class ScenarioGeneratorAgent(BaseAgent):
             invoice_id = f"inv_{self._invoice_counter:05d}"
 
             days_overdue = (i + 1) * 10
-            created_at = datetime.utcnow() - timedelta(days=days_overdue + 30)
-            due_date = datetime.utcnow() - timedelta(days=days_overdue)
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_overdue + 30)
+            due_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_overdue)
 
             amount = self._generate_invoice_amount(customer["credit_limit"])
             invoice_data = {
@@ -1011,8 +1012,8 @@ class ScenarioGeneratorAgent(BaseAgent):
                 "derogatory_marks": random.randint(0, 3),
                 "hard_inquiries": random.randint(0, 5),
             },
-            "fetched_at": datetime.utcnow().isoformat(),
-            "valid_until": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+            "fetched_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "valid_until": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
         }
 
         self.publish_event(
@@ -1037,7 +1038,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             invoice_id = f"inv_{self._invoice_counter:05d}"
 
             amount = self._generate_invoice_amount(customer["credit_limit"])
-            due_date = datetime.utcnow() - timedelta(days=(i + 1) * 15)
+            due_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=(i + 1) * 15)
             created_at = due_date - timedelta(days=30)
 
             invoice_data = {
@@ -1077,10 +1078,10 @@ class ScenarioGeneratorAgent(BaseAgent):
                 "customer_id": customer_id,
                 "amount": partial_amount,
                 "currency": customer["currency"],
-                "payment_date": datetime.utcnow().isoformat(),
+                "payment_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "payment_method": random.choice(self.PAYMENT_METHODS),
                 "status": "partial",
-                "reference": f"PAT-{datetime.utcnow().strftime('%Y-%m-%d')}-{payment_id}",
+                "reference": f"PAT-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d')}-{payment_id}",
                 "remaining_balance": round(amount - partial_amount, 2),
             }
 
@@ -1214,7 +1215,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             "status": "registered",
             "host": self.host,
             "instance_id": self.instance_id,
-            "registered_at": datetime.utcnow().isoformat(),
+            "registered_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "replica_index": self.replica_index,
             "replica_count": self.replica_count,
             "max_replicas": self.max_replicas,
@@ -1260,9 +1261,9 @@ class ScenarioGeneratorAgent(BaseAgent):
                 "amount": amount,
                 "remaining_amount": amount,
                 "currency": customer["currency"],
-                "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
                 "status": "pending",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "updated_at": None,
                 "line_items": None,
                 "notes": None,
@@ -1299,14 +1300,14 @@ class ScenarioGeneratorAgent(BaseAgent):
             "customer_id": invoice["customer_id"],
             "amount": invoice["amount"],
             "currency": invoice["currency"],
-            "payment_date": datetime.utcnow().isoformat(),
+            "payment_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "payment_method": random.choice(self.PAYMENT_METHODS),
             "status": "completed",
-            "reference": f"MAN-{datetime.utcnow().strftime('%Y-%m-%d')}-{payment_id}",
+            "reference": f"MAN-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d')}-{payment_id}",
         }
 
         self._invoices[invoice_id]["status"] = "paid"
-        self._invoices[invoice_id]["updated_at"] = datetime.utcnow().isoformat()
+        self._invoices[invoice_id]["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         self.publish_event(
             topic=self.TOPIC_PAYMENTS,

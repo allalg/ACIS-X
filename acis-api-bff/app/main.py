@@ -38,7 +38,7 @@ METRICS_JOBS: dict[str, dict[str, Any]] = {}
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat().replace('+00:00', 'Z')
 
 
 @app.get('/api/v1/health')

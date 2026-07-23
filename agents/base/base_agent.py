@@ -173,7 +173,7 @@ class BaseAgent(ABC):
             signal.signal(signal.SIGTERM, self._signal_handler)
 
         self._running = True
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Subscribe to topics FIRST (so registry has correct topic list)
         topics = self.subscribe()
@@ -368,7 +368,7 @@ class BaseAgent(ABC):
             self._current_correlation_id = event.correlation_id
 
             # Track latency (event age)
-            processing_start = datetime.utcnow()
+            processing_start = datetime.now(timezone.utc).replace(tzinfo=None)
             latency_ms = (processing_start - event.event_time).total_seconds() * 1000
 
             # Process with retry logic
@@ -472,7 +472,7 @@ class BaseAgent(ABC):
             event_id=f"dlq_{uuid.uuid4()}",
             event_type="dlq.event.failed",
             event_source=self.agent_name,
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             correlation_id=event.correlation_id,
             entity_id=event.entity_id,
             schema_version=self.SCHEMA_VERSION,
@@ -481,7 +481,7 @@ class BaseAgent(ABC):
                 "error": {
                     "code": type(error).__name__,
                     "message": str(error),
-                    "failed_at": datetime.utcnow().isoformat(),
+                    "failed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                     "retry_count": retry_count,
                     "max_retries": self.max_retries,
                     "consumer_group": self.group_id,
@@ -537,7 +537,7 @@ class BaseAgent(ABC):
             event_source=self.agent_name,
             # Use timezone.utc for correctness, then strip tzinfo so the Event
             # model (which stores a naive UTC datetime) stays consistent.
-            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None),
             correlation_id=correlation_id,
             entity_id=entity_id,
             schema_version=self.SCHEMA_VERSION,
@@ -580,7 +580,7 @@ class BaseAgent(ABC):
         """Get agent uptime in seconds."""
         if self._start_time is None:
             return 0
-        delta = datetime.utcnow() - self._start_time
+        delta = datetime.now(timezone.utc).replace(tzinfo=None) - self._start_time
         return int(delta.total_seconds())
 
     def _get_consumer_lag(self) -> int:
@@ -659,7 +659,7 @@ class BaseAgent(ABC):
 
     def send_heartbeat(self) -> None:
         """Send heartbeat event to acis.agent.health topic."""
-        self._last_heartbeat = datetime.utcnow()
+        self._last_heartbeat = datetime.now(timezone.utc).replace(tzinfo=None)
         metrics = self.collect_metrics()
 
         heartbeat_payload = {
@@ -715,7 +715,7 @@ class BaseAgent(ABC):
             "agent_name": self.agent_name,
             "instance_id": self.instance_id,
             "host": self.host,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
 
             # Core metrics
             "cpu_percent": metrics["cpu_percent"],
@@ -762,7 +762,7 @@ class BaseAgent(ABC):
     def _check_and_emit_overload(self, metrics: Dict[str, Any]) -> None:
         """Check for overload conditions and emit agent.overloaded event if needed."""
         # Check cooldown first to prevent event spam
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if self._last_overload_event is not None:
             elapsed = (now - self._last_overload_event).total_seconds()
             if elapsed < self.OVERLOAD_COOLDOWN_SECONDS:
@@ -810,7 +810,7 @@ class BaseAgent(ABC):
                 "instance_id": self.instance_id,
                 "host": self.host,
                 "status": "overloaded",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
 
                 # Current metrics
                 "cpu_percent": metrics.get("cpu_percent"),
@@ -865,7 +865,7 @@ class BaseAgent(ABC):
     ) -> None:
         """Check lag threshold and emit lag.detected event if needed."""
         # Check cooldown first to prevent event spam
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if self._last_lag_detection_event is not None:
             elapsed = (now - self._last_lag_detection_event).total_seconds()
             if elapsed < self.LAG_DETECTION_COOLDOWN_SECONDS:
@@ -941,7 +941,7 @@ class BaseAgent(ABC):
             "max_replicas": self.max_replicas,
             "status": "healthy" if self._running else "stopped",
             "metadata": {},  # Subclasses can add custom metadata
-            "last_updated": datetime.utcnow().isoformat(),
+            "last_updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
     def _publish_agent_card(self) -> None:
@@ -974,7 +974,7 @@ class BaseAgent(ABC):
             },
             "status": "registered",
             "version": self.agent_version,
-            "registered_at": datetime.utcnow().isoformat(),
+            "registered_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "group_id": self.group_id,
             "replica_index": self.replica_index,
             "replica_count": self.replica_count,
@@ -1005,7 +1005,7 @@ class BaseAgent(ABC):
             "status": "deregistered",
             "version": self.agent_version,
             "registered_at": None,
-            "deregistered_at": datetime.utcnow().isoformat(),
+            "deregistered_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
         try:

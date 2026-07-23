@@ -1,3 +1,4 @@
+from datetime import timezone
 from pydantic import BaseModel
 
 

@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_exactly_once_processing.py
 
@@ -77,7 +78,7 @@ def _make_invoice_event() -> Event:
         event_id=STATIC_EVENT_ID,
         event_type="invoice.created",
         event_source="ScenarioGeneratorAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=CUSTOMER_ID,
         schema_version="1.1",
         payload={
@@ -86,8 +87,8 @@ def _make_invoice_event() -> Event:
             "customer_name": "Idempotency Test Corp",
             "amount": 75_000.0,
             "total_amount": 75_000.0,
-            "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
-            "issued_date": datetime.utcnow().isoformat(),
+            "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
+            "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "status": "pending",
         },
         metadata={"environment": "test"},

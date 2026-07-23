@@ -1,3 +1,4 @@
+from datetime import timezone
 """Integration tests for the ACIS-X risk profile pipeline.
 
 These tests exercise the full write path without a live Kafka broker:
@@ -50,7 +51,7 @@ def _make_risk_event(
         event_id=event_id or f"evt_{uuid.uuid4()}",
         event_type="risk.profile.updated",  # must match AggregatorAgent exactly
         event_source="AggregatorAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         schema_version="1.1",
         correlation_id=f"corr_{uuid.uuid4()}",
@@ -64,7 +65,7 @@ def _make_risk_event(
             "confidence": 0.85,
             "financial_source": "NSE",
             "litigation_source": "NCLT",
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         },
         metadata={"environment": "test"},
     )
@@ -145,7 +146,7 @@ def test_handle_customer_risk_profile_persists_correct_values(db_agent_with_temp
 
     # Ensure the parent customer row exists (FK constraint)
     conn = sqlite3.connect(db_path)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn.execute(
         "INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
         (customer_id, company_name, now, now),
@@ -196,7 +197,7 @@ def test_handle_customer_risk_profile_is_idempotent(db_agent_with_temp_db):
 
     # Seed parent customer
     conn = sqlite3.connect(db_path)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn.execute(
         "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?, ?, ?)",
         (customer_id, now, now),

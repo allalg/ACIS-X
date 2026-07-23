@@ -1,3 +1,4 @@
+from datetime import timezone
 from __future__ import annotations
 
 import sqlite3
@@ -23,7 +24,7 @@ def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
 
 
 def get_dashboard_summary() -> dict:
-    now = datetime.utcnow().isoformat() + 'Z'
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
     with get_connection() as conn:
         cursor = conn.cursor()
 

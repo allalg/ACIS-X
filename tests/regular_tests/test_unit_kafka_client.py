@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_unit_kafka_client.py
 
@@ -40,7 +41,7 @@ def _make_message(topic: str = "acis.invoices", partition: int = 0, offset: int 
         key=None,
         value={"event_id": "evt_test"},
         headers={},
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
     )
 
 

@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 Time Tick Agent for ACIS-X.
 
@@ -108,7 +109,7 @@ class TimeTickAgent(BaseAgent):
         tick_count = 0
         while self._running:
             try:
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc).replace(tzinfo=None)
                 tick_count += 1
 
                 # Publish time tick event

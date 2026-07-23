@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_throughput_scaling.py
 
@@ -141,7 +142,7 @@ def _make_prediction_event(seq: int) -> Dict[str, Any]:
         event_id=f"evt_bench_{seq:06d}",
         event_type="payment.risk.predicted",
         event_source="PaymentPredictionAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=f"cust_bench_{seq % 100:03d}",
         correlation_id=f"corr_bench_{seq:06d}",
         schema_version="1.1",

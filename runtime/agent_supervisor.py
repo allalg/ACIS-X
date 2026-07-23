@@ -1,3 +1,4 @@
+from datetime import timezone
 import logging
 import multiprocessing
 import time
@@ -86,14 +87,14 @@ class AgentSupervisor:
                     "agent_name": agent_name,
                     "reason": "Max restart limit reached",
                     "restart_count": entry.restart_count,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                     "severity": "critical"
                 }
                 event = {
                     "event_id": f"evt_{uuid.uuid4()}",
                     "event_type": "agent.critical.failure",
                     "event_source": "AgentSupervisor",
-                    "event_time": datetime.utcnow().isoformat(),
+                    "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                     "entity_id": agent_name,
                     "schema_version": "1.1",
                     "payload": alert_payload,

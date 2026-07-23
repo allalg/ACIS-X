@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/suite/test_lifecycle_trace.py
 
@@ -137,7 +138,7 @@ def _query_handler(query_type: str, params: dict = None, **kwargs):
                     "total_amount": 50_000.0,
                     "amount": 50_000.0,
                     "remaining_amount": 50_000.0,
-                    "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                    "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
                     "status": "pending",
                 }
                 for i in range(2)
@@ -199,7 +200,7 @@ def _run_invoice_lifecycle(
         event_id=f"evt_inv_{seq:06d}",
         event_type="invoice.created",
         event_source="ScenarioGeneratorAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         correlation_id=corr_id,
         schema_version="1.1",
@@ -208,8 +209,8 @@ def _run_invoice_lifecycle(
             "invoice_id": invoice_id,
             "amount": 50_000.0 + seq,
             "total_amount": 50_000.0 + seq,
-            "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
-            "issued_date": datetime.utcnow().isoformat(),
+            "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
+            "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "status": "pending",
         },
         metadata={},
@@ -486,7 +487,7 @@ class TestPaymentRescoreLifecycle:
             event_id="evt_inv_pay_lc",
             event_type="invoice.created",
             event_source="ScenarioGeneratorAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id=customer_id,
             correlation_id=corr_id,
             schema_version="1.1",
@@ -495,8 +496,8 @@ class TestPaymentRescoreLifecycle:
                 "invoice_id": invoice_id,
                 "amount": 50_000.0,
                 "total_amount": 50_000.0,
-                "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
-                "issued_date": datetime.utcnow().isoformat(),
+                "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
+                "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "status": "pending",
             },
             metadata={},
@@ -525,7 +526,7 @@ class TestPaymentRescoreLifecycle:
             event_id="evt_pay_pay_lc",
             event_type="payment.received",
             event_source="ScenarioGeneratorAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id=customer_id,
             correlation_id=corr_id,
             schema_version="1.1",
@@ -534,7 +535,7 @@ class TestPaymentRescoreLifecycle:
                 "invoice_id": invoice_id,
                 "customer_id": customer_id,
                 "amount": 25_000.0,
-                "payment_date": datetime.utcnow().isoformat(),
+                "payment_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             },
             metadata={},
         )

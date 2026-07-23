@@ -1,3 +1,4 @@
+from datetime import timezone
 import pytest
 import time
 from utils.circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitState

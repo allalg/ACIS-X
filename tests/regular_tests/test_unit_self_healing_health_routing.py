@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 Unit tests: MonitoringAgent → SelfHealingAgent health event routing.
 
@@ -26,7 +27,7 @@ def _make_health_event(event_type: str, agent_name: str = "TestAgent") -> Event:
         event_id=f"evt_{event_type.replace('.', '_')}_001",
         event_type=event_type,
         event_source="MonitoringAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=agent_name,
         payload={
             "agent_id": f"agent_{agent_name}",
@@ -37,7 +38,7 @@ def _make_health_event(event_type: str, agent_name: str = "TestAgent") -> Event:
             "status": event_type.split(".")[-1],   # "degraded" or "critical"
             "error_code": "TEST_CONDITION",
             "error_message": "test condition",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "metrics": {
                 "cpu_percent": None,
                 "memory_percent": None,
@@ -195,7 +196,7 @@ def test_self_healing_drops_stale_health_events(mock_kafka_client):
 
     agent = SelfHealingAgent(kafka_client=mock_kafka_client)
     # Manually set a start_time in the future relative to the event
-    agent._start_time = datetime.utcnow() + timedelta(seconds=60)
+    agent._start_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=60)
 
     with patch.object(agent, "_handle_degraded") as spy:
         stale_event = _make_health_event(SystemEventType.AGENT_HEALTH_DEGRADED.value)

@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_overpayment_clamping.py
 
@@ -47,7 +48,7 @@ def _make_invoice_event(invoice_id: str, customer_id: str, total_amount: float):
         event_id=f"evt_inv_{invoice_id}",
         event_type="invoice.created",
         event_source="ScenarioGeneratorAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         correlation_id=f"corr_inv_{invoice_id}",
         schema_version="1.1",
@@ -58,7 +59,7 @@ def _make_invoice_event(invoice_id: str, customer_id: str, total_amount: float):
             "total_amount": total_amount,
             "amount": total_amount,
             "due_date": "2026-12-31",
-            "issued_date": datetime.utcnow().isoformat(),
+            "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "status": "pending",
         },
         metadata={},
@@ -77,7 +78,7 @@ def _make_payment_event(
         event_id=f"evt_pay_{payment_id}",
         event_type="payment.received",
         event_source="ScenarioGeneratorAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         correlation_id=f"corr_pay_{payment_id}",
         schema_version="1.1",
@@ -86,7 +87,7 @@ def _make_payment_event(
             "invoice_id": invoice_id,
             "customer_id": customer_id,
             "amount": amount,
-            "payment_date": datetime.utcnow().isoformat(),
+            "payment_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         },
         metadata={},
     )

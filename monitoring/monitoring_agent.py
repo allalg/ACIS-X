@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 MonitoringAgent - Event-driven health and metrics monitor for ACIS-X.
 
@@ -384,7 +385,7 @@ class MonitoringAgent(BaseAgent):
             if agent is None or agent.agent_name == self.agent_name:
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             missing_heartbeat = False
             critical_heartbeat = False
             if agent.last_heartbeat is not None:
@@ -445,7 +446,7 @@ class MonitoringAgent(BaseAgent):
             if agent is None:
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             last_emitted = (
                 agent.last_critical_emitted_at
                 if status == AgentStatus.CRITICAL.value
@@ -511,7 +512,7 @@ class MonitoringAgent(BaseAgent):
             if agent is None:
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             if agent.last_lag_emitted_at and (now - agent.last_lag_emitted_at).total_seconds() < self.LAG_EVENT_COOLDOWN_SECONDS:
                 return
 
@@ -549,7 +550,7 @@ class MonitoringAgent(BaseAgent):
             if agent is None:
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             if agent.last_overloaded_emitted_at and (now - agent.last_overloaded_emitted_at).total_seconds() < self.OVERLOAD_EVENT_COOLDOWN_SECONDS:
                 return
 
@@ -597,7 +598,7 @@ class MonitoringAgent(BaseAgent):
             if agent is None:
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             if agent.last_error_emitted_at and (now - agent.last_error_emitted_at).total_seconds() < self.ERROR_EVENT_COOLDOWN_SECONDS:
                 return
 
@@ -639,7 +640,7 @@ class MonitoringAgent(BaseAgent):
             if agent is None or agent.events_per_second < self.THROUGHPUT_MIN_EVENTS_PER_SECOND:
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             if agent.last_throughput_emitted_at and (now - agent.last_throughput_emitted_at).total_seconds() < self.THROUGHPUT_EVENT_COOLDOWN_SECONDS:
                 return
 
@@ -670,7 +671,7 @@ class MonitoringAgent(BaseAgent):
 
     def _publish_system_metrics_if_due(self) -> None:
         """Emit aggregate metrics.updated snapshots with a small cooldown."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if self._last_metrics_event_at and (now - self._last_metrics_event_at).total_seconds() < self.METRICS_PUBLISH_COOLDOWN_SECONDS:
             return
 

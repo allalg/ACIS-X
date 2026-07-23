@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 RegistryService - Central agent registry for ACIS-X.
 
@@ -86,7 +87,7 @@ class RegisteredAgent:
             return False
         if self.last_heartbeat is None:
             return False
-        age = (datetime.utcnow() - self.last_heartbeat).total_seconds()
+        age = (datetime.now(timezone.utc).replace(tzinfo=None) - self.last_heartbeat).total_seconds()
         return age < heartbeat_timeout_seconds
 
     def to_dict(self) -> Dict[str, Any]:
@@ -185,7 +186,7 @@ class RegistryService:
         logger.info("Starting RegistryService")
 
         self._running = True
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Subscribe to topics with STABLE consumer group (not random UUID)
         # This ensures we don't replay old events on restart
@@ -353,10 +354,10 @@ class RegistryService:
 
             # Update existing entry only -- no auto-registration
             agent = self._registry[agent_id]
-            agent.last_heartbeat = datetime.utcnow()
+            agent.last_heartbeat = datetime.now(timezone.utc).replace(tzinfo=None)
             agent.status = payload.get("status", agent.status)
             agent.metrics = payload.get("metrics", agent.metrics)
-            agent.last_updated = datetime.utcnow()
+            agent.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Update replica info if present
             if payload.get("replica_count") is not None:
@@ -391,8 +392,8 @@ class RegistryService:
             topics_consumed=payload.get("subscribed_topics", []),
             topics_produced=payload.get("produced_topics", []),
             status=AgentStatus.HEALTHY.value,
-            registered_at=datetime.utcnow(),
-            last_updated=datetime.utcnow(),
+            registered_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            last_updated=datetime.now(timezone.utc).replace(tzinfo=None),
             replica_index=payload.get("replica_index"),
             replica_count=payload.get("replica_count"),
             max_replicas=payload.get("max_replicas"),
@@ -427,7 +428,7 @@ class RegistryService:
             if agent_id in self._registry:
                 agent = self._registry[agent_id]
                 agent.status = payload.get("status", AgentStatus.HEALTHY.value)
-                agent.last_updated = datetime.utcnow()
+                agent.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
 
                 # Update restart count in metrics
                 if "restart_count" in payload:
@@ -471,8 +472,8 @@ class RegistryService:
             topics_consumed=topics_consumed,
             topics_produced=topics_produced,
             status=payload.get("status", AgentStatus.HEALTHY.value),
-            registered_at=datetime.utcnow(),
-            last_updated=datetime.utcnow(),
+            registered_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            last_updated=datetime.now(timezone.utc).replace(tzinfo=None),
             replica_index=payload.get("replica_index"),
             replica_count=payload.get("replica_count"),
             max_replicas=payload.get("max_replicas"),
@@ -542,7 +543,7 @@ class RegistryService:
                 if "metrics" in payload:
                     agent.metrics = payload["metrics"]
 
-                agent.last_updated = datetime.utcnow()
+                agent.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
 
                 logger.info(f"Agent updated: {agent_id}")
 
@@ -576,7 +577,7 @@ class RegistryService:
                     agent.replica_index = agent_card.replica_index
                     agent.replica_count = agent_card.replica_count
                     agent.max_replicas = agent_card.max_replicas
-                    agent.last_updated = datetime.utcnow()
+                    agent.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
 
                     logger.info(f"Agent card updated: {agent_id}")
                 else:
@@ -596,8 +597,8 @@ class RegistryService:
                         replica_index=agent_card.replica_index,
                         replica_count=agent_card.replica_count,
                         max_replicas=agent_card.max_replicas,
-                        registered_at=datetime.utcnow(),
-                        last_updated=datetime.utcnow(),
+                        registered_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                        last_updated=datetime.now(timezone.utc).replace(tzinfo=None),
                         agent_card=agent_card,
                     )
                     logger.info(f"Agent card registered: {agent_id}")
@@ -662,8 +663,8 @@ class RegistryService:
             is_new = agent.agent_id not in self._registry
 
             if is_new:
-                agent.registered_at = datetime.utcnow()
-            agent.last_updated = datetime.utcnow()
+                agent.registered_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            agent.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
 
             self._registry[agent.agent_id] = agent
             self._registry_updates += 1
@@ -716,7 +717,7 @@ class RegistryService:
                 updated = True
 
             if updated:
-                agent.last_updated = datetime.utcnow()
+                agent.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
                 self._registry_updates += 1
 
         if updated:
@@ -874,7 +875,7 @@ class RegistryService:
             # Heartbeat recency (negative because more recent is better)
             heartbeat_age = 0
             if agent.last_heartbeat:
-                heartbeat_age = (datetime.utcnow() - agent.last_heartbeat).total_seconds()
+                heartbeat_age = (datetime.now(timezone.utc).replace(tzinfo=None) - agent.last_heartbeat).total_seconds()
 
             return (lag, cpu, heartbeat_age)
 
@@ -1044,7 +1045,7 @@ class RegistryService:
                 "agents_by_host": agents_by_host,
                 "capabilities_map": capabilities_map,
                 "agents": [a.to_dict() for a in agents],
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             }
 
     # -------------------------------------------------------------------------
@@ -1068,7 +1069,7 @@ class RegistryService:
 
     def _cleanup_stale_agents(self) -> None:
         """Remove agents with stale heartbeats."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         stale_agents = []
 
         with self._registry_lock:
@@ -1105,7 +1106,7 @@ class RegistryService:
 
     def _mark_topology_changed(self) -> None:
         """Mark that topology has changed and emit event if needed."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         self._topology_version += 1
         self._last_topology_change = now
         self._topology_changes += 1
@@ -1151,7 +1152,7 @@ class RegistryService:
             "event_id": f"evt_{uuid.uuid4()}",
             "event_type": RegistryEventType.AGENT_REGISTERED.value,
             "event_source": self.service_id,
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": f"corr_{uuid.uuid4()}",
             "entity_id": agent.agent_name,
             "schema_version": "1.1",
@@ -1174,7 +1175,7 @@ class RegistryService:
             "instance_id": agent.instance_id,
             "status": agent.status,
             "metrics": agent.metrics,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "update_reason": reason,
             "replica_count": agent.replica_count,
             "replica_index": agent.replica_index,
@@ -1184,7 +1185,7 @@ class RegistryService:
             "event_id": f"evt_{uuid.uuid4()}",
             "event_type": RegistryEventType.AGENT_UPDATED.value,
             "event_source": self.service_id,
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": f"corr_{uuid.uuid4()}",
             "entity_id": agent.agent_name,
             "schema_version": "1.1",
@@ -1211,14 +1212,14 @@ class RegistryService:
             "status": "deregistered",
             "version": agent.version,
             "registered_at": None,
-            "deregistered_at": datetime.utcnow().isoformat(),
+            "deregistered_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
         event_dict = {
             "event_id": f"evt_{uuid.uuid4()}",
             "event_type": RegistryEventType.AGENT_DEREGISTERED.value,
             "event_source": self.service_id,
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": f"corr_{uuid.uuid4()}",
             "entity_id": agent.agent_name,
             "schema_version": "1.1",
@@ -1243,14 +1244,14 @@ class RegistryService:
             "agents_by_type": topology["agents_by_type"],
             "agents_by_host": topology["agents_by_host"],
             "change_type": "agents_added_or_removed",
-            "changed_at": datetime.utcnow().isoformat(),
+            "changed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
         event_dict = {
             "event_id": f"evt_{uuid.uuid4()}",
             "event_type": RegistryEventType.TOPOLOGY_CHANGED.value,
             "event_source": self.service_id,
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": f"corr_{uuid.uuid4()}",
             "entity_id": "system_topology",
             "schema_version": "1.1",
@@ -1279,14 +1280,14 @@ class RegistryService:
             "query": query,
             "results": [a.to_dict() for a in agents],
             "result_count": len(agents),
-            "responded_at": datetime.utcnow().isoformat(),
+            "responded_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
         event_dict = {
             "event_id": f"evt_{uuid.uuid4()}",
             "event_type": RegistryEventType.DISCOVERY_RESPONSE.value,
             "event_source": self.service_id,
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": correlation_id or f"corr_{uuid.uuid4()}",
             "entity_id": requester,
             "schema_version": "1.1",
@@ -1322,7 +1323,7 @@ class RegistryService:
 
             uptime_seconds = 0
             if self._start_time:
-                uptime_seconds = int((datetime.utcnow() - self._start_time).total_seconds())
+                uptime_seconds = int((datetime.now(timezone.utc).replace(tzinfo=None) - self._start_time).total_seconds())
 
             return {
                 "service_id": self.service_id,
@@ -1371,5 +1372,5 @@ class RegistryService:
         return {
             "topology": topology,
             "stats": stats,
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }

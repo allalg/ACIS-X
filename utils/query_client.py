@@ -1,3 +1,4 @@
+from datetime import timezone
 import logging
 import threading
 import time
@@ -94,7 +95,7 @@ class QueryClient:
             "event_id": f"evt_{uuid.uuid4().hex}",
             "event_type": "query.request",
             "event_source": "QueryClient",
-            "event_time": datetime.utcnow().isoformat(),
+            "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "correlation_id": correlation_id,
             "entity_id": payload.get("customer_id", "unknown"),
             "schema_version": "1.1",

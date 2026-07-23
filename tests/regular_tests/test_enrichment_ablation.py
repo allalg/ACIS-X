@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_enrichment_ablation.py
 
@@ -112,7 +113,7 @@ def _run_aggregation(
             event_id=f"evt_fin_{cid}",
             event_type="external.data.enriched",
             event_source="ExternalDataAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id=cid,
             correlation_id=f"corr_fin_{cid}",
             schema_version="1.1",
@@ -133,7 +134,7 @@ def _run_aggregation(
             event_id=f"evt_lit_{cid}",
             event_type="external.litigation.updated",
             event_source="ExternalScrapingAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id=cid,
             correlation_id=f"corr_lit_{cid}",
             schema_version="1.1",

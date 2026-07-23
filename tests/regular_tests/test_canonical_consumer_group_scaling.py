@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_canonical_consumer_group_scaling.py
 
@@ -149,7 +150,7 @@ def _make_synthetic_event(seq: int) -> Dict[str, Any]:
         "event_id": f"evt_scale_{seq:06d}",
         "event_type": "customer.metrics.updated",
         "customer_id": f"cust_{seq:06d}",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "seq": seq,
     }
 

@@ -60,19 +60,19 @@ class TestEventTimezoneNormalisation:
         assert event.event_time.tzinfo is None
 
     def test_naive_utcnow_roundtrip(self):
-        """datetime.utcnow() (already naive) must survive model_validate unchanged."""
-        now = datetime.utcnow()
+        """datetime.now(timezone.utc).replace(tzinfo=None) (already naive) must survive model_validate unchanged."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         event = Event.model_validate(_make_event_dict(event_time=now.isoformat()))
         assert event.event_time.tzinfo is None
 
     def test_timezone_aware_utc_stripped(self):
-        """datetime.now(timezone.utc).replace(tzinfo=None) pattern used in
+        """datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None) pattern used in
         publish_event() must produce a naive datetime that parses cleanly."""
-        ts = datetime.now(timezone.utc).replace(tzinfo=None)
+        ts = datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None)
         event = Event.model_validate(_make_event_dict(event_time=ts.isoformat()))
         assert event.event_time.tzinfo is None
         # Sanity: the value should be close to now
-        delta = abs((event.event_time - datetime.utcnow()).total_seconds())
+        delta = abs((event.event_time - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds())
         assert delta < 5, f"Timestamp too far from now: {delta}s"
 
     def test_positive_offset_normalised(self):

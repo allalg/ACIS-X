@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/suite/test_unit_core.py
 
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 # ===========================================================================
 
 def _make_invoice_event(invoice_id: str, customer_id: str, total: float) -> Event:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     return Event(
         event_id=f"evt_inv_{invoice_id}",
         event_type="invoice.created",
@@ -68,7 +69,7 @@ def _make_payment_event(payment_id: str, invoice_id: str, customer_id: str, amou
         event_id=f"evt_pay_{payment_id}",
         event_type="payment.received",
         event_source="test",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         schema_version="1.1",
         payload={
@@ -76,7 +77,7 @@ def _make_payment_event(payment_id: str, invoice_id: str, customer_id: str, amou
             "invoice_id": invoice_id,
             "customer_id": customer_id,
             "amount": amount,
-            "payment_date": datetime.utcnow().isoformat(),
+            "payment_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         },
         metadata={},
     )
@@ -106,13 +107,13 @@ class TestDBAgentContracts:
         kafka = MagicMock()
         kafka.publish.return_value = True
         agent = DBAgent(kafka_client=kafka, db_path=db_path)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         created = Event(
             event_id="evt_inv_created",
             event_type="invoice.created",
             event_source="test",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="inv_001",
             payload={
                 "invoice_id": "inv_001",
@@ -127,7 +128,7 @@ class TestDBAgentContracts:
             event_id="evt_inv_overdue",
             event_type="invoice.overdue",
             event_source="test",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="inv_001",
             payload={
                 "invoice_id": "inv_001",
@@ -194,7 +195,7 @@ class TestDBAgentContracts:
             event_id="evt_idempotency_core",
             event_type="invoice.created",
             event_source="test",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="cust_idem",
             schema_version="1.1",
             payload={
@@ -202,8 +203,8 @@ class TestDBAgentContracts:
                 "customer_id": "cust_idem",
                 "amount": 75_000.0,
                 "total_amount": 75_000.0,
-                "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
-                "issued_date": datetime.utcnow().isoformat(),
+                "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
+                "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "status": "pending",
             },
             metadata={},
@@ -239,7 +240,7 @@ class TestDBAgentContracts:
         DBAgent(kafka_client=kafka, db_path=db_path)  # initialize schema
 
         conn = sqlite3.connect(db_path)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
             "INSERT OR IGNORE INTO customers (customer_id, created_at, updated_at) VALUES (?, ?, ?)",
             ("cust_ov", now, now),

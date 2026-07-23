@@ -1,3 +1,4 @@
+from datetime import timezone
 import pytest
 from unittest.mock import MagicMock, patch
 from typing import Generator, Dict, Any
@@ -166,7 +167,7 @@ def sample_customer_event() -> Dict[str, Any]:
         "event_id": "evt_001",
         "event_type": "customer.profile.created",
         "event_source": "test",
-        "event_time": datetime.utcnow().isoformat(),
+        "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "entity_id": "cust_00001",
         "schema_version": "1.1",
         "payload": {
@@ -187,15 +188,15 @@ def sample_invoice_event() -> Dict[str, Any]:
         "event_id": "evt_002",
         "event_type": "invoice.created",
         "event_source": "test",
-        "event_time": datetime.utcnow().isoformat(),
+        "event_time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "entity_id": "inv_00001",
         "schema_version": "1.1",
         "payload": {
             "invoice_id": "inv_00001",
             "customer_id": "cust_00001",
             "total_amount": 50000,
-            "issued_date": datetime.utcnow().isoformat(),
-            "due_date": datetime.utcnow().isoformat(),
+            "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            "due_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "status": "issued",
         },
         "metadata": {},

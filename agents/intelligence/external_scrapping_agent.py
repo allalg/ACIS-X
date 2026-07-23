@@ -409,7 +409,7 @@ class ExternalScrapingAgent(BaseAgent):
                         if pub:
                             try:
                                 pd = parsedate_to_datetime(pub)
-                                age_days = (datetime.now(timezone.utc) - pd).days
+                                age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - pd).days
                                 age = f" ({age_days}d ago)"
                             except Exception:
                                 pass
@@ -635,7 +635,7 @@ class ExternalScrapingAgent(BaseAgent):
 
         def _rss_fetch(encoded_q: str, days: int, tier: str, max_items: int) -> List[Dict]:
             results = []
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
             # Google News
             try:
@@ -723,7 +723,7 @@ class ExternalScrapingAgent(BaseAgent):
         """
         results: List[Dict] = []
         seen: set = set()
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=365)   # 1-year window for macro/regulatory news
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=365)   # 1-year window for macro/regulatory news
 
         # Derive a short sector label for queries
         sector = industry.lower() if industry and industry != "unknown" else ""
@@ -1010,7 +1010,7 @@ class ExternalScrapingAgent(BaseAgent):
             if pub_date_str:
                 try:
                     pub_date = parsedate_to_datetime(pub_date_str)
-                    age_hours = (datetime.now(timezone.utc) - pub_date).total_seconds() / 3600
+                    age_hours = (datetime.now(timezone.utc).replace(tzinfo=None) - pub_date).total_seconds() / 3600
                     age_info = f"\nAge: {round(age_hours, 1)} hours"
                 except Exception:
                     pass
@@ -1190,7 +1190,7 @@ OUTPUT (STRICT JSON):
                         pass
 
         if valid_pub_dates:
-            min_age_hours = min([max(0, (datetime.now(timezone.utc) - pd).total_seconds() / 3600) for pd in valid_pub_dates])
+            min_age_hours = min([max(0, (datetime.now(timezone.utc).replace(tzinfo=None) - pd).total_seconds() / 3600) for pd in valid_pub_dates])
             decay = max(0.5, 1 - (min_age_hours / 72))
             confidence *= decay
 
@@ -1222,7 +1222,7 @@ OUTPUT (STRICT JSON):
         if not history:
             return current_risk, 0.0
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         weighted_sum = 0.0
         total_weight = 0.0
@@ -1378,47 +1378,47 @@ OUTPUT (STRICT JSON):
             # 1. Fetch NCLT raw cases (cached 12h)
             nclt_cache_key = company_name.lower()
             nclt_entry = self._nclt_cache.get(nclt_cache_key)
-            if nclt_entry and (datetime.utcnow() - nclt_entry["timestamp"]).total_seconds() < 43200:
+            if nclt_entry and (datetime.now(timezone.utc).replace(tzinfo=None) - nclt_entry["timestamp"]).total_seconds() < 43200:
                 nclt_cases = nclt_entry["data"]
             else:
                 logger.info(f"[ExternalScrapingAgent] Fetching NCLT for {company_name}...")
                 nclt_cases = self._fetch_nclt_all_benches(company_name)
-                self._nclt_cache[nclt_cache_key] = {"data": nclt_cases, "timestamp": datetime.utcnow()}
+                self._nclt_cache[nclt_cache_key] = {"data": nclt_cases, "timestamp": datetime.now(timezone.utc).replace(tzinfo=None)}
 
             # 2. Fetch news (cached 6h)
             news_cache_key = company_name.lower()
             news_entry = self._news_cache.get(news_cache_key)
-            if news_entry and (datetime.utcnow() - news_entry["timestamp"]).total_seconds() < 43200:
+            if news_entry and (datetime.now(timezone.utc).replace(tzinfo=None) - news_entry["timestamp"]).total_seconds() < 43200:
                 articles = news_entry["data"]
             else:
                 logger.info(f"[ExternalScrapingAgent] Fetching news for {company_name}...")
                 articles = self._fetch_company_news_risk(company_name, aliases=aliases)
-                self._news_cache[news_cache_key] = {"data": articles, "timestamp": datetime.utcnow()}
+                self._news_cache[news_cache_key] = {"data": articles, "timestamp": datetime.now(timezone.utc).replace(tzinfo=None)}
 
             # 3. Fetch CaseMine (cached 12h)
             cm_cache_key = f"cm:{company_name.lower()}"
             cm_entry = self._nclt_cache.get(cm_cache_key)
-            if cm_entry and (datetime.utcnow() - cm_entry["timestamp"]).total_seconds() < 43200:
+            if cm_entry and (datetime.now(timezone.utc).replace(tzinfo=None) - cm_entry["timestamp"]).total_seconds() < 43200:
                 casemine_data = cm_entry["data"]
             else:
                 logger.info(f"[ExternalScrapingAgent] Fetching CaseMine for {company_name}...")
                 casemine_data = self._fetch_casemine(company_name)
-                self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.utcnow()}
+                self._nclt_cache[cm_cache_key] = {"data": casemine_data, "timestamp": datetime.now(timezone.utc).replace(tzinfo=None)}
 
             # 4. Fetch macro/regulatory context (cached 3h)
             macro_cache_key = f"macro:{company_name.lower()}:{industry.lower()}"
             macro_entry = self._news_cache.get(macro_cache_key)
-            if macro_entry and (datetime.utcnow() - macro_entry["timestamp"]).total_seconds() < 21600:
+            if macro_entry and (datetime.now(timezone.utc).replace(tzinfo=None) - macro_entry["timestamp"]).total_seconds() < 21600:
                 macro_articles = macro_entry["data"]
             else:
                 logger.info(f"[ExternalScrapingAgent] Fetching macro/regulatory context for {company_name}...")
                 macro_articles = self._fetch_macro_context(company_name, industry)
-                self._news_cache[macro_cache_key] = {"data": macro_articles, "timestamp": datetime.utcnow()}
+                self._news_cache[macro_cache_key] = {"data": macro_articles, "timestamp": datetime.now(timezone.utc).replace(tzinfo=None)}
 
             # 5. Unified LLM analysis
             analysis_cache_key = f"analysis:{company_name.lower()}"
             analysis_entry = self._news_cache.get(analysis_cache_key)
-            if analysis_entry and (datetime.utcnow() - analysis_entry["timestamp"]).total_seconds() < 43200:
+            if analysis_entry and (datetime.now(timezone.utc).replace(tzinfo=None) - analysis_entry["timestamp"]).total_seconds() < 43200:
                 fusion = analysis_entry["data"]
             else:
                 fusion = self._unified_llm_analysis(
@@ -1430,7 +1430,7 @@ OUTPUT (STRICT JSON):
                     macro_articles=macro_articles,
                     aliases=aliases,
                 )
-                self._news_cache[analysis_cache_key] = {"data": fusion, "timestamp": datetime.utcnow()}
+                self._news_cache[analysis_cache_key] = {"data": fusion, "timestamp": datetime.now(timezone.utc).replace(tzinfo=None)}
 
             base_risk = fusion["final_risk"]
 
@@ -1440,7 +1440,7 @@ OUTPUT (STRICT JSON):
             # Store history
             history = self._risk_history.setdefault(customer_id, [])
             history.append({
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None),
                 "base_risk": base_risk,
                 "risk": final_risk,
                 "source": "unified_llm",
@@ -1485,7 +1485,7 @@ OUTPUT (STRICT JSON):
                     "history_length": len(self._risk_history.get(customer_id, [])),
                     "recent_avg": round(historical_avg, 4) if history else 0.0,
                 },
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             }
 
             self.publish_event(

@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_unit_external_agent.py
 
@@ -47,7 +48,7 @@ def _make_metrics_event(customer_id: str = "cust_001", company_name: str = "ACME
         event_id="evt_ext_001",
         event_type="customer.metrics.updated",
         event_source="CustomerStateAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         schema_version="1.1",
         payload={
@@ -124,7 +125,7 @@ class TestExternalDataAgentNonBlocking:
             event_id="evt_no_cust",
             event_type="customer.metrics.updated",
             event_source="CustomerStateAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id="unknown",
             schema_version="1.1",
             payload={},           # no customer_id

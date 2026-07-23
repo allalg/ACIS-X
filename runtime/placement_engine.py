@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 PlacementEngine - Event-driven placement decider for ACIS-X.
 
@@ -123,7 +124,7 @@ class PlacementEngine(BaseAgent):
                     "instance_id": chosen_instance,
                     "message_key": payload.get("message_key"),
                     "original_topic": payload.get("original_topic"),
-                    "assigned_at": datetime.utcnow().isoformat()
+                    "assigned_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 }
             )
 
@@ -135,7 +136,7 @@ class PlacementEngine(BaseAgent):
         if not agent_name:
             logger.warning("[PlacementEngine] placement.requested missing agent_name: %s", payload)
             return
-        instance_id = payload.get("instance_id") or f"instance_{agent_name.lower()}_{datetime.utcnow().strftime('%H%M%S')}"
+        instance_id = payload.get("instance_id") or f"instance_{agent_name.lower()}_{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%H%M%S')}"
         preferred_hosts = payload.get("preferred_hosts")
         excluded_hosts = payload.get("excluded_hosts")
         decision_rule = payload.get("decision_rule", "SIMULATED_ROUND_ROBIN")

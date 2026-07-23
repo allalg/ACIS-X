@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_unit_query_client.py
 

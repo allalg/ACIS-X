@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_recovery_action_correctness.py
 
@@ -240,7 +241,7 @@ class TestRecoveryActionCorrectness:
             consumer_lag=lag,
             error_count=err,
             latency_ms=lat_ms,
-            last_event_at=datetime.utcnow(),
+            last_event_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
 
         # --- Step 1: compute health score ---

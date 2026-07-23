@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_self_healing_concurrent.py
 
@@ -85,7 +86,7 @@ def _make_agent() -> SelfHealingAgent:
     kafka.publish.return_value = None
     agent = SelfHealingAgent(kafka_client=kafka)
     # Backdate start_time so injected events aren't rejected as stale
-    agent._start_time = datetime.utcnow() - timedelta(hours=1)
+    agent._start_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     return agent
 
 
@@ -103,7 +104,7 @@ def _make_degraded_event(thread_idx: int, round_idx: int) -> Event:
         event_id=f"evt_concurrent_{round_idx}_{thread_idx}",
         event_type=SystemEventType.AGENT_HEALTH_DEGRADED.value,
         event_source="MonitoringAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=agent_id,
         schema_version="1.1",
         payload={

@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/suite/test_performance.py
 
@@ -47,7 +48,7 @@ def _pipeline_query_handler(query_type: str, params: dict = None, **kwargs):
                     "total_amount": 50_000.0,
                     "amount": 50_000.0,
                     "remaining_amount": 50_000.0,
-                    "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                    "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
                     "status": "pending",
                 }
                 for i in range(2)
@@ -129,7 +130,7 @@ class TestPipelineP95Latency:
                 event_id=f"evt_perf_{seq:06d}",
                 event_type="invoice.created",
                 event_source="ScenarioGeneratorAgent",
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(timezone.utc).replace(tzinfo=None),
                 entity_id=customer_id,
                 correlation_id=corr_id,
                 schema_version="1.1",
@@ -138,8 +139,8 @@ class TestPipelineP95Latency:
                     "invoice_id": f"inv_perf_{seq:06d}",
                     "amount": 10_000.0 + seq,
                     "total_amount": 10_000.0 + seq,
-                    "due_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
-                    "issued_date": datetime.utcnow().isoformat(),
+                    "due_date": (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat(),
+                    "issued_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                     "status": "pending",
                 },
                 metadata={"environment": "test"},
@@ -227,7 +228,7 @@ class TestSelfHealingMTTR:
         kafka = MagicMock()
         kafka.publish.return_value = None
         agent = SelfHealingAgent(kafka_client=kafka)
-        agent._start_time = datetime.utcnow() - timedelta(hours=1)
+        agent._start_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
 
         TARGET_ID = "agent_PerfWorker"
         TARGET_NAME = "PerfWorker"
@@ -244,7 +245,7 @@ class TestSelfHealingMTTR:
                 event_id=f"evt_timeout_perf_{i:04d}",
                 event_type=SystemEventType.AGENT_TIMEOUT.value,
                 event_source="MonitoringAgent",
-                event_time=datetime.utcnow(),
+                event_time=datetime.now(timezone.utc).replace(tzinfo=None),
                 entity_id=TARGET_ID,
                 schema_version="1.1",
                 payload={
@@ -264,7 +265,7 @@ class TestSelfHealingMTTR:
 
             with agent._state_lock:
                 state.status = AgentStatus.HEALTHY.value
-                state.last_heartbeat = datetime.utcnow()
+                state.last_heartbeat = datetime.now(timezone.utc).replace(tzinfo=None)
                 state.last_restart_requested = None
                 state.last_recovery_triggered = None
 
@@ -324,7 +325,7 @@ class TestCollectionsAgentDuplicatePrevention:
             event_id="evt_risk_dedup",
             event_type="risk.scored",
             event_source="RiskScoringAgent",
-            event_time=datetime.utcnow(),
+            event_time=datetime.now(timezone.utc).replace(tzinfo=None),
             entity_id=customer_id,
             correlation_id="corr_dedup_001",
             schema_version="1.1",

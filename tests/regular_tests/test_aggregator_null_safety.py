@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_aggregator_null_safety.py
 
@@ -95,7 +96,7 @@ def _make_financial_event(
         event_id=f"evt_fin_{seq:04d}",
         event_type="external.data.enriched",
         event_source="ExternalDataAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         schema_version="1.1",
         payload={
@@ -103,7 +104,7 @@ def _make_financial_event(
             "company_name": COMPANY_NAME,
             "external_risk": financial_risk,
             "source": "screener" if financial_risk is not None else "throttled",
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         },
         metadata={"environment": "test"},
     )
@@ -123,7 +124,7 @@ def _make_litigation_event(
         event_id=f"evt_lit_{seq:04d}",
         event_type="external.litigation.updated",
         event_source="ExternalScrapingAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=customer_id,
         schema_version="1.1",
         payload={
@@ -131,7 +132,7 @@ def _make_litigation_event(
             "company_name": COMPANY_NAME,
             "litigation_risk": litigation_risk if litigation_risk is not None else 0.0,
             "source": "nclt" if litigation_risk is not None else "unavailable",
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         },
         metadata={"environment": "test"},
     )

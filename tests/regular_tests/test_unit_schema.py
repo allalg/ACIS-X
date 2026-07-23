@@ -1,3 +1,4 @@
+from datetime import timezone
 """Unit tests for database schema and queries (no Kafka broker needed)."""
 
 import pytest
@@ -39,7 +40,7 @@ def test_customer_insertion(db_agent):
     # Insert test customer via direct SQL
     conn = sqlite3.connect(db_agent._db_path)
     cursor = conn.cursor()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     cursor.execute("""
         INSERT INTO customers (customer_id, name, credit_limit, created_at, updated_at)
@@ -64,7 +65,7 @@ def test_invoice_queries(db_agent):
     """Test invoice query methods."""
     conn = sqlite3.connect(db_agent._db_path)
     cursor = conn.cursor()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     # Create test customer
     cursor.execute("""
@@ -116,7 +117,7 @@ def test_get_customer_with_enrichment_fields(db_agent):
     """Test that get_customer returns enrichment fields (name, credit_limit)."""
     conn = sqlite3.connect(db_agent._db_path)
     cursor = conn.cursor()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
     cursor.execute("""
         INSERT INTO customers (customer_id, name, credit_limit, created_at, updated_at)

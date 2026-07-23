@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 tests/test_recovery_storm_prevention.py
 
@@ -107,7 +108,7 @@ def _make_degraded_event(seq: int) -> Event:
         event_id=f"evt_storm_{seq:04d}",
         event_type=SystemEventType.AGENT_HEALTH_DEGRADED.value,
         event_source="MonitoringAgent",
-        event_time=datetime.utcnow(),
+        event_time=datetime.now(timezone.utc).replace(tzinfo=None),
         entity_id=TARGET_AGENT_ID,
         schema_version="1.1",
         payload={
@@ -177,7 +178,7 @@ class TestRecoveryStormPrevention:
         agent = SelfHealingAgent(kafka_client=kafka)
 
         # Backdate _start_time so no events are considered stale
-        agent._start_time = datetime.utcnow() - timedelta(hours=1)
+        agent._start_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
 
         # Pre-seed the tracked state with a degraded_at timestamp that is
         # old enough to BYPASS the grace period (DEGRADED_RESTART_DELAY).
@@ -187,10 +188,10 @@ class TestRecoveryStormPrevention:
             agent_id=TARGET_AGENT_ID,
             agent_name=TARGET_AGENT_NAME,
             status=AgentStatus.DEGRADED.value,
-            last_degraded_at=datetime.utcnow() - timedelta(
+            last_degraded_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
                 seconds=SelfHealingAgent.DEGRADED_RESTART_DELAY_SECONDS + 10
             ),
-            last_event_at=datetime.utcnow() - timedelta(
+            last_event_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
                 seconds=SelfHealingAgent.DEGRADED_RESTART_DELAY_SECONDS + 10
             ),
         )
