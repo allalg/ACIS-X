@@ -21,14 +21,25 @@ export function PacketOrchestrator({ events, positionMap, focusAgent }: PacketOr
             return null
           }
           const abbreviation = EVENT_ABBREVIATIONS[event.event_type] ?? event.event_type.slice(0, 4).toUpperCase()
+          
+          // Compute trajectory from agent node to bus ring
+          // Assuming agent is at radius 180, bus ring is at radius 100
+          // If position is relative to (0,0):
+          const rAgent = Math.sqrt(position.x * position.x + position.y * position.y)
+          const ratio = rAgent > 0 ? 100 / rAgent : 0
+          const toX = position.x * ratio
+          const toY = position.y * ratio
+
           return (
             <DataPacket
               key={event.event_id}
               id={event.event_id}
               label={abbreviation}
               colorClass="agent-color-blue"
-              x={position.x}
-              y={160 + ((index % 3) - 1) * 16}
+              fromX={position.x}
+              fromY={position.y}
+              toX={toX}
+              toY={toY}
             />
           )
         })}

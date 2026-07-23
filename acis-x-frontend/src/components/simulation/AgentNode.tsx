@@ -5,8 +5,9 @@ type AgentNodeProps = {
   y: number
   label: string
   colorClass: string
-  size?: 'business' | 'operational'
+  size?: 'business' | 'operational' | 'center'
   status?: 'idle' | 'active' | 'processing' | 'error' | 'heartbeat'
+  labelAngle?: number // 0 to 360 degrees
 }
 
 export function AgentNode({
@@ -16,8 +17,42 @@ export function AgentNode({
   colorClass,
   size = 'business',
   status = 'idle',
+  labelAngle,
 }: AgentNodeProps) {
-  const radius = size === 'business' ? 22 : 16
+  const radius = size === 'center' ? 32 : size === 'business' ? 22 : 16
+
+  // Calculate smart label positioning if angle is provided
+  let labelX = x
+  let labelY = y + radius + 16
+  let anchor: 'start' | 'middle' | 'end' = 'middle'
+
+  if (labelAngle !== undefined) {
+    const rad = (labelAngle * Math.PI) / 180
+    const distance = radius + 14
+    labelX = x + Math.cos(rad) * distance
+    labelY = y + Math.sin(rad) * distance + 4 // +4 for vertical text centering
+
+    // Determine text anchor based on angle
+    // Right side: 315 to 45 deg
+    // Left side: 135 to 225 deg
+    // Top: 225 to 315 deg
+    // Bottom: 45 to 135 deg
+    const normalizedAngle = (labelAngle % 360 + 360) % 360
+    if (normalizedAngle > 315 || normalizedAngle <= 45) {
+      anchor = 'start'
+      labelX += 4
+    } else if (normalizedAngle > 135 && normalizedAngle <= 225) {
+      anchor = 'end'
+      labelX -= 4
+    } else if (normalizedAngle > 45 && normalizedAngle <= 135) {
+      anchor = 'middle'
+      labelY += 10
+    } else {
+      anchor = 'middle'
+      labelY -= 14
+    }
+  }
+
   return (
     <g className={`agent-node ${colorClass} status-${status}`}>
       <motion.circle
@@ -31,8 +66,8 @@ export function AgentNode({
       />
       <circle cx={x} cy={y} r={radius} className="agent-node-main" />
       {status === 'processing' ? <circle cx={x} cy={y} r={radius + 3} className="agent-node-spinner" /> : null}
-      {status === 'error' ? <text x={x} y={y - radius - 8} className="agent-err">ERR</text> : null}
-      <text x={x} y={y + radius + 16} textAnchor="middle" className="agent-label">
+      {status === 'error' ? <text x={x} y={y - radius - 8} className="agent-err" textAnchor="middle">ERR</text> : null}
+      <text x={labelX} y={labelY} textAnchor={anchor} className="agent-label">
         {label}
       </text>
     </g>

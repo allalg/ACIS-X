@@ -11,7 +11,6 @@ import { SimulationControls } from '../components/simulation/SimulationControls'
 export default function SimulationPage() {
   const { data: statusData } = useAgentStatus()
   const { events, status } = useEventStream()
-  const [speed, setSpeed] = useState(1)
   const [focusAgent, setFocusAgent] = useState('')
 
   const latestEvent = useMemo(() => events.at(-1), [events])
@@ -26,8 +25,6 @@ export default function SimulationPage() {
       </header>
 
       <SimulationControls
-        speed={speed}
-        onSpeedChange={setSpeed}
         focusAgent={focusAgent}
         onFocusAgentChange={setFocusAgent}
         streamStatus={status}

@@ -19,31 +19,31 @@
   --text-muted: #4a5568;
   --text-disabled: #2d3748;
 
-  --agent-scenario: #5b9bf5;
-  --agent-customer-state: #4ec9b0;
-  --agent-aggregator: #9ba3b5;
-  --agent-profile: #c49cde;
-  --agent-risk-scoring: #e07d5a;
-  --agent-payment-pred: #5da4db;
-  --agent-collections: #4db882;
-  --agent-overdue: #cfa24e;
-  --agent-credit-policy: #7b8cf0;
-  --agent-external-data: #5bbec9;
-  --agent-external-scrape: #82ad5e;
-  --agent-db: #7d8a9e;
-  --agent-memory: #9677c2;
-  --agent-query: #68a8cc;
-  --agent-time-tick: #b8a04a;
+  --agent-scenario: #3b82f6;
+  --agent-customer-state: #10b981;
+  --agent-aggregator: #6366f1;
+  --agent-profile: #d946ef;
+  --agent-risk-scoring: #f43f5e;
+  --agent-payment-pred: #0ea5e9;
+  --agent-collections: #22c55e;
+  --agent-overdue: #eab308;
+  --agent-credit-policy: #8b5cf6;
+  --agent-external-data: #06b6d4;
+  --agent-external-scrape: #84cc16;
+  --agent-db: #64748b;
+  --agent-memory: #a855f7;
+  --agent-query: #38bdf8;
+  --agent-time-tick: #f59e0b;
 
-  --agent-monitoring: #cfa24e;
-  --agent-self-healing: #4db882;
-  --agent-runtime: #5b6abf;
-  --agent-placement: #7b6bba;
-  --agent-registry: #c47ba0;
+  --agent-monitoring: #fbbf24;
+  --agent-self-healing: #10b981;
+  --agent-runtime: #6366f1;
+  --agent-placement: #8b5cf6;
+  --agent-registry: #ec4899;
 
-  --kafka-color: #cfa24e;
-  --kafka-glow: rgba(207, 162, 78, 0.18);
-  --kafka-flow: rgba(207, 162, 78, 0.35);
+  --kafka-color: #fbbf24;
+  --kafka-glow: rgba(251, 191, 36, 0.25);
+  --kafka-flow: rgba(251, 191, 36, 0.5);
 
   --risk-low: #22c55e;
   --risk-medium: #f59e0b;
@@ -509,20 +509,23 @@ select {
 }
 
 .kafka-bus-glow {
+  fill: none;
   stroke: var(--kafka-glow);
   stroke-width: 10;
 }
 
 .kafka-bus {
+  fill: none;
   stroke: var(--kafka-color);
   stroke-width: 3;
 }
 
 .kafka-flow {
+  fill: none;
   stroke: var(--kafka-flow);
   stroke-width: 2;
   stroke-dasharray: 12 12;
-  animation: flowDash 1s linear infinite;
+  animation: flowDash 3s linear infinite;
 }
 
 .kafka-label {

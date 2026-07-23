@@ -17,7 +17,7 @@ export function EventLog({ events, focusAgent }: EventLogProps) {
     <section className="event-log surface-card">
       <header>
         <h3>EVENT STREAM</h3>
-        <span className="mono">{filtered.length}</span>
+        <span className="mono">{filtered.length >= 600 ? '600+' : filtered.length}</span>
       </header>
       <div className="event-list-wrap">
         {filtered.slice(-240).map((event) => {

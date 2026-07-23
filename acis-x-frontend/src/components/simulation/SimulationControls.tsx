@@ -4,38 +4,20 @@ import { BUSINESS_AGENTS } from '../../types/agent'
 import { LiveIndicator } from '../ui/LiveIndicator'
 
 type SimulationControlsProps = {
-  speed: number
-  onSpeedChange: (speed: number) => void
   focusAgent: string
   onFocusAgentChange: (agent: string) => void
   streamStatus: EventStreamStatus
 }
 
 export function SimulationControls({
-  speed,
-  onSpeedChange,
   focusAgent,
   onFocusAgentChange,
   streamStatus,
 }: SimulationControlsProps) {
-  const speeds = useMemo(() => [0.5, 1, 2, 4], [])
-
   return (
     <section className="simulation-controls surface-card">
       <div className="controls-left">
-        <span className="mono controls-label">SPEED</span>
-        <div className="speed-buttons">
-          {speeds.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              className={candidate === speed ? 'button-dark active' : 'button-dark'}
-              onClick={() => onSpeedChange(candidate)}
-            >
-              {candidate}x
-            </button>
-          ))}
-        </div>
+        {/* Removed Speed control as it conflicts with live backend streaming */}
       </div>
 
       <div className="controls-center">
