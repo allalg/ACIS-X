@@ -41,7 +41,7 @@ class TestDynamicDiscovery:
         """
         agent_id = f"test-agent-{uuid.uuid4().hex[:6]}"
         config = KafkaConfig(client_id=agent_id, bootstrap_servers="localhost:9092")
-        client = KafkaClient(config)
+        client = KafkaClient(config, backend="kafka-python")
         agent = PaymentPredictionAgent(instance_id=agent_id, kafka_client=client)
         
         # Override topics for test safety
@@ -76,7 +76,7 @@ class TestDynamicDiscovery:
         for i in range(3):
             aid = f"concurrent-agent-{i}"
             config = KafkaConfig(client_id=aid, bootstrap_servers="localhost:9092")
-            client = KafkaClient(config)
+            client = KafkaClient(config, backend="kafka-python")
             agent = PaymentPredictionAgent(instance_id=aid, kafka_client=client)
             agent.consume_topic = "acis.discovery.test"
             agents.append(agent)
@@ -88,7 +88,7 @@ class TestDynamicDiscovery:
         time.sleep(5) # Wait for Kafka group rebalance and dynamic discovery
         
         for agent in agents:
-            assert agent.kafka_client._consumer is not None, f"Agent {agent.agent_id} failed dynamic discovery."
+            assert agent.kafka_client._consumer is not None, f"Agent {agent.instance_id} failed dynamic discovery."
             agent.stop()
             
         for thread in threads:

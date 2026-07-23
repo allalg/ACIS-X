@@ -16,7 +16,15 @@ x-kafka-common-env: &kafka-common-env
   KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
   KAFKA_MIN_INSYNC_REPLICAS: 2
   KAFKA_DEFAULT_REPLICATION_FACTOR: 3
-  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  # Give all ~20 agent processes time to join before the first rebalance fires.
+  # 0ms caused a rebalance storm on startup (each new joiner immediately
+  # triggered a fresh rebalance, cascading continuously).
+  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 3000
+  # Raise broker-side session/heartbeat maximums to comfortably accommodate
+  # the client-side session_timeout_ms=10000 and heartbeat_interval_ms=3000
+  # configured in KafkaConfig, preventing spurious "heartbeat failed" evictions.
+  KAFKA_GROUP_MAX_SESSION_TIMEOUT_MS: 60000
+  KAFKA_GROUP_MAX_HEARTBEAT_INTERVAL_MS: 10000
   CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
 services:
