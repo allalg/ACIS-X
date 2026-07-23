@@ -246,14 +246,16 @@ def get_customer_metrics() -> list[dict]:
         rows = conn.execute(
             """
             SELECT
-                customer_id,
-                COALESCE(total_outstanding, 0) AS total_outstanding,
-                COALESCE(avg_delay, 0) AS avg_delay,
-                COALESCE(on_time_ratio, 0) AS on_time_ratio,
-                COALESCE(last_payment_date, updated_at) AS last_payment_date,
-                updated_at
-            FROM customer_metrics
-            ORDER BY total_outstanding DESC
+                cm.customer_id,
+                COALESCE(c.name, cm.customer_id) AS company_name,
+                COALESCE(cm.total_outstanding, 0) AS total_outstanding,
+                COALESCE(cm.avg_delay, 0) AS avg_delay,
+                COALESCE(cm.on_time_ratio, 0) AS on_time_ratio,
+                COALESCE(cm.last_payment_date, cm.updated_at) AS last_payment_date,
+                cm.updated_at
+            FROM customer_metrics cm
+            LEFT JOIN customers c ON c.customer_id = cm.customer_id
+            ORDER BY cm.total_outstanding DESC
             """
         ).fetchall()
         return rows_to_dicts(rows)

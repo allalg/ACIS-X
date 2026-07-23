@@ -8,11 +8,10 @@ import type {
 import type { AgentsStatusResponse } from '../types/agent'
 import type { InvoiceResponse, PaymentResponse } from '../types/ledger'
 import type { MetricsResult } from '../types/metrics'
-import { stubs } from './stubs'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const API_KEY = import.meta.env.VITE_API_KEY ?? ''
-const USE_STUBS = import.meta.env.VITE_USE_STUBS === 'true'
+const USE_STUBS = false // Keeping constant exported for backward compatibility if used elsewhere
 
 export class ApiError extends Error {
   readonly status: number
@@ -51,39 +50,23 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   getHealth(): Promise<HealthResponse> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getHealth())
-    }
     return apiRequest<HealthResponse>('/api/v1/health')
   },
 
   getDashboardSummary(): Promise<DashboardSummary> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getDashboardSummary())
-    }
     return apiRequest<DashboardSummary>('/api/v1/dashboard/summary')
   },
 
   getCustomers(search = ''): Promise<CustomersResponse> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getCustomers(search))
-    }
     const query = search ? `?search=${encodeURIComponent(search)}` : ''
     return apiRequest<CustomersResponse>(`/api/v1/customers${query}`)
   },
 
   getCustomerById(id: string): Promise<CustomerProfile> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getCustomerById(id))
-    }
     return apiRequest<CustomerProfile>(`/api/v1/customers/${id}`)
   },
 
   getInvoices(customerId?: string, status?: string): Promise<InvoiceResponse> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getInvoices(customerId, status))
-    }
-
     const params = new URLSearchParams()
     if (customerId) {
       params.set('customer_id', customerId)
@@ -98,10 +81,6 @@ export const api = {
   },
 
   getPayments(customerId?: string, invoiceId?: string): Promise<PaymentResponse> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getPayments(customerId, invoiceId))
-    }
-
     const params = new URLSearchParams()
     if (customerId) {
       params.set('customer_id', customerId)
@@ -116,16 +95,10 @@ export const api = {
   },
 
   getAgentStatus(): Promise<AgentsStatusResponse> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getAgentsStatus())
-    }
     return apiRequest<AgentsStatusResponse>('/api/v1/agents/status')
   },
 
   computeMetrics(): Promise<MetricsComputeResponse> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.computeMetrics())
-    }
     return apiRequest<MetricsComputeResponse>('/api/v1/metrics/compute', {
       method: 'POST',
       body: JSON.stringify({}),
@@ -133,9 +106,6 @@ export const api = {
   },
 
   getMetricsResult(jobId: string): Promise<MetricsResult> {
-    if (USE_STUBS) {
-      return Promise.resolve(stubs.getMetricsResult(jobId))
-    }
     return apiRequest<MetricsResult>(`/api/v1/metrics/result/${jobId}`)
   },
 }

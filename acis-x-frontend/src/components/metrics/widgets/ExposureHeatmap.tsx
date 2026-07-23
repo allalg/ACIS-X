@@ -26,7 +26,7 @@ export function ExposureHeatmap({ rows }: ExposureHeatmapProps) {
         <tbody>
           {top.map((row) => (
             <tr key={row.customer_id}>
-              <td className="mono">{row.customer_id}</td>
+              <td>{row.company_name}</td>
               <td className="numeric">{formatCurrency(row.total_outstanding * 0.35)}</td>
               <td className="numeric">{formatCurrency(row.total_outstanding * 0.28)}</td>
               <td className="numeric">{formatCurrency(row.total_outstanding * 0.22)}</td>

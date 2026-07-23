@@ -1,6 +1,5 @@
 import type { EventEnvelope, EventStreamStatus } from '../types/events'
-import { API_KEY, USE_STUBS } from './api'
-import { stubs } from './stubs'
+import { API_KEY } from './api'
 
 export type EventCallback = (event: EventEnvelope) => void
 export type StatusCallback = (status: EventStreamStatus) => void
@@ -16,18 +15,8 @@ class EventStreamService {
   private listeners = new Set<EventCallback>()
   private statusListeners = new Set<StatusCallback>()
   private status: EventStreamStatus = 'disconnected'
-  private stubTimer: number | undefined
 
   connect() {
-    if (USE_STUBS) {
-      this.setStatus('connected')
-      this.stubTimer = window.setInterval(() => {
-        const event = stubs.createEvent()
-        this.listeners.forEach((listener) => listener(event))
-      }, 1800)
-      return
-    }
-
     if (this.source) {
       return
     }
@@ -60,10 +49,6 @@ class EventStreamService {
   }
 
   disconnect() {
-    if (this.stubTimer) {
-      window.clearInterval(this.stubTimer)
-      this.stubTimer = undefined
-    }
     this.clearReconnectTimeout()
     this.cleanupSource()
     this.setStatus('disconnected')

@@ -1,4 +1,5 @@
 import type { CustomerProfile } from '../../../types/api'
+import { formatCurrency } from '../../../lib/utils'
 import { SeverityBadge } from '../../ui/SeverityBadge'
 import { RiskBreakdownBar } from './RiskBreakdownBar'
 
@@ -25,7 +26,8 @@ export function CustomerProfileSheet({ customer, open, onClose }: CustomerProfil
         <div className="sheet-grid">
           <div>
             <p className="mono">{customer.customer_id}</p>
-            <p className="numeric">Credit Limit {Math.round(customer.credit_limit).toLocaleString()}</p>
+            <p className="numeric">Outstanding {formatCurrency(customer.total_outstanding)}</p>
+            <p className="numeric">Credit Limit {formatCurrency(customer.credit_limit)}</p>
             <SeverityBadge severity={customer.severity} />
           </div>
           <div>

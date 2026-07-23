@@ -11,6 +11,7 @@ export type RiskProfile = {
 
 export type CustomerMetric = {
   customer_id: string
+  company_name: string
   total_outstanding: number
   avg_delay: number
   on_time_ratio: number

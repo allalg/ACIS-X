@@ -8,6 +8,7 @@ class Settings:
     api_key: str
     db_path: str
     allowed_origins: list[str]
+    kafka_bootstrap_servers: str
 
 
 
@@ -22,4 +23,10 @@ def load_settings() -> Settings:
         ).split(',')
         if origin.strip()
     ]
-    return Settings(api_key=api_key, db_path=db_path, allowed_origins=allowed_origins)
+    kafka_bootstrap_servers = os.getenv('ACIS_KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+    return Settings(
+        api_key=api_key, 
+        db_path=db_path, 
+        allowed_origins=allowed_origins,
+        kafka_bootstrap_servers=kafka_bootstrap_servers
+    )

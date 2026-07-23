@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import random
 import uuid
+import logging
+import random
 from datetime import datetime, timezone
+from aiokafka import AIOKafkaConsumer
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -35,10 +37,58 @@ app.add_middleware(
 )
 
 METRICS_JOBS: dict[str, dict[str, Any]] = {}
+AGENTS_STATE: dict[str, dict[str, Any]] = {}
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat().replace('+00:00', 'Z')
+
+
+async def consume_agent_status():
+    consumer = AIOKafkaConsumer(
+        'acis.registry', 'acis.agent.health',
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        group_id=f"bff-status-group-{uuid.uuid4()}",
+        auto_offset_reset='latest'
+    )
+    await consumer.start()
+    try:
+        async for msg in consumer:
+            if msg.value:
+                event = json.loads(msg.value.decode('utf-8'))
+                payload = event.get('payload', {})
+                agent_id = payload.get('agent_id')
+                if not agent_id:
+                    continue
+                
+                if event['event_type'] == 'registry.agent.deregistered':
+                    AGENTS_STATE.pop(agent_id, None)
+                else:
+                    if agent_id not in AGENTS_STATE:
+                        AGENTS_STATE[agent_id] = {
+                            'agent_id': agent_id,
+                            'agent_name': payload.get('agent_name', agent_id),
+                            'agent_type': payload.get('agent_type', 'unknown'),
+                            'status': payload.get('status', 'healthy'),
+                            'registered_at': now_iso(),
+                            'last_heartbeat': now_iso(),
+                            'topics': payload.get('topics', {}),
+                            'capabilities': payload.get('capabilities', []),
+                            'version': payload.get('version', '1.0.0')
+                        }
+                    else:
+                        if 'status' in payload:
+                            AGENTS_STATE[agent_id]['status'] = payload['status']
+                        AGENTS_STATE[agent_id]['last_heartbeat'] = now_iso()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await consumer.stop()
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(consume_agent_status())
 
 
 @app.get('/api/v1/health')
@@ -99,72 +149,23 @@ def payments(
 
 @app.get('/api/v1/agents/status')
 def agents_status(_: str = Depends(require_api_key)):
-    names = [
-        'ScenarioGeneratorAgent',
-        'CustomerStateAgent',
-        'AggregatorAgent',
-        'CustomerProfileAgent',
-        'RiskScoringAgent',
-        'PaymentPredictionAgent',
-        'CollectionsAgent',
-        'OverdueDetectionAgent',
-        'CreditPolicyAgent',
-        'ExternalDataAgent',
-        'ExternalScrapingAgent',
-        'DBAgent',
-        'MemoryAgent',
-        'QueryAgent',
-        'TimeTickAgent',
-        'MonitoringAgent',
-        'SelfHealingAgent',
-        'RuntimeManager',
-        'PlacementEngine',
-        'RegistryService',
-    ]
     return {
-        'agents': [
-            {
-                'agent_id': f'agent-{index:03d}',
-                'agent_name': name,
-                'agent_type': 'business' if name.endswith('Agent') else 'operational',
-                'status': random.choice(['healthy', 'healthy', 'degraded']),
-                'registered_at': now_iso(),
-                'last_heartbeat': now_iso(),
-                'topics': {
-                    'consumes': ['acis.invoices', 'acis.payments'],
-                    'produces': ['acis.risk'],
-                },
-                'capabilities': ['stream-processing'],
-                'version': '1.0.0',
-            }
-            for index, name in enumerate(names, start=1)
-        ]
+        'agents': list(AGENTS_STATE.values())
     }
 
 
 @app.post('/api/v1/metrics/compute')
 def compute_metrics(_: str = Depends(require_api_key)):
     job_id = str(uuid.uuid4())
-    METRICS_JOBS[job_id] = {
-        'status': 'computing',
-        'started_at': now_iso(),
-    }
     return {
         'job_id': job_id,
-        'status': 'computing',
-        'started_at': METRICS_JOBS[job_id]['started_at'],
+        'status': 'ready',
+        'started_at': now_iso(),
     }
 
 
 @app.get('/api/v1/metrics/result/{job_id}')
 def metrics_result(job_id: str, _: str = Depends(require_api_key)):
-    job = METRICS_JOBS.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail='Job not found')
-
-    # Prototype behavior: first request after compute returns ready immediately.
-    job['status'] = 'ready'
-
     return {
         'job_id': job_id,
         'status': 'ready',
@@ -177,42 +178,35 @@ def metrics_result(job_id: str, _: str = Depends(require_api_key)):
     }
 
 
-async def stream_generator():
-    while True:
-        event = {
-            'event_id': str(uuid.uuid4()),
-            'event_type': random.choice(
-                [
-                    'invoice.created',
-                    'payment.received',
-                    'customer.metrics.updated',
-                    'risk.profile.updated',
-                    'agent.health',
-                    'self.healing.triggered',
-                    'time.tick',
-                ]
-            ),
-            'event_source': random.choice(
-                [
-                    'ScenarioGeneratorAgent',
-                    'CustomerStateAgent',
-                    'AggregatorAgent',
-                    'RiskScoringAgent',
-                    'MonitoringAgent',
-                    'SelfHealingAgent',
-                ]
-            ),
-            'event_time': now_iso(),
-            'correlation_id': None,
-            'entity_id': f'CUST-{random.randint(1, 20):04d}',
-            'schema_version': '1.0',
-            'payload': {'reason': 'prototype-stream'},
-            'metadata': {},
-        }
+logger = logging.getLogger(__name__)
 
-        yield ': heartbeat\n\n'
-        yield f"event: acis_event\ndata: {json.dumps(event)}\n\n"
-        await asyncio.sleep(15)
+async def stream_generator():
+    consumer = AIOKafkaConsumer(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        group_id=f"bff-sse-group-{uuid.uuid4()}",
+        auto_offset_reset='latest',
+        enable_auto_commit=False,
+    )
+    
+    # Subscribe to all topics starting with acis.
+    consumer.subscribe(pattern=r'^acis\..*')
+    
+    await consumer.start()
+    try:
+        while True:
+            try:
+                msg = await asyncio.wait_for(consumer.getone(), timeout=15.0)
+                if msg.value:
+                    event_data = msg.value.decode('utf-8')
+                    yield f"event: acis_event\ndata: {event_data}\n\n"
+            except asyncio.TimeoutError:
+                # Keep connection alive
+                yield ': heartbeat\n\n'
+    except asyncio.CancelledError:
+        logger.info("SSE client disconnected, stopping consumer")
+        raise
+    finally:
+        await consumer.stop()
 
 
 @app.get('/api/v1/events/stream')

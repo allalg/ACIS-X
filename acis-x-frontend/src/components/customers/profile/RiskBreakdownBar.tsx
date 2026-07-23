@@ -4,9 +4,9 @@ type RiskBreakdownBarProps = {
 }
 
 export function RiskBreakdownBar({ financial, litigation }: RiskBreakdownBarProps) {
-  const total = Math.max(financial + litigation, 0.0001)
-  const financialPct = Math.round((financial / total) * 100)
-  const litigationPct = Math.max(0, 100 - financialPct)
+  const total = financial + litigation
+  const financialPct = total > 0 ? Math.round((financial / total) * 100) : 0
+  const litigationPct = total > 0 ? Math.round((litigation / total) * 100) : 0
 
   return (
     <div className="risk-breakdown">
