@@ -241,7 +241,14 @@ def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
 
 def _create_topics() -> Dict[str, bool]:
     try:
-        admin = TopicAdmin(bootstrap_servers=_bootstrap_servers(), backend=_kafka_backend())
+        admin = TopicAdmin(
+            bootstrap_servers=_bootstrap_servers(),
+            backend=_kafka_backend(),
+            security_protocol=settings.kafka_security_protocol,
+            sasl_mechanism=settings.kafka_sasl_mechanism,
+            sasl_username=settings.kafka_sasl_username,
+            sasl_password=settings.kafka_sasl_password,
+        )
         try:
             results = admin.create_all_acis_topics()
             failed = [topic for topic, ok in results.items() if not ok]

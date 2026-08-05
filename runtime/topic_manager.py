@@ -266,7 +266,15 @@ DEFAULT_TOPICS = ACIS_TOPIC_CONFIGS
 class TopicAdmin:
     """Admin operations for Kafka topics."""
 
-    def __init__(self, bootstrap_servers: List[str], backend: str = "confluent"):
+    def __init__(
+        self,
+        bootstrap_servers: List[str],
+        backend: str = "confluent",
+        security_protocol: str = "PLAINTEXT",
+        sasl_mechanism: Optional[str] = None,
+        sasl_username: Optional[str] = None,
+        sasl_password: Optional[str] = None,
+    ):
         """
         Initialize topic admin client.
 
@@ -276,6 +284,10 @@ class TopicAdmin:
         """
         self.bootstrap_servers = bootstrap_servers
         self.backend = backend
+        self.security_protocol = security_protocol
+        self.sasl_mechanism = sasl_mechanism
+        self.sasl_username = sasl_username
+        self.sasl_password = sasl_password
         self._admin_client: Optional[Any] = None
 
         if backend == "confluent":
@@ -291,6 +303,13 @@ class TopicAdmin:
             config = {
                 "bootstrap.servers": ",".join(self.bootstrap_servers),
             }
+            if self.security_protocol != "PLAINTEXT":
+                config["security.protocol"] = self.security_protocol
+                if self.sasl_mechanism:
+                    config["sasl.mechanism"] = self.sasl_mechanism
+                    config["sasl.username"] = self.sasl_username
+                    config["sasl.password"] = self.sasl_password
+
             self._admin_client = AdminClient(config)
             logger.info("Confluent Kafka admin client initialized")
 
@@ -303,9 +322,17 @@ class TopicAdmin:
         try:
             from kafka import KafkaAdminClient
 
-            self._admin_client = KafkaAdminClient(
-                bootstrap_servers=self.bootstrap_servers,
-            )
+            config: Dict[str, Any] = {
+                "bootstrap_servers": self.bootstrap_servers,
+            }
+            if self.security_protocol and self.security_protocol.upper() != "PLAINTEXT":
+                config["security_protocol"] = self.security_protocol.upper()
+                if self.sasl_mechanism:
+                    config["sasl_mechanism"] = self.sasl_mechanism.upper()
+                    config["sasl_plain_username"] = self.sasl_username
+                    config["sasl_plain_password"] = self.sasl_password
+
+            self._admin_client = KafkaAdminClient(**config)
             logger.info("kafka-python admin client initialized")
 
         except ImportError:
