@@ -1,60 +1,83 @@
-# Production Dockerfile for ACIS-X Unified Engine + BFF Service
+# Production Dockerfile for ACIS-X Unified Container (Kafka + Engine + BFF)
 FROM python:3.11-slim
 
-# Prevent Python from writing pyc files and buffering stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
+# Install system dependencies & OpenJDK JRE for embedded KRaft Kafka
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     librdkafka-dev \
     libxml2-dev \
     libxslt1-dev \
     supervisor \
+    default-jre-headless \
+    wget \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Download and extract Apache Kafka 3.7.0 (KRaft mode)
+RUN wget -q https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz && \
+    tar -xzf kafka_2.13-3.7.0.tgz && \
+    mv kafka_2.13-3.7.0 /opt/kafka && \
+    rm kafka_2.13-3.7.0.tgz
+
 # Copy requirement files
 COPY requirements.txt .
 COPY acis-api-bff/requirements.txt ./bff_requirements.txt
 
-# Install dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r bff_requirements.txt
 
 # Copy application source code
 COPY . .
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data
+# Create data directory for SQLite & Kafka logs
+RUN mkdir -p /app/data /tmp/kraft-combined-logs
+
+# Format KRaft storage directory
+RUN /opt/kafka/bin/kafka-storage.sh format -t MkU3OEVBNTcwNTJENDM2Qk -c /opt/kafka/config/kraft/server.properties
 
 # Expose BFF API Port
 EXPOSE 8000
 
-# Create supervisor configuration to run both acis-engine and acis-bff
+# Create supervisor configuration to run Kafka, acis-engine, and acis-bff
 RUN echo '[supervisord]\n\
 nodaemon=true\n\
 logfile=/dev/null\n\
 logfile_maxbytes=0\n\
 \n\
+[program:kafka]\n\
+command=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties\n\
+directory=/opt/kafka\n\
+autostart=true\n\
+autorestart=true\n\
+priority=1\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+\n\
 [program:acis-engine]\n\
-command=python run_all_agents.py\n\
+command=sh -c "sleep 6 && python run_all_agents.py"\n\
 directory=/app\n\
 autostart=true\n\
 autorestart=true\n\
+priority=2\n\
 stdout_logfile=/dev/stdout\n\
 stdout_logfile_maxbytes=0\n\
 stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 \n\
 [program:acis-bff]\n\
-command=uvicorn app.main:app --host 0.0.0.0 --port 8000\n\
+command=sh -c "sleep 6 && uvicorn app.main:app --host 0.0.0.0 --port 8000"\n\
 directory=/app/acis-api-bff\n\
 autostart=true\n\
 autorestart=true\n\
+priority=3\n\
 stdout_logfile=/dev/stdout\n\
 stdout_logfile_maxbytes=0\n\
 stderr_logfile=/dev/stderr\n\
