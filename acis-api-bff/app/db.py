@@ -16,9 +16,7 @@ def get_connection():
     abs_path = os.path.abspath(raw_path)
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
     
-    # Standard SQLite URI syntax
-    db_path = f"file:{abs_path}?nolock=1"
-    conn = sqlite3.connect(db_path, uri=True, timeout=10.0)
+    conn = sqlite3.connect(abs_path, timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
