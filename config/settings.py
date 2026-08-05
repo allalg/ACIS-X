@@ -149,6 +149,7 @@ def _lazy_attr(name: str):
 
 # Eagerly resolve the backward-compatible constants so existing imports work.
 _settings = get_settings()
+settings = _settings  # Public alias for `from config.settings import settings`
 ACIS_KAFKA_BOOTSTRAP_SERVERS = _settings.kafka_bootstrap_servers
 ACIS_KAFKA_BACKEND = _settings.kafka_backend
 DEFAULT_MAX_REPLICAS = _settings.default_max_replicas

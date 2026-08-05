@@ -142,10 +142,17 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
     logger.info("[ConsumerGroup] First run detected - deleting committed consumer groups")
 
     try:
-        admin = KafkaAdminClient(
-            bootstrap_servers=bootstrap_servers,
-            client_id="acis-consumer-group-init"
-        )
+        admin_kwargs = {
+            "bootstrap_servers": bootstrap_servers,
+            "client_id": "acis-consumer-group-init",
+        }
+        if settings.kafka_security_protocol and settings.kafka_security_protocol.upper() != "PLAINTEXT":
+            admin_kwargs["security_protocol"] = settings.kafka_security_protocol.upper()
+            if settings.kafka_sasl_mechanism:
+                admin_kwargs["sasl_mechanism"] = settings.kafka_sasl_mechanism.upper()
+                admin_kwargs["sasl_plain_username"] = settings.kafka_sasl_username
+                admin_kwargs["sasl_plain_password"] = settings.kafka_sasl_password
+        admin = KafkaAdminClient(**admin_kwargs)
 
         consumer_groups_to_reset = [
             "db-agent-group",
