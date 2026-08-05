@@ -37,6 +37,10 @@ app.add_middleware(
     allow_methods=['GET', 'POST', 'OPTIONS'],
     allow_headers=['X-API-Key', 'Content-Type', 'Authorization'],
 )
+@app.get('/')
+@app.get('/health')
+def health_check():
+    return {'status': 'healthy', 'timestamp': now_iso()}
 
 AGENTS_STATE: dict[str, dict[str, Any]] = {}
 

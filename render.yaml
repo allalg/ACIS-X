@@ -16,6 +16,7 @@ services:
     dockerContext: .
     dockerfilePath: Dockerfile.prod
     plan: free
+    healthCheckPath: /health
     envVars:
       - key: ACIS_API_KEY
         generateValue: true
