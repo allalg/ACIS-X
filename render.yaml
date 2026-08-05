@@ -19,7 +19,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ACIS_API_KEY
-        generateValue: true
+        value: change_me
       - key: ACIS_ENV
         value: production
       - key: ACIS_DB_PATH
