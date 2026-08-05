@@ -5,7 +5,6 @@ export function useDashboardSummary() {
   return useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: () => api.getDashboardSummary(),
-    refetchInterval: 5000,
     staleTime: 0,
   })
 }

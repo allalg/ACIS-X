@@ -11,7 +11,14 @@ from .config import load_settings
 @contextmanager
 def get_connection():
     settings = load_settings()
-    conn = sqlite3.connect(settings.db_path)
+    db_path = settings.db_path
+    if not db_path.startswith("file:"):
+        import os
+        abs_path = os.path.abspath(db_path).replace("\\", "/")
+        if not abs_path.startswith("/"):
+            abs_path = "/" + abs_path
+        db_path = f"file:{abs_path}?nolock=1"
+    conn = sqlite3.connect(db_path, uri=True, timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -40,6 +47,14 @@ def get_dashboard_summary() -> dict:
             'SELECT COALESCE(AVG(avg_delay), 0), COALESCE(AVG(on_time_ratio), 0) FROM customer_metrics'
         ).fetchone()
 
+        db_on_time_ratio = float(metrics[1] or 0)
+        if db_on_time_ratio <= 0 and total_invoices > 0:
+            on_time_ratio = float((total_invoices - overdue_invoices) / total_invoices)
+        elif total_invoices == 0:
+            on_time_ratio = 1.0
+        else:
+            on_time_ratio = db_on_time_ratio
+
         risk_counts = cursor.execute(
             """
             SELECT
@@ -58,7 +73,7 @@ def get_dashboard_summary() -> dict:
         'overdue_invoices': overdue_invoices,
         'total_outstanding': float(total_outstanding or 0),
         'avg_delay': float(metrics[0] or 0),
-        'on_time_ratio': float(metrics[1] or 0),
+        'on_time_ratio': on_time_ratio,
         'high_risk_count': int(risk_counts[0] or 0),
         'medium_risk_count': int(risk_counts[1] or 0),
         'low_risk_count': int(risk_counts[2] or 0),
@@ -106,6 +121,11 @@ def get_customer_by_id(customer_id: str) -> dict | None:
             COALESCE(cm.total_outstanding, 0) AS total_outstanding,
             COALESCE(cm.avg_delay, 0) AS avg_delay,
             COALESCE(cm.on_time_ratio, 0) AS on_time_ratio,
+            COALESCE(cm.aging_current, 0) AS aging_current,
+            COALESCE(cm.aging_1_30, 0) AS aging_1_30,
+            COALESCE(cm.aging_31_60, 0) AS aging_31_60,
+            COALESCE(cm.aging_61_90, 0) AS aging_61_90,
+            COALESCE(cm.aging_90_plus, 0) AS aging_90_plus,
             COALESCE((SELECT COUNT(*) FROM invoices i WHERE i.customer_id = c.customer_id AND i.status = 'overdue'), 0) AS overdue_count,
             COALESCE(cm.last_payment_date, c.updated_at) AS last_payment_date,
             COALESCE(rp.financial_risk, 0) AS financial_risk,
@@ -251,6 +271,11 @@ def get_customer_metrics() -> list[dict]:
                 COALESCE(cm.total_outstanding, 0) AS total_outstanding,
                 COALESCE(cm.avg_delay, 0) AS avg_delay,
                 COALESCE(cm.on_time_ratio, 0) AS on_time_ratio,
+                COALESCE(cm.aging_current, 0) AS aging_current,
+                COALESCE(cm.aging_1_30, 0) AS aging_1_30,
+                COALESCE(cm.aging_31_60, 0) AS aging_31_60,
+                COALESCE(cm.aging_61_90, 0) AS aging_61_90,
+                COALESCE(cm.aging_90_plus, 0) AS aging_90_plus,
                 COALESCE(cm.last_payment_date, cm.updated_at) AS last_payment_date,
                 cm.updated_at
             FROM customer_metrics cm
@@ -259,3 +284,49 @@ def get_customer_metrics() -> list[dict]:
             """
         ).fetchall()
         return rows_to_dicts(rows)
+
+
+def get_customer_collections(customer_id: str) -> list[dict]:
+    query = """
+        SELECT id, invoice_id, action, stage, priority, reason, timestamp
+        FROM collections_log
+        WHERE customer_id = ?
+        ORDER BY timestamp DESC
+    """
+    with get_connection() as conn:
+        rows = conn.execute(query, (customer_id,)).fetchall()
+        return rows_to_dicts(rows)
+
+
+def get_customer_risk_explanation(customer_id: str) -> dict | None:
+    query = """
+        SELECT invoice_id, risk_score, risk_level, shap_top_driver, shap_values, reasons, updated_at
+        FROM risk_explanations
+        WHERE customer_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+    """
+    with get_connection() as conn:
+        row = conn.execute(query, (customer_id,)).fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+
+def get_customer_external_intelligence(customer_id: str) -> dict | None:
+    query = """
+        SELECT 
+            l.litigation_risk, l.severity, l.case_count, l.case_types, l.cases, l.evidence, l.source as litigation_source, l.confidence,
+            f.pe, f.roe, f.roce, f.operating_margin, f.interest_coverage, f.source as financial_source,
+            f."debt (₹ Cr.)" as debt, f."market_cap (₹ Cr.)" as market_cap, f.sales_growth, f.profit_growth
+        FROM external_litigation l
+        LEFT JOIN customers c ON c.customer_id = l.customer_id
+        LEFT JOIN external_financials f ON f.company_name = c.name
+        WHERE l.customer_id = ?
+        LIMIT 1
+    """
+    with get_connection() as conn:
+        row = conn.execute(query, (customer_id,)).fetchone()
+        if not row:
+            return None
+        return dict(row)

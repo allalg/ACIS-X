@@ -8,6 +8,8 @@ type AgentNodeProps = {
   size?: 'business' | 'operational' | 'center'
   status?: 'idle' | 'active' | 'processing' | 'error' | 'heartbeat'
   labelAngle?: number // 0 to 360 degrees
+  isFocused?: boolean
+  onClick?: () => void
 }
 
 export function AgentNode({
@@ -18,6 +20,8 @@ export function AgentNode({
   size = 'business',
   status = 'idle',
   labelAngle,
+  isFocused,
+  onClick,
 }: AgentNodeProps) {
   const radius = size === 'center' ? 32 : size === 'business' ? 22 : 16
 
@@ -32,11 +36,6 @@ export function AgentNode({
     labelX = x + Math.cos(rad) * distance
     labelY = y + Math.sin(rad) * distance + 4 // +4 for vertical text centering
 
-    // Determine text anchor based on angle
-    // Right side: 315 to 45 deg
-    // Left side: 135 to 225 deg
-    // Top: 225 to 315 deg
-    // Bottom: 45 to 135 deg
     const normalizedAngle = (labelAngle % 360 + 360) % 360
     if (normalizedAngle > 315 || normalizedAngle <= 45) {
       anchor = 'start'
@@ -54,7 +53,25 @@ export function AgentNode({
   }
 
   return (
-    <g className={`agent-node ${colorClass} status-${status}`}>
+    <g
+      className={`agent-node ${colorClass} status-${status}`}
+      style={{ opacity: isFocused === false ? 0.35 : 1, transition: 'opacity 0.3s', cursor: 'pointer' }}
+      onClick={onClick}
+    >
+      {isFocused && (
+        <motion.circle
+          cx={x}
+          cy={y}
+          r={radius + 8}
+          fill="none"
+          stroke="var(--accent-amber)"
+          strokeWidth="2.5"
+          strokeDasharray="4 4"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1, rotate: 360 }}
+          transition={{ rotate: { duration: 8, repeat: Infinity, ease: 'linear' } }}
+        />
+      )}
       <motion.circle
         cx={x}
         cy={y}

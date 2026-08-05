@@ -66,7 +66,7 @@ class QueryClient:
             servers = [s.strip() for s in bootstrap_servers.split(",") if s.strip()]
             backend = os.getenv("ACIS_KAFKA_BACKEND", "kafka-python")
 
-            group_id = f"query-client-{threading.get_ident()}"
+            group_id = f"query-client-{os.getpid()}-{threading.get_ident()}"
             config = KafkaConfig(
                 bootstrap_servers=servers,
                 consumer_auto_offset_reset="latest",
@@ -87,7 +87,7 @@ class QueryClient:
         return tl.consumer
 
     @classmethod
-    def query(cls, query_type: str, payload: Dict[str, Any], timeout: float = 5.0) -> Optional[Any]:
+    def query(cls, query_type: str, payload: Dict[str, Any], timeout: float = 15.0) -> Optional[Any]:
         publisher = cls._get_publisher()
         correlation_id = f"query_{uuid.uuid4().hex}"
         
@@ -109,11 +109,11 @@ class QueryClient:
         # Obtain (or lazily create) the per-thread consumer.
         consumer = cls._get_or_create_consumer()
         tl = cls._thread_local
-
+ 
         if not tl.consumer_ready:
             # Force the consumer to join the group and get partition assignments.
             assigned = False
-            for _ in range(50):  # Wait up to 5 seconds for initial assignment
+            for _ in range(150):  # Wait up to 15 seconds for initial assignment
                 consumer.poll(timeout_ms=100)
                 if hasattr(consumer, "_consumer") and consumer._consumer:
                     if consumer._consumer.assignment():
@@ -128,7 +128,7 @@ class QueryClient:
                 tl.consumer_ready = True
             else:
                 logger.warning(
-                    "[QueryClient] Consumer did not get assignments within 5s "
+                    "[QueryClient] Consumer did not get assignments within 15s "
                     "(thread=%s, correlation_id=%s)",
                     threading.get_ident(),
                     correlation_id,

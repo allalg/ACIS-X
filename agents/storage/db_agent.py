@@ -1,16 +1,30 @@
-from datetime import timezone
-import json
 import logging
+import os
 import re
 import sqlite3
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Any, Optional
 
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
 from utils.query_client import QueryClient
+
+# Handler modules extracted from this file (Phase 2 refactor)
+from agents.storage.handlers import (
+    SCHEMA_DDL,
+    SCHEMA_MIGRATIONS,
+    SCHEMA_VERSION,
+    handle_invoice_upsert,
+    handle_payment_received,
+    handle_collection_action,
+    handle_customer_profile,
+    handle_metrics_updated,
+    handle_litigation_event,
+    handle_customer_risk_profile,
+    handle_risk_scored,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +99,17 @@ class DBAgent(BaseAgent):
         self._init_database()
         logger.info("QueryAgent reference set for cache invalidation")
 
+    def _get_uri_path(self) -> str:
+        if self._db_path.startswith("file:"):
+            return self._db_path
+        abs_path = os.path.abspath(self._db_path).replace("\\", "/")
+        if not abs_path.startswith("/"):
+            abs_path = "/" + abs_path
+        return f"file:{abs_path}?nolock=1"
+
     def _get_connection(self) -> sqlite3.Connection:
         """Create a DB connection with FK enforcement enabled."""
-        conn = sqlite3.connect(self._db_path, timeout=30.0, isolation_level="DEFERRED")
+        conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=30.0, isolation_level="DEFERRED")
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
@@ -123,44 +145,41 @@ class DBAgent(BaseAgent):
         self._backfill_customer_name(conn, customer_id)
 
     def _init_database(self) -> None:
-        """Initialize SQLite database and create tables if not exists."""
-        import time
+        """Initialize SQLite database and create tables if not exists.
 
+        Schema DDL is defined in agents.storage.handlers.schema and executed
+        in order.  Migrations (ALTER TABLE) are applied best-effort.
+        """
         with self._db_lock:
             # FIX #6: Handle corrupted database by detecting and cleaning it up
             corruption_detected = False
 
             try:
-                # First, try to detect corruption by attempting to open and parse the database
-                test_conn = sqlite3.connect(self._db_path, timeout=10.0)
+                test_conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=10.0)
                 test_cursor = test_conn.cursor()
                 test_cursor.execute("PRAGMA integrity_check")
                 integrity = test_cursor.fetchone()[0]
-                test_conn.close()  # Close connection BEFORE deleting
+                test_conn.close()
 
                 if integrity != "ok":
                     logger.warning(f"Database integrity check failed: {integrity}, removing corrupted file")
                     corruption_detected = True
             except sqlite3.DatabaseError as e:
-                # Database is corrupted
                 if "malformed" in str(e).lower():
                     logger.warning(f"Database corrupted, preparing cleanup: {e}")
                     corruption_detected = True
                 test_conn = None
 
-            # If corruption detected, delete the corrupted files
             if corruption_detected:
-                import os
                 for attempt in range(3):
                     try:
-                        # Try to remove main file and WAL files
                         for suffix in ["", "-wal", "-shm"]:
                             filepath = self._db_path + suffix
                             if os.path.exists(filepath):
                                 try:
                                     os.remove(filepath)
                                     logger.info(f"Deleted corrupted database file: {filepath}")
-                                except:
+                                except Exception:
                                     pass
                         break
                     except Exception as e:
@@ -171,236 +190,26 @@ class DBAgent(BaseAgent):
                             logger.error(f"Could not remove corrupted database after 3 attempts: {e}")
                             raise
 
-            # Now open with fresh database (or cleaned-up file)
-            # Use timeout and WAL mode for better concurrent access
             conn = self._get_connection()
             try:
                 cursor = conn.cursor()
 
-                # Enable WAL mode for concurrent reads while DBAgent is writing.
-                # Multiple agents (MemoryAgent, CustomerStateAgent, QueryAgent) read
-                # from the same DB; WAL lets them do so without waiting for writes.
-                cursor.execute("PRAGMA journal_mode = WAL")
-                cursor.execute("PRAGMA synchronous = NORMAL")  # Balance safety and speed
-                cursor.execute("PRAGMA cache_size=-32000")   # 32MB cache
-                cursor.execute("PRAGMA temp_store=MEMORY")
+                # Execute all DDL from the schema module
+                for ddl in SCHEMA_DDL:
+                    cursor.execute(ddl)
 
-                # Enable foreign key constraints
-                cursor.execute("PRAGMA foreign_keys = ON")
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS event_log (
-                        event_id TEXT PRIMARY KEY,
-                        event_type TEXT,
-                        processed_at TEXT
-                    )
-                """)
-
-                # Index used by the hourly pruning DELETE to avoid a full-table scan.
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_event_log_time
-                    ON event_log (processed_at)
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS customers (
-                        customer_id TEXT PRIMARY KEY,
-                        name TEXT,
-                        credit_limit REAL DEFAULT 0,
-                        risk_score REAL DEFAULT 0,
-                        status TEXT DEFAULT 'active',
-                        created_at TEXT,
-                        updated_at TEXT
-                    )
-                """)
-                # Unique index on company name — prevents same company appearing
-                # under multiple customer IDs even if ScenarioGenerator retries.
-                cursor.execute("""
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_name_unique
-                    ON customers (name)
-                    WHERE name IS NOT NULL
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS invoices (
-                        invoice_id TEXT PRIMARY KEY,
-                        customer_id TEXT,
-                        total_amount REAL,
-                        paid_amount REAL DEFAULT 0,
-                        issued_date TEXT,
-                        due_date TEXT,
-                        status TEXT DEFAULT 'pending',
-                        created_at TEXT,
-                        updated_at TEXT,
-                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-                    )
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS payments (
-                        payment_id TEXT PRIMARY KEY,
-                        invoice_id TEXT,
-                        customer_id TEXT,
-                        amount REAL,
-                        payment_date TEXT,
-                        created_at TEXT,
-                        FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id),
-                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-                    )
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS collections_log (
-                        id TEXT PRIMARY KEY,
-                        customer_id TEXT,
-                        invoice_id TEXT,
-                        action TEXT,
-                        stage TEXT,
-                        priority TEXT,
-                        reason TEXT,
-                        timestamp TEXT,
-                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-                    )
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS customer_metrics (
-                        customer_id TEXT PRIMARY KEY,
-                        total_outstanding REAL DEFAULT 0,
-                        avg_delay REAL DEFAULT 0,
-                        on_time_ratio REAL DEFAULT 0,
-                        aging_current REAL DEFAULT 0,
-                        aging_1_30 REAL DEFAULT 0,
-                        aging_31_60 REAL DEFAULT 0,
-                        aging_61_90 REAL DEFAULT 0,
-                        aging_90_plus REAL DEFAULT 0,
-                        last_payment_date TEXT,
-                        updated_at TEXT,
-                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-                    )
-                """)
-
-                # Safely add columns if they don't exist
-                try:
-                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_current REAL DEFAULT 0")
-                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_1_30 REAL DEFAULT 0")
-                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_31_60 REAL DEFAULT 0")
-                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_61_90 REAL DEFAULT 0")
-                    cursor.execute("ALTER TABLE customer_metrics ADD COLUMN aging_90_plus REAL DEFAULT 0")
-                except sqlite3.OperationalError:
-                    pass  # Columns already exist
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS external_financials (
-                        company_name TEXT PRIMARY KEY,
-                        pe REAL,
-                        roe REAL,
-                        roce REAL,
-                        "debt (₹ Cr.)" REAL,
-                        "market_cap (₹ Cr.)" REAL,
-                        sales_growth REAL,
-                        profit_growth REAL,
-                        operating_margin REAL,
-                        interest_coverage REAL,
-                        risk REAL,
-                        source TEXT,
-                        updated_at TEXT
-                    )
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS external_litigation (
-                        customer_id TEXT PRIMARY KEY,
-                        id TEXT UNIQUE,
-                        company_name TEXT,
-                        litigation_risk REAL,
-                        severity TEXT,
-                        case_count INTEGER,
-                        case_types TEXT,
-                        cases TEXT,
-                        evidence TEXT,
-                        source TEXT,
-                        confidence REAL,
-                        created_at TEXT
-                    )
-                """)
-
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_invoice_id
-                    ON invoices(invoice_id)
-                """)
-
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_invoice_customer
-                    ON invoices(customer_id)
-                """)
-
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_litigation_customer
-                    ON external_litigation(customer_id)
-                """)
-
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_payments_invoice
-                    ON payments(invoice_id)
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS customer_risk_profile (
-                        customer_id TEXT PRIMARY KEY,
-                        id TEXT UNIQUE,
-                        company_name TEXT,
-                        financial_risk REAL,
-                        litigation_risk REAL,
-                        combined_risk REAL,
-                        severity TEXT,
-                        financial_source TEXT,
-                        litigation_source TEXT,
-                        confidence REAL,
-                        created_at TEXT,
-                        updated_at TEXT
-                    )
-                """)
-
-                # risk_explanations: per-invoice SHAP attribution audit trail.
-                # Written by _handle_risk_scored() from every risk.scored event.
-                # Supports regulatory explainability queries:
-                #   SELECT customer_id, shap_top_driver, shap_values
-                #   FROM risk_explanations ORDER BY risk_score DESC LIMIT 10;
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS risk_explanations (
-                        invoice_id              TEXT PRIMARY KEY,
-                        customer_id             TEXT NOT NULL,
-                        risk_score              REAL NOT NULL,
-                        risk_level              TEXT,
-                        shap_top_driver         TEXT,
-                        shap_values             TEXT,   -- JSON: {feature: phi_i}
-                        shap_sum                REAL,   -- sum(phi_i) ≈ base risk_score
-                        shap_baseline           REAL DEFAULT 0.0,
-                        shap_rating_adjustment  REAL DEFAULT 0.0,
-                        shap_litigation_adjustment REAL DEFAULT 0.0,
-                        reasons                 TEXT,   -- JSON: human-readable list
-                        created_at              TEXT NOT NULL,
-                        updated_at              TEXT NOT NULL,
-                        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-                    )
-                """)
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_risk_exp_customer
-                    ON risk_explanations (customer_id)
-                """)
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_risk_exp_score
-                    ON risk_explanations (risk_score DESC)
-                """)
+                # Apply migrations (add columns if missing)
+                for migration in SCHEMA_MIGRATIONS:
+                    try:
+                        cursor.execute(migration)
+                    except sqlite3.OperationalError:
+                        pass  # Column already exists
 
                 self._cleanup_legacy_company_names(conn)
                 self._repair_payment_integrity(conn)
-                # Single authoritative commit — covers schema DDL, legacy name
-                # cleanup, and payment integrity repair in one atomic transaction.
                 conn.commit()
                 logger.info(f"Database initialized at {self._db_path}")
-                logger.info("Upgraded database schema to v6 (SHAP risk_explanations ready)")
+                logger.info(f"Database schema {SCHEMA_VERSION} ready")
             finally:
                 conn.close()
 
@@ -619,926 +428,30 @@ class DBAgent(BaseAgent):
         ]
 
     def process_event(self, event: Event) -> None:
-        """Process incoming events and persist to database."""
+        """Route incoming events to the appropriate handler module."""
         event_type = event.event_type
 
         if event_type.startswith("invoice."):
-            self._handle_invoice_upsert(event)
+            handle_invoice_upsert(self, event)
         elif event_type in {"payment.received", "payment.partial"}:
-            self._handle_payment_received(event)
+            handle_payment_received(self, event)
         elif event_type.startswith("collection."):
-            self._handle_collection_action(event)
+            handle_collection_action(self, event)
         elif event_type == "customer.profile.updated":
-            self._handle_customer_profile(event)
-        elif event_type == "external.litigation.updated":  # FIX: standardized name
-            self._handle_litigation_event(event)
-        elif event_type == "risk.profile.updated":  # FIX: standardized name
-            self._handle_customer_risk_profile(event)
+            handle_customer_profile(self, event)
+        elif event_type == "external.litigation.updated":
+            handle_litigation_event(self, event)
+        elif event_type == "risk.profile.updated":
+            handle_customer_risk_profile(self, event)
         elif event_type == "risk.scored":
-            self._handle_risk_scored(event)
+            handle_risk_scored(self, event)
         elif event_type == "customer.metrics.updated":
-            self._handle_metrics_updated(event)
+            handle_metrics_updated(self, event)
 
-    def _handle_metrics_updated(self, event: Event) -> None:
-        """Handle customer.metrics.updated event and update customer_metrics table."""
-        data = event.payload or {}
-        customer_id = data.get("customer_id")
-        if not customer_id:
-            logger.warning("customer.metrics.updated event missing customer_id, skipping")
-            return
-
-        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                self._ensure_customer_exists(
-                    conn,
-                    customer_id,
-                    data.get("company_name") or data.get("customer_name") or data.get("name"),
-                )
-
-                aging_buckets = data.get("aging_buckets", {})
-                
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO customer_metrics
-                    (customer_id, total_outstanding, avg_delay, on_time_ratio, 
-                     aging_current, aging_1_30, aging_31_60, aging_61_90, aging_90_plus,
-                     last_payment_date, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        customer_id,
-                        float(data.get("total_outstanding", 0.0)),
-                        float(data.get("avg_delay", 0.0)),
-                        float(data.get("on_time_ratio", 0.0)),
-                        float(aging_buckets.get("current", 0.0)),
-                        float(aging_buckets.get("1_30_days", 0.0)),
-                        float(aging_buckets.get("31_60_days", 0.0)),
-                        float(aging_buckets.get("61_90_days", 0.0)),
-                        float(aging_buckets.get("90_plus_days", 0.0)),
-                        data.get("last_payment_date"),
-                        now,
-                    ),
-                )
-
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, now),
-                )
-                conn.commit()
-                logger.info(f"[DBAgent] Upserted metrics for customer {customer_id}")
-            except Exception as e:
-                logger.error(f"[DBAgent] Error handling metrics update: {e}")
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_invoice_upsert(self, event: Event) -> None:
-        """
-        Handle all invoice.* events using UPSERT logic.
-        Supports:
-        - invoice.created
-        - invoice.overdue
-        - invoice.disputed
-        - invoice.cancelled
-        """
-        data = event.payload or {}
-        invoice_id = data.get("invoice_id")
-        customer_id = data.get("customer_id")
-        raw_total_amount = data.get("amount")
-        if raw_total_amount is None:
-            raw_total_amount = data.get("total_amount")
-        due_date = data.get("due_date")
-        status = data.get("status", "pending")
-        issued_date = data.get("created_at") or data.get("issued_date")
-        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-        total_amount = None
-        if raw_total_amount is not None:
-            try:
-                total_amount = float(raw_total_amount)
-            except (TypeError, ValueError):
-                logger.warning(
-                    "[DBAgent] Invalid invoice amount for %s: %r; preserving existing amount if available",
-                    invoice_id,
-                    raw_total_amount,
-                )
-
-        if not invoice_id:
-            logger.warning("Invoice event missing invoice_id, skipping")
-            return
-
-        if not issued_date:
-            issued_date = now
-
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                self._ensure_customer_exists(
-                    conn,
-                    customer_id,
-                    data.get("customer_name") or data.get("company_name") or data.get("name"),
-                )
-
-                cursor.execute("""
-                    INSERT INTO invoices (
-                        invoice_id,
-                        customer_id,
-                        total_amount,
-                        paid_amount,
-                        issued_date,
-                        due_date,
-                        status,
-                        created_at,
-                        updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(invoice_id) DO UPDATE SET
-                        customer_id=COALESCE(excluded.customer_id, invoices.customer_id),
-                        total_amount=COALESCE(?, invoices.total_amount, 0.0),
-                        due_date=COALESCE(excluded.due_date, invoices.due_date),
-                        status=excluded.status,
-                        updated_at=excluded.updated_at
-                """, (
-                    invoice_id,
-                    customer_id,
-                    total_amount if total_amount is not None else 0.0,
-                    0.0,  # Initialize paid_amount to 0
-                    issued_date,
-                    due_date,
-                    status,
-                    now,
-                    now,
-                    total_amount,
-                ))
-
-                cursor.execute(
-                    """
-                    SELECT
-                        COALESCE(total_amount, 0.0),
-                        COALESCE(paid_amount, 0.0)
-                    FROM invoices
-                    WHERE invoice_id = ?
-                    """,
-                    (invoice_id,),
-                )
-                invoice_row = cursor.fetchone()
-                resolved_total_amount = float(invoice_row[0]) if invoice_row else 0.0
-                resolved_paid_amount = float(invoice_row[1]) if invoice_row else 0.0
-                resolved_remaining_amount = max(
-                    resolved_total_amount - resolved_paid_amount,
-                    0.0,
-                )
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-                )
-                conn.commit()
-                logger.info(
-                    f"[DBAgent] Upserted invoice: {invoice_id} status={status} "
-                    f"total_amount={resolved_total_amount}"
-                )
-
-                # FIX #2: Pre-populate cache instead of just invalidating
-                # This prevents cache misses for agents querying immediately after write
-                if True:
-                    invoice_cache_data = {
-                        "invoice_id": invoice_id,
-                        "customer_id": customer_id,
-                        "total_amount": resolved_total_amount,
-                        "paid_amount": resolved_paid_amount,
-                        "remaining_amount": resolved_remaining_amount,
-                        "due_date": due_date,
-                        "status": status,
-                    }
-                    QueryClient.query("update_invoice_cache", {"invoice_id": invoice_id})
-                    if customer_id:
-                        QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_payment_received(self, event: Event) -> None:
-        """Handle payment.received event - insert payment and update invoice paid_amount and status."""
-        data = event.payload or {}
-        payment_id = data.get("payment_id")
-        invoice_id = data.get("invoice_id")
-        raw_amount = data.get("amount")
-        payment_date = data.get("payment_date") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-        if not payment_id:
-            logger.warning("payment.received event missing payment_id, skipping")
-            return
-
-        try:
-            amount = float(raw_amount or 0.0)
-        except (TypeError, ValueError):
-            logger.warning(
-                "[DBAgent] Invalid payment amount for payment_id=%s invoice_id=%s: %r",
-                payment_id,
-                invoice_id,
-                raw_amount,
-            )
-            return
-
-        if amount <= 0:
-            logger.warning(
-                "[DBAgent] Payment amount must be positive, got %r for payment_id=%s invoice_id=%s — rejected",
-                raw_amount, payment_id, invoice_id,
-            )
-            return
-
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                # Resolve customer_id from invoice if not provided
-                # WITH RETRY: payment may arrive before invoice insert (race condition)
-                customer_id = data.get("customer_id")
-                if not customer_id and invoice_id:
-                    for attempt in range(3):
-                        cursor.execute(
-                            "SELECT customer_id FROM invoices WHERE invoice_id = ?",
-                            (invoice_id,)
-                        )
-                        row = cursor.fetchone()
-                        if row:
-                            customer_id = row[0]
-                            logger.info(f"[DBAgent] Resolved customer_id from invoice: {invoice_id} -> {customer_id}")
-                            break
-                        elif attempt < 2:
-                            logger.warning(f"[DBAgent] Invoice {invoice_id} not found, retrying... (attempt {attempt + 1}/3)")
-                            time.sleep(0.1)
-
-                    if not customer_id:
-                        logger.error(f"[DBAgent] Could not find invoice {invoice_id} after 3 retries, cannot process payment")
-                        return
-
-                # Ensure parent rows exist before inserting payment
-                # (payments can arrive before invoice.created due to Kafka ordering)
-
-                # 2) Ensure invoice exists — create placeholder if not yet
-                self._ensure_customer_exists(
-                    conn,
-                    customer_id,
-                    data.get("customer_name") or data.get("company_name") or data.get("name"),
-                )
-
-                if invoice_id:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO invoices (
-                            invoice_id, customer_id, total_amount, paid_amount,
-                            issued_date, due_date, status, created_at, updated_at
-                        ) VALUES (?, ?, 0.0, 0.0, ?, ?, 'pending', ?, ?)
-                    """, (invoice_id, customer_id, now, now, now, now))
-                    if cursor.rowcount > 0:
-                        logger.info(
-                            f"[DBAgent] Created placeholder invoice {invoice_id} for payment "
-                            f"(will be amended when invoice.created arrives)"
-                        )
-
-                # Insert payment (idempotent)
-                cursor.execute("""
-                    INSERT OR IGNORE INTO payments (
-                        payment_id,
-                        invoice_id,
-                        customer_id,
-                        amount,
-                        payment_date,
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (payment_id, invoice_id, customer_id, amount, payment_date, now))
-
-                if cursor.rowcount > 0:
-                    logger.info(f"[DBAgent] Inserted payment: {payment_id} for invoice: {invoice_id}, amount={amount}")
-
-                    # Update invoice paid_amount and determine status
-                    if invoice_id:
-                        # Get current invoice state
-                        cursor.execute(
-                            "SELECT total_amount, paid_amount FROM invoices WHERE invoice_id = ?",
-                            (invoice_id,)
-                        )
-                        invoice_row = cursor.fetchone()
-                        if invoice_row:
-                            total_amount = invoice_row[0]
-                            current_paid = invoice_row[1] or 0
-                            new_paid = current_paid + amount
-                            if total_amount is not None:
-                                new_paid = min(float(total_amount), new_paid)
-
-                            # Determine status based on remaining amount
-                            remaining = total_amount - new_paid if total_amount else 0
-                            if remaining <= 0:
-                                status = "paid"
-                            elif new_paid > 0:
-                                status = "partial"
-                            else:
-                                status = "pending"
-
-                            cursor.execute("""
-                                UPDATE invoices
-                                SET paid_amount = ?, status = ?, updated_at = ?
-                                WHERE invoice_id = ?
-                            """, (new_paid, status, now, invoice_id))
-
-                            logger.info(
-                                f"[DBAgent] Updated invoice: {invoice_id} paid={new_paid} remaining={remaining} status={status}"
-                            )
-                        else:
-                            logger.warning(f"[DBAgent] Invoice {invoice_id} not found for payment update")
-                else:
-                    logger.debug(f"[DBAgent] Payment {payment_id} already exists, skipped")
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-                )
-                conn.commit()
-
-                # FIX #2: Pre-populate cache instead of just invalidating
-                if True:
-                    if invoice_id:
-                        # After payment, invoice state has changed (paid_amount, status)
-                        # Invalidate to force refresh on next read
-                        QueryClient.query("invalidate_invoice_cache", {"invoice_id": invoice_id})
-                    if customer_id:
-                        QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_collection_action(self, event: Event) -> None:
-        """Handle all collection.* events - insert into collections_log."""
-        data = event.payload or {}
-        collection_id = data.get("id") or data.get("collection_id") or event.event_id
-        customer_id = data.get("customer_id")
-        invoice_id = data.get("invoice_id")
-
-        # Map action_type or action field
-        action = data.get("action") or data.get("action_type") or event.event_type
-
-        # Map stage from event type if not in payload
-        stage = data.get("stage") or event.event_type
-
-        # New fields for analytics
-        priority = data.get("priority")
-        reason = data.get("reason")
-        timestamp = data.get("timestamp") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-        if not collection_id:
-            logger.warning(f"{event.event_type} event missing id, skipping")
-            return
-
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-                cursor.execute("""
-                    INSERT OR IGNORE INTO collections_log (
-                        id,
-                        customer_id,
-                        invoice_id,
-                        action,
-                        stage,
-                        priority,
-                        reason,
-                        timestamp
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (collection_id, customer_id, invoice_id, action, stage, priority, reason, timestamp))
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-                )
-                conn.commit()
-
-                if cursor.rowcount > 0:
-                    logger.info(
-                        f"[DBAgent] Inserted collection log: {collection_id} for customer: {customer_id}, "
-                        f"action: {action}, priority: {priority}, reason: {reason}"
-                    )
-                else:
-                    logger.debug(f"[DBAgent] Collection log {collection_id} already exists, skipped")
-
-                # Invalidate caches
-                if customer_id:
-                    QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_customer_profile(self, event: Event) -> None:
-        """Handle customer.profile.updated event - upsert customer profile data.
-
-        Strategy:
-          Step 1 — INSERT OR IGNORE: create the row if it does not yet exist,
-                   seeding it with whatever fields this event carries.
-          Step 2 — Targeted UPDATE: build the SET clause dynamically from only
-                   the keys that were actually present in the payload.
-                   Fields absent from the payload are left untouched, so agents
-                   that own different columns (ScenarioGeneratorAgent → credit_limit,
-                   CustomerProfileAgent → risk_score) never overwrite each other.
-        """
-        data = event.payload or {}
-        customer_id = data.get("customer_id")
-        if not customer_id:
-            logger.warning("customer.profile.updated event missing customer_id, skipping")
-            return
-
-        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-        # Only extract fields that are genuinely present in this event's payload
-        name         = self._sanitize_company_name(data.get("customer_name") or data.get("name"))
-        if name is None:
-            name = customer_id
-        has_risk     = "risk_score"   in data
-        has_limit    = "credit_limit" in data
-        has_status   = "status"       in data
-
-        risk_score   = float(data["risk_score"])   if has_risk  else None
-        credit_limit = float(data["credit_limit"]) if has_limit else None
-        status       = data["status"]              if has_status else "active"
-
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                # Step 1: Ensure the customer row exists.
-                # CRITICAL: Do NOT insert name=NULL — it creates stub rows we can't fix later.
-                # Only include name in the INSERT if we have a real value.
-                if name is not None:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO customers
-                            (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        customer_id,
-                        name,
-                        risk_score   if risk_score   is not None else 0.0,
-                        credit_limit if credit_limit is not None else 0.0,
-                        status,
-                        now, now,
-                    ))
-                else:
-                    # No name — only insert the bare skeleton if the row is truly missing.
-                    # Skip if the row already exists so we don't clobber a real name.
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO customers
-                            (customer_id, risk_score, credit_limit, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        customer_id,
-                        risk_score   if risk_score   is not None else 0.0,
-                        credit_limit if credit_limit is not None else 0.0,
-                        status,
-                        now, now,
-                    ))
-                    # Immediately attempt backfill in case profile arrived earlier
-                    self._backfill_customer_name(conn, customer_id)
-
-                # Step 2: Unconditionally update name when a real name is present.
-                # This ensures NULL rows (created by stub inserts from invoice/payment handlers)
-                # are overwritten as soon as the profile event arrives.
-                update_fields = []
-                update_params = []
-
-                if name is not None:
-                    update_fields.append("name = ?")
-                    update_params.append(name)
-
-                if has_risk:
-                    update_fields.append("risk_score = ?")
-                    update_params.append(risk_score)
-
-                if has_limit:
-                    update_fields.append("credit_limit = ?")
-                    update_params.append(credit_limit)
-
-                if has_status:
-                    update_fields.append("status = ?")
-                    update_params.append(status)
-
-                if update_fields:
-                    update_fields.append("updated_at = ?")
-                    update_params.append(now)
-                    update_params.append(customer_id)
-                    cursor.execute(
-                        f"UPDATE customers SET {', '.join(update_fields)} WHERE customer_id = ?",
-                        update_params,
-                    )
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-                )
-                conn.commit()
-                logger.info(
-                    f"[DBAgent] Upserted customer: {customer_id} "
-                    f"name={name!r} risk={risk_score} limit={credit_limit} status={status}"
-                )
-
-                # Update query-agent cache with only the fields we know about
-                if True:
-                    cache_patch = {"customer_id": customer_id, "updated_at": now}
-                    if name         is not None: cache_patch["name"]         = name
-                    if has_risk:                 cache_patch["risk_score"]   = risk_score
-                    if has_limit:                cache_patch["credit_limit"] = credit_limit
-                    QueryClient.query("update_customer_cache", {"customer_id": customer_id})
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_litigation_event(self, event: Event) -> None:
-        """Handle LitigationRiskUpdated event - insert litigation risk data."""
-        data = event.payload or {}
-        customer_id = data.get("customer_id")
-        company_name = data.get("company_name")
-        company_name = self._sanitize_company_name(company_name)
-        litigation_risk = data.get("litigation_risk", 0.0)
-        severity = data.get("severity")
-        case_count = data.get("case_count") or data.get("nclt_case_count", 0)
-        case_types = data.get("case_types", [])
-        cases = data.get("cases") or data.get("nclt_cases", [])
-        evidence = data.get("evidence", "")
-        source = data.get("source")
-        confidence = data.get("confidence", 0.0)
-        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-        if not customer_id:
-            logger.warning("LitigationRiskUpdated event missing customer_id, skipping")
-            return
-
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                # Also try the company_name from this litigation event directly
-                if company_name:
-                    conn.execute(
-                        "UPDATE customers SET name = ?, updated_at = ? "
-                        "WHERE customer_id = ? AND name IS NULL",
-                        (company_name, created_at, customer_id),
-                    )
-
-                cursor.execute("""
-                    INSERT OR REPLACE INTO external_litigation (
-                        id,
-                        customer_id,
-                        company_name,
-                        litigation_risk,
-                        severity,
-                        case_count,
-                        case_types,
-                        cases,
-                        evidence,
-                        source,
-                        confidence,
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    event.event_id,
-                    customer_id,
-                    company_name,
-                    litigation_risk,
-                    severity,
-                    case_count,
-                    json.dumps(case_types or []),
-                    json.dumps(cases or []),
-                    evidence,
-                    source,
-                    confidence,
-                    created_at
-                ))
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-                )
-                conn.commit()
-
-                if cursor.rowcount > 0:
-                    logger.info(
-                        f"[DBAgent] Stored litigation: customer={customer_id}, "
-                        f"risk={litigation_risk}, cases={case_count}"
-                    )
-                else:
-                    logger.debug(f"[DBAgent] Litigation record {event.event_id} already exists, skipped")
-
-                # Invalidate cache
-                if True:
-                    QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_customer_risk_profile(self, event: Event) -> None:
-        """
-        Handle risk.profile.updated event — upsert aggregated risk data.
-
-        KEY FIXES:
-        1. IDEMPOTENCY: skip if this event_id was already processed.
-        2. NULL-SAFE UPSERT: financial_risk, financial_source and company_name
-           are only overwritten when the incoming value is NOT NULL, so a
-           throttled follow-up event (financial_risk=None) can never destroy
-           a previously stored valid score.
-        3. FRESHNESS CHECK: incoming event's generated_at must be >= the stored
-           updated_at, otherwise the write is silently skipped.
-        """
-        import re as _re
-        data = event.payload or {}
-
-        customer_id = data.get("customer_id")
-        company_name = data.get("company_name")
-        company_name = self._sanitize_company_name(company_name)
-
-        if not customer_id:
-            logger.warning("CustomerRiskProfileUpdated missing customer_id, skipping")
-            return
-
-        # --- IDEMPOTENCY GUARD ---
-        event_id = event.event_id
-        if event_id and event_id in self._processed_risk_events:
-            logger.debug(f"[DBAgent] Skipping duplicate risk profile event_id={event_id}")
-            return
-
-        # Guard: if company_name looks like a customer_id fallback (e.g. "cust_00003"),
-        # try to resolve it from the customers table before persisting.
-        if not company_name or _re.match(r'^cust_\d+$', company_name):
-            conn_check = self._get_connection()
-            try:
-                row = conn_check.execute(
-                    "SELECT name FROM customers WHERE customer_id = ?", (customer_id,)
-                ).fetchone()
-                if row and row[0]:
-                    company_name = self._sanitize_company_name(row[0])
-                    logger.debug(f"[DBAgent] Resolved company_name from customers table: {company_name}")
-                else:
-                    company_name = None  # persist NULL rather than a useless placeholder
-            except Exception:
-                company_name = None
-            finally:
-                conn_check.close()
-
-        # financial_risk may be None (private company / failed fetch) — preserve existing in that case
-        financial_risk = data.get("financial_risk")   # intentionally NOT defaulting to 0.0
-        litigation_risk = data.get("litigation_risk", 0.0)
-        combined_risk = data.get("combined_risk", 0.0)
-
-        severity = data.get("severity")
-        financial_source = data.get("financial_source")  # may be None
-        litigation_source = data.get("litigation_source")
-
-        confidence = data.get("confidence", 0.0)
-        now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-
-        # Parse the event's generated_at for the freshness guard
-        incoming_generated_at = data.get("generated_at")
-
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                self._ensure_customer_exists(conn, customer_id, company_name)
-
-                # --- FRESHNESS GUARD ---
-                # Check the stored updated_at; if the incoming event is older, skip.
-                existing_row = cursor.execute(
-                    "SELECT updated_at FROM customer_risk_profile WHERE customer_id = ?",
-                    (customer_id,)
-                ).fetchone()
-                if existing_row and existing_row[0] and incoming_generated_at:
-                    try:
-                        if incoming_generated_at < existing_row[0]:
-                            logger.debug(
-                                f"[DBAgent] Discarding stale risk profile event for {customer_id}: "
-                                f"event generated_at={incoming_generated_at} < stored updated_at={existing_row[0]}"
-                            )
-                            return
-                    except Exception:
-                        pass  # If comparison fails, proceed
-
-                # --- NULL-SAFE UPSERT ---
-                # Use INSERT ... ON CONFLICT DO UPDATE with COALESCE so that:
-                #   - financial_risk: only overwritten if the new value is NOT NULL
-                #   - financial_source: same protection
-                #   - company_name: same protection
-                # This is the core fix for Bug 2 — an event with financial_risk=None
-                # (throttled ExternalDataAgent) can no longer wipe out a real score.
-                cursor.execute("""
-                    INSERT INTO customer_risk_profile (
-                        customer_id,
-                        id,
-                        company_name,
-                        financial_risk,
-                        litigation_risk,
-                        combined_risk,
-                        severity,
-                        financial_source,
-                        litigation_source,
-                        confidence,
-                        created_at,
-                        updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(customer_id) DO UPDATE SET
-                        id               = excluded.id,
-                        company_name     = COALESCE(excluded.company_name,    customer_risk_profile.company_name),
-                        financial_risk   = COALESCE(excluded.financial_risk,  customer_risk_profile.financial_risk),
-                        litigation_risk  = excluded.litigation_risk,
-                        combined_risk    = excluded.combined_risk,
-                        severity         = excluded.severity,
-                        financial_source = COALESCE(excluded.financial_source, customer_risk_profile.financial_source),
-                        litigation_source = excluded.litigation_source,
-                        confidence       = excluded.confidence,
-                        updated_at       = excluded.updated_at
-                """, (
-                    customer_id,
-                    event_id,
-                    company_name,
-                    financial_risk,
-                    litigation_risk,
-                    combined_risk,
-                    severity,
-                    financial_source,
-                    litigation_source,
-                    confidence,
-                    now_iso,   # created_at (preserved by COALESCE for existing rows)
-                    now_iso,   # updated_at (always refreshed)
-                ))
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-                )
-                conn.commit()
-
-                logger.info(
-                    f"[DBAgent] Stored aggregated risk: customer={customer_id}, combined={combined_risk}, "
-                    f"financial={financial_risk if financial_risk is not None else '(preserved)'}"
-                )
-
-                # --- MARK EVENT AS PROCESSED (bounded eviction) ---
-                if event_id:
-                    if len(self._processed_risk_events) >= self.MAX_PROCESSED_IDS:
-                        self._processed_risk_events.popitem(last=False)
-                    self._processed_risk_events[event_id] = True
-
-                # Invalidate cache
-                if True:
-                    QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
-
-            finally:
-                self._finalize_handler_connection(conn)
-
-    def _handle_risk_scored(self, event: Event) -> None:
-        """Persist invoice-level risk scores and SHAP explanations.
-
-        Writes to two tables:
-        1. customers.risk_score  — scalar for downstream use (unchanged).
-        2. risk_explanations     — full SHAP attribution for regulatory audit.
-        """
-        data = event.payload or {}
-        customer_id = data.get("customer_id")
-        invoice_id  = data.get("invoice_id")
-        if not customer_id:
-            logger.warning("risk.scored event missing customer_id, skipping")
-            return
-
-        try:
-            risk_score = float(data.get("risk_score") or 0.0)
-        except (TypeError, ValueError):
-            logger.warning("[DBAgent] Invalid risk_score for %s: %r", customer_id, data.get("risk_score"))
-            return
-
-        # ── SHAP fields (present when emitted by PaymentPredictionAgent v1.1+) ──
-        shap_values  = data.get("shap_values")   # dict or None
-        shap_top_driver = data.get("shap_top_driver")
-        shap_sum     = data.get("shap_sum")
-        shap_baseline = float(data.get("shap_baseline") or 0.0)
-        shap_rating_adj   = float(data.get("shap_rating_adjustment") or 0.0)
-        shap_litig_adj    = float(data.get("shap_litigation_adjustment") or 0.0)
-        risk_level   = data.get("risk_level")
-        reasons      = data.get("reasons")  # list or None
-
-        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        with self._db_lock:
-            conn = self._get_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 FROM event_log WHERE event_id = ?", (event.event_id,))
-                if cursor.fetchone():
-                    logger.debug(f"Skipping duplicate event_id={event.event_id}")
-                    return
-
-                self._ensure_customer_exists(
-                    conn,
-                    customer_id,
-                    data.get("customer_name") or data.get("company_name") or data.get("name"),
-                )
-
-                # 1. Update scalar risk_score on the customer row
-                cursor.execute(
-                    "UPDATE customers SET risk_score = ?, updated_at = ? WHERE customer_id = ?",
-                    (risk_score, now, customer_id),
-                )
-
-                # 2. Upsert SHAP explanation into risk_explanations (if invoice_id present)
-                if invoice_id:
-                    cursor.execute("""
-                        INSERT INTO risk_explanations (
-                            invoice_id,
-                            customer_id,
-                            risk_score,
-                            risk_level,
-                            shap_top_driver,
-                            shap_values,
-                            shap_sum,
-                            shap_baseline,
-                            shap_rating_adjustment,
-                            shap_litigation_adjustment,
-                            reasons,
-                            created_at,
-                            updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(invoice_id) DO UPDATE SET
-                            risk_score              = excluded.risk_score,
-                            risk_level              = excluded.risk_level,
-                            shap_top_driver         = excluded.shap_top_driver,
-                            shap_values             = excluded.shap_values,
-                            shap_sum                = excluded.shap_sum,
-                            shap_baseline           = excluded.shap_baseline,
-                            shap_rating_adjustment  = excluded.shap_rating_adjustment,
-                            shap_litigation_adjustment = excluded.shap_litigation_adjustment,
-                            reasons                 = excluded.reasons,
-                            updated_at              = excluded.updated_at
-                    """, (
-                        invoice_id,
-                        customer_id,
-                        risk_score,
-                        risk_level,
-                        shap_top_driver,
-                        json.dumps(shap_values)  if shap_values is not None else None,
-                        shap_sum,
-                        shap_baseline,
-                        shap_rating_adj,
-                        shap_litig_adj,
-                        json.dumps(reasons) if reasons is not None else None,
-                        now,
-                        now,
-                    ))
-                    logger.info(
-                        "[DBAgent] SHAP explanation stored: invoice=%s customer=%s "
-                        "risk=%.4f top_driver=%s",
-                        invoice_id, customer_id, risk_score, shap_top_driver,
-                    )
-
-                cursor.execute(
-                    "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",
-                    (event.event_id, event.event_type, now),
-                )
-                conn.commit()
-                QueryClient.query("invalidate_customer_cache", {"customer_id": customer_id})
-            finally:
-                self._finalize_handler_connection(conn)
+    # ── Event log housekeeping ─────────────────────────────────────────────
 
     def _maybe_prune_event_log(self, conn: "sqlite3.Connection") -> None:
-        """Delete event_log rows older than 7 days, at most once per hour.
-
-        Called at the end of each handler's finally block so cleanup is
-        amortised across normal write operations.  The check is fast (one
-        datetime comparison) on the common path.
-        """
+        """Delete event_log rows older than 7 days, at most once per hour."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         if (now - self._last_event_log_cleanup).total_seconds() < 3600:
             return
@@ -1554,3 +467,32 @@ class DBAgent(BaseAgent):
                 logger.info("[DBAgent] Pruned %d stale event_log rows", deleted)
         except Exception as exc:
             logger.warning("[DBAgent] event_log prune failed: %s", exc)
+
+    # ── Backward Compatibility Delegate Methods ────────────────────────────
+    # Preserves backwards compatibility for existing unit tests calling private handlers directly
+
+    def _handle_invoice_upsert(self, event: Event) -> None:
+        handle_invoice_upsert(self, event)
+
+    def _handle_payment_received(self, event: Event) -> None:
+        handle_payment_received(self, event)
+
+    def _handle_collection_action(self, event: Event) -> None:
+        handle_collection_action(self, event)
+
+    def _handle_customer_profile(self, event: Event) -> None:
+        handle_customer_profile(self, event)
+
+    def _handle_litigation_event(self, event: Event) -> None:
+        handle_litigation_event(self, event)
+
+    def _handle_customer_risk_profile(self, event: Event) -> None:
+        handle_customer_risk_profile(self, event)
+
+    def _handle_risk_scored(self, event: Event) -> None:
+        handle_risk_scored(self, event)
+
+    def _handle_metrics_updated(self, event: Event) -> None:
+        handle_metrics_updated(self, event)
+
+

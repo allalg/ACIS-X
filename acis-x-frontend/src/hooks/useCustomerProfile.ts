@@ -6,7 +6,6 @@ export function useCustomerProfile(customerId: string) {
     queryKey: ['customer-profile', customerId],
     queryFn: () => api.getCustomerById(customerId),
     enabled: Boolean(customerId),
-    refetchInterval: 5000,
     staleTime: 0,
   })
 }

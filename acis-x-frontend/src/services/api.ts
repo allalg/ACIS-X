@@ -108,6 +108,32 @@ export const api = {
   getMetricsResult(jobId: string): Promise<MetricsResult> {
     return apiRequest<MetricsResult>(`/api/v1/metrics/result/${jobId}`)
   },
+
+  getCustomerCollections(customerId: string): Promise<any[]> {
+    return apiRequest<any[]>(`/api/v1/customers/${customerId}/collections`)
+  },
+
+  getCustomerRiskExplanation(customerId: string): Promise<any> {
+    return apiRequest<any>(`/api/v1/customers/${customerId}/risk-explanation`)
+  },
+
+  getCustomerExternalIntelligence(customerId: string): Promise<any> {
+    return apiRequest<any>(`/api/v1/customers/${customerId}/external-intelligence`)
+  },
+
+  simulationControl(action: 'pause' | 'pause_scenario' | 'freeze_all' | 'resume'): Promise<{ status: string; message: string }> {
+    return apiRequest<{ status: string; message: string }>('/api/v1/simulation/control', {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    })
+  },
+
+  simulationFault(instanceId: string): Promise<{ status: string; message: string }> {
+    return apiRequest<{ status: string; message: string }>('/api/v1/simulation/fault', {
+      method: 'POST',
+      body: JSON.stringify({ instance_id: instanceId }),
+    })
+  },
 }
 
 export { API_BASE_URL, API_KEY, USE_STUBS }

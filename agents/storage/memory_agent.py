@@ -88,15 +88,24 @@ class MemoryAgent(BaseAgent):
         self._persistent_conn = None
         logger.info("QueryAgent reference set for state recomputation")
 
+    def _get_uri_path(self) -> str:
+        if self._db_path.startswith("file:"):
+            return self._db_path
+        import os
+        abs_path = os.path.abspath(self._db_path).replace("\\", "/")
+        if not abs_path.startswith("/"):
+            abs_path = "/" + abs_path
+        return f"file:{abs_path}?nolock=1"
+
     def _get_persistent_conn(self) -> sqlite3.Connection:
         if self._persistent_conn is None:
             self._persistent_conn = sqlite3.connect(
-                self._db_path,
-                isolation_level="IMMEDIATE",
+                self._get_uri_path(),
+                uri=True,
                 check_same_thread=False
             )
             self._persistent_conn.execute("PRAGMA foreign_keys = ON")
-            self._persistent_conn.execute("PRAGMA journal_mode = WAL")
+            self._persistent_conn.execute("PRAGMA journal_mode = DELETE")
         return self._persistent_conn
 
     def subscribe(self) -> List[str]:

@@ -5,7 +5,6 @@ export function useCustomers(search = '') {
   return useQuery({
     queryKey: ['customers', search],
     queryFn: () => api.getCustomers(search),
-    refetchInterval: 10000,
     staleTime: 0,
   })
 }

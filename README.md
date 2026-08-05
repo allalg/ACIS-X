@@ -54,36 +54,61 @@ is via Docker Desktop and the bundled `docker-compose.yml`.
 - Python 3.9+ with a virtual environment activated
 - All dependencies: `pip install -r requirements.txt`
 
-### 2. Start Kafka
+### 2. Start Kafka or the Full Application Stack
 
+You can run the system in two ways:
+
+#### Option A: Run Full Application inside Docker Containers (Recommended)
+This starts all components (Kafka cluster, Python agent engine, BFF gateway, and Frontend dashboard) in isolated, production-ready containers:
 ```bash
-# Launch Kafka Cluster in the background (KRaft mode, no ZooKeeper needed)
-docker-compose up -d
+# Launch everything in the background
+docker-compose up --build -d
 
-# To stop Kafka later:
+# To view live logs of the engine:
+docker-compose logs -f acis-engine
+
+# To shut down everything:
 docker-compose down
 ```
 
-### 3. Run ACIS-X
-
+#### Option B: Run Kafka in Docker + Python Agents on Host
+Useful for interactive debugging of agents in your local terminal:
 ```bash
-# Option A — foreground (recommended for development)
+# 1. Start only the Kafka cluster in the background
+docker-compose up -d kafka1 kafka2 kafka3 kafka-ui
+
+# 2. Run ACIS-X Agent Engine
 python run_acis.py
 
-# Option B — background via control script
-python scripts/acis_control.py start
-python scripts/acis_control.py status
-python scripts/acis_control.py stop
+# 3. Stop Kafka later
+docker-compose down
 ```
 
-### 4. Reset to a clean state
+### 3. Controlling the Scenario Generator (Simulation)
+
+You can pause and resume the live simulation generator without stopping any of the other agents or services:
 
 ```bash
-# Purges Kafka topics, deletes acis.db, resets consumer-group offsets
+# Pause the Scenario Generator spawning cycles
+python control_scenario.py pause
+
+# Resume the Scenario Generator spawning cycles
+python control_scenario.py resume
+```
+
+### 4. Resetting to a Clean State
+
+To wipe all data, reset Kafka partition offsets, and start fresh:
+
+```bash
+# 1. Shut down any running containers
+docker-compose down
+
+# 2. Re-create pristine topics and wipe database/logs
 python reset_acis.py
 
-# Then start fresh
-python run_acis.py
+# 3. Start fresh
+docker-compose up --build -d
 ```
 
 ### 5. Run the test suite

@@ -60,6 +60,20 @@ class QueryAgent(BaseAgent):
         # Reference to MemoryAgent for state queries (optional, set via set_memory_agent())
         self._memory_agent = None
 
+    def _get_uri_path(self) -> str:
+        if self._db_path.startswith("file:"):
+            return self._db_path
+        import os
+        abs_path = os.path.abspath(self._db_path).replace("\\", "/")
+        if not abs_path.startswith("/"):
+            abs_path = "/" + abs_path
+        return f"file:{abs_path}?nolock=1"
+
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        return conn
+
     def set_memory_agent(self, agent: Any) -> None:
         """
         Wire a MemoryAgent instance for in-process state lookups.
@@ -182,8 +196,7 @@ class QueryAgent(BaseAgent):
         logger.debug(f"Cache miss for customer: {customer_id}, querying database")
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -258,8 +271,7 @@ class QueryAgent(BaseAgent):
         logger.debug(f"[QueryAgent] Falling back to DB for {customer_id} (MemoryAgent unavailable)")
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 # Get customer base + metrics
@@ -334,8 +346,7 @@ class QueryAgent(BaseAgent):
         """
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -381,8 +392,7 @@ class QueryAgent(BaseAgent):
         logger.debug(f"Cache miss for invoice: {invoice_id}, querying database")
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -482,8 +492,7 @@ class QueryAgent(BaseAgent):
         """
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -543,8 +552,7 @@ class QueryAgent(BaseAgent):
 
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -592,8 +600,7 @@ class QueryAgent(BaseAgent):
 
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -642,7 +649,7 @@ class QueryAgent(BaseAgent):
         """
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -704,8 +711,7 @@ class QueryAgent(BaseAgent):
 
         with self._db_lock:
             try:
-                conn = sqlite3.connect(self._db_path)
-                conn.row_factory = sqlite3.Row
+                conn = self._get_connection()
                 cursor = conn.cursor()
 
                 placeholders = ",".join("?" * len(invoice_ids))

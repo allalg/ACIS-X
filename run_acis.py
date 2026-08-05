@@ -33,7 +33,7 @@ from kafka.admin import KafkaAdminClient, ConfigResource, ConfigResourceType
 
 from agents.intelligence.customer_state_agent import CustomerStateAgent
 from agents.intelligence.external_data_agent import ExternalDataAgent
-from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
+from agents.intelligence.external_scraping_agent import ExternalScrapingAgent
 from agents.intelligence.aggregator_agent import AggregatorAgent
 from agents.invoice.overdue_detection_agent import OverdueDetectionAgent
 from agents.prediction.payment_prediction_agent import PaymentPredictionAgent
@@ -70,14 +70,54 @@ def _configure_console_streams() -> None:
 
 _configure_console_streams()
 
-logging.basicConfig(
-    level=os.getenv("ACIS_LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler("acis.log", mode="a", encoding="utf-8"),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+
+class _JSONFormatter(logging.Formatter):
+    """Emit one JSON object per log line for structured log aggregation."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json as _json
+
+        entry = {
+            "ts": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0] is not None:
+            entry["exc"] = self.formatException(record.exc_info)
+        # Attach structured fields if the caller set them via `extra=`
+        for key in ("agent_name", "event_type", "customer_id"):
+            val = getattr(record, key, None)
+            if val is not None:
+                entry[key] = val
+        return _json.dumps(entry, default=str)
+
+
+def _setup_logging() -> None:
+    """Configure root logger with rotating file (JSON) + console (human)."""
+    from logging.handlers import RotatingFileHandler
+
+    log_level = os.getenv("ACIS_LOG_LEVEL", "INFO")
+    root = logging.getLogger()
+    root.setLevel(log_level)
+
+    # Console handler — human-readable
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s"
+    ))
+    root.addHandler(console)
+
+    # File handler — JSON structured, rotating (10MB × 5 backups)
+    file_handler = RotatingFileHandler(
+        "acis.log", maxBytes=10 * 1024 * 1024, backupCount=5,
+        mode="a", encoding="utf-8",
+    )
+    file_handler.setFormatter(_JSONFormatter())
+    root.addHandler(file_handler)
+
+
+_setup_logging()
 logger = logging.getLogger("run_acis")
 
 
@@ -396,6 +436,11 @@ def main() -> None:
 
     logger.info("ACIS-X runtime bootstrap complete (Multi-Process with Supervisor)")
     logger.info(">>> Press Ctrl+C to stop the system")
+
+    # Start health-check HTTP server (daemon thread, port 9090)
+    from runtime.health_server import start_health_server
+    process_registry = {name: proc for name, proc in supervisor._processes.items() if proc is not None}
+    start_health_server(port=int(os.getenv("ACIS_HEALTH_PORT", "9090")), process_registry=process_registry)
 
     try:
         # Supervisor loop

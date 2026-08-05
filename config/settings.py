@@ -1,91 +1,151 @@
-from datetime import timezone
+"""
+Centralized configuration for ACIS-X.
+
+All settings are loaded from environment variables with sensible defaults.
+Import and use the singleton ``settings`` instance directly::
+
+    from config.settings import settings
+    print(settings.kafka_bootstrap_servers)
+"""
+
+from __future__ import annotations
+
 import os
+from functools import lru_cache
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings
 
 
-# =========================================================
-# Kafka Configuration
-# =========================================================
+class ACISSettings(BaseSettings):
+    """ACIS-X configuration loaded from environment variables.
 
-ACIS_KAFKA_BOOTSTRAP_SERVERS = os.getenv(
-    "ACIS_KAFKA_BOOTSTRAP_SERVERS",
-    "localhost:9092",
-)
+    Variable names are prefixed with ``ACIS_`` and are case-insensitive.
+    """
 
-ACIS_KAFKA_BACKEND = os.getenv(
-    "ACIS_KAFKA_BACKEND",
-    "confluent",
-)
+    model_config = {
+        'env_prefix': 'ACIS_',
+        'env_file': '.env',
+        'env_file_encoding': 'utf-8',
+        'extra': 'ignore',
+    }
+
+    # ── Kafka ──────────────────────────────────────────────────────────────
+    kafka_bootstrap_servers: str = Field(
+        default='localhost:9092',
+        description='Comma-separated Kafka broker addresses',
+    )
+    kafka_backend: str = Field(
+        default='confluent',
+        description='Kafka client backend: "confluent" or "kafka-python"',
+    )
+    offset_reset: str = Field(
+        default='latest',
+        description='Consumer auto-offset reset: "latest" or "earliest"',
+    )
+
+    # ── Agent ──────────────────────────────────────────────────────────────
+    default_max_replicas: int = Field(default=3)
+    decision_interval: int = Field(default=15, description='Seconds between placement decisions')
+    generation_interval: float = Field(
+        default=20.0,
+        description='Seconds between scenario generation cycles',
+    )
+
+    # ── Self-Healing / Monitoring ──────────────────────────────────────────
+    heartbeat_interval: int = Field(default=5, description='Heartbeat interval in seconds')
+    health_score_threshold: float = Field(default=0.8)
+    restart_cooldown: int = Field(default=120)
+    scale_cooldown: int = Field(default=180)
+    spawn_cooldown: int = Field(default=180)
+    fallback_cooldown: int = Field(default=120)
+    recovery_event_cooldown: int = Field(default=60)
+    placement_request_cooldown: int = Field(default=180)
+    degraded_restart_delay: int = Field(default=30)
+    lag_scale_threshold: int = Field(default=50)
+    critical_lag_threshold: int = Field(default=200)
+
+    # ── Database ───────────────────────────────────────────────────────────
+    db_path: str = Field(default='acis.db', description='Path to the SQLite database file')
+
+    # ── Logging ────────────────────────────────────────────────────────────
+    log_level: str = Field(default='INFO')
+
+    # ── Registry ───────────────────────────────────────────────────────────
+    registry_port: int = Field(default=5000)
+
+    # ── LLM / External ────────────────────────────────────────────────────
+    groq_api_key: str | None = Field(default=None, alias='GROQ_API_KEY')
+
+    @field_validator('log_level')
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        valid = {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
+        v_upper = v.upper()
+        if v_upper not in valid:
+            raise ValueError(f'Invalid log level "{v}". Must be one of: {valid}')
+        return v_upper
+
+    @field_validator('kafka_backend')
+    @classmethod
+    def validate_kafka_backend(cls, v: str) -> str:
+        valid = {'confluent', 'kafka-python'}
+        if v not in valid:
+            raise ValueError(f'Invalid Kafka backend "{v}". Must be one of: {valid}')
+        return v
 
 
-# =========================================================
-# Agent Configuration
-# =========================================================
-
-DEFAULT_MAX_REPLICAS = int(
-    os.getenv("ACIS_DEFAULT_MAX_REPLICAS", "3")
-)
-
-DECISION_INTERVAL = int(
-    os.getenv("ACIS_DECISION_INTERVAL", "15")
-)
+@lru_cache(maxsize=1)
+def get_settings() -> ACISSettings:
+    """Return the cached singleton settings instance."""
+    return ACISSettings()
 
 
-# =========================================================
-# Self-Healing / Monitoring
-# =========================================================
+# ── Backwards-compatible module-level exports ──────────────────────────────
+# These allow existing code like `from config.settings import LOG_LEVEL`
+# to continue working without modification.
 
-HEARTBEAT_INTERVAL = int(
-    os.getenv("ACIS_HEARTBEAT_INTERVAL", "5")
-)
-
-HEALTH_SCORE_THRESHOLD = float(
-    os.getenv("ACIS_HEALTH_SCORE_THRESHOLD", "0.8")
-)
-
-# Self-Healing cooldown periods (seconds)
-RESTART_COOLDOWN = int(
-    os.getenv("ACIS_RESTART_COOLDOWN", "120")
-)
-
-SCALE_COOLDOWN = int(
-    os.getenv("ACIS_SCALE_COOLDOWN", "180")
-)
-
-SPAWN_COOLDOWN = int(
-    os.getenv("ACIS_SPAWN_COOLDOWN", "180")
-)
-
-FALLBACK_COOLDOWN = int(
-    os.getenv("ACIS_FALLBACK_COOLDOWN", "120")
-)
-
-RECOVERY_EVENT_COOLDOWN = int(
-    os.getenv("ACIS_RECOVERY_EVENT_COOLDOWN", "60")
-)
-
-PLACEMENT_REQUEST_COOLDOWN = int(
-    os.getenv("ACIS_PLACEMENT_REQUEST_COOLDOWN", "180")
-)
-
-# Self-Healing thresholds
-DEGRADED_RESTART_DELAY = int(
-    os.getenv("ACIS_DEGRADED_RESTART_DELAY", "30")
-)
-
-LAG_SCALE_THRESHOLD = int(
-    os.getenv("ACIS_LAG_SCALE_THRESHOLD", "50")    # FIX 3: was 5000 – unreachable in single-process sim
-)
-
-CRITICAL_LAG_THRESHOLD = int(
-    os.getenv("ACIS_CRITICAL_LAG_THRESHOLD", "200")  # FIX 3: was 10000 – unreachable in single-process sim
-)
+def _lazy_attr(name: str):
+    """Resolve a module-level attribute from the settings singleton."""
+    _s = get_settings()
+    _map = {
+        'ACIS_KAFKA_BOOTSTRAP_SERVERS': _s.kafka_bootstrap_servers,
+        'ACIS_KAFKA_BACKEND': _s.kafka_backend,
+        'DEFAULT_MAX_REPLICAS': _s.default_max_replicas,
+        'DECISION_INTERVAL': _s.decision_interval,
+        'HEARTBEAT_INTERVAL': _s.heartbeat_interval,
+        'HEALTH_SCORE_THRESHOLD': _s.health_score_threshold,
+        'RESTART_COOLDOWN': _s.restart_cooldown,
+        'SCALE_COOLDOWN': _s.scale_cooldown,
+        'SPAWN_COOLDOWN': _s.spawn_cooldown,
+        'FALLBACK_COOLDOWN': _s.fallback_cooldown,
+        'RECOVERY_EVENT_COOLDOWN': _s.recovery_event_cooldown,
+        'PLACEMENT_REQUEST_COOLDOWN': _s.placement_request_cooldown,
+        'DEGRADED_RESTART_DELAY': _s.degraded_restart_delay,
+        'LAG_SCALE_THRESHOLD': _s.lag_scale_threshold,
+        'CRITICAL_LAG_THRESHOLD': _s.critical_lag_threshold,
+        'LOG_LEVEL': _s.log_level,
+    }
+    if name in _map:
+        return _map[name]
+    raise AttributeError(f"module 'config.settings' has no attribute {name!r}")
 
 
-# =========================================================
-# Logging
-# =========================================================
-
-LOG_LEVEL = os.getenv(
-    "ACIS_LOG_LEVEL",
-    "INFO",
-)
+# Eagerly resolve the backward-compatible constants so existing imports work.
+_settings = get_settings()
+ACIS_KAFKA_BOOTSTRAP_SERVERS = _settings.kafka_bootstrap_servers
+ACIS_KAFKA_BACKEND = _settings.kafka_backend
+DEFAULT_MAX_REPLICAS = _settings.default_max_replicas
+DECISION_INTERVAL = _settings.decision_interval
+HEARTBEAT_INTERVAL = _settings.heartbeat_interval
+HEALTH_SCORE_THRESHOLD = _settings.health_score_threshold
+RESTART_COOLDOWN = _settings.restart_cooldown
+SCALE_COOLDOWN = _settings.scale_cooldown
+SPAWN_COOLDOWN = _settings.spawn_cooldown
+FALLBACK_COOLDOWN = _settings.fallback_cooldown
+RECOVERY_EVENT_COOLDOWN = _settings.recovery_event_cooldown
+PLACEMENT_REQUEST_COOLDOWN = _settings.placement_request_cooldown
+DEGRADED_RESTART_DELAY = _settings.degraded_restart_delay
+LAG_SCALE_THRESHOLD = _settings.lag_scale_threshold
+CRITICAL_LAG_THRESHOLD = _settings.critical_lag_threshold
+LOG_LEVEL = _settings.log_level

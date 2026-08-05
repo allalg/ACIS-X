@@ -3,11 +3,16 @@ import type { AgentInfo } from '../../types/agent'
 
 type AgentActivityCardProps = {
   agent: AgentInfo
+  onClick?: () => void
 }
 
-export function AgentActivityCard({ agent }: AgentActivityCardProps) {
+export function AgentActivityCard({ agent, onClick }: AgentActivityCardProps) {
   return (
-    <article className={`agent-activity-card status-${agent.status.toLowerCase()}`}>
+    <article
+      className={`agent-activity-card status-${agent.status.toLowerCase()} surface-card-hover`}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+    >
       <header>
         <span className="activity-dot" />
         <strong className="mono">{agent.agent_name}</strong>

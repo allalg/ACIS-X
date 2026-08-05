@@ -1,0 +1,64 @@
+# Production Dockerfile for ACIS-X Unified Engine + BFF Service
+FROM python:3.11-slim
+
+# Prevent Python from writing pyc files and buffering stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    librdkafka-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    supervisor \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirement files
+COPY requirements.txt .
+COPY acis-api-bff/requirements.txt ./bff_requirements.txt
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r bff_requirements.txt
+
+# Copy application source code
+COPY . .
+
+# Create data directory for SQLite
+RUN mkdir -p /app/data
+
+# Expose BFF API Port
+EXPOSE 8000
+
+# Create supervisor configuration to run both acis-engine and acis-bff
+RUN echo '[supervisord]\n\
+nodaemon=true\n\
+logfile=/dev/null\n\
+logfile_maxbytes=0\n\
+\n\
+[program:acis-engine]\n\
+command=python run_all_agents.py\n\
+directory=/app\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+\n\
+[program:acis-bff]\n\
+command=uvicorn app.main:app --host 0.0.0.0 --port 8000\n\
+directory=/app/acis-api-bff\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n'\
+> /etc/supervisor/conf.d/supervisord.conf
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

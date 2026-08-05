@@ -42,9 +42,9 @@ class TimeTickAgent(BaseAgent):
     def __init__(self, kafka_client: Any):
         super().__init__(
             agent_name="TimeTickAgent",
-            agent_version="1.0.0",
+            agent_version="1.1.0",
             group_id="time-tick-group",
-            subscribed_topics=[],  # No input topics - only produces
+            subscribed_topics=["acis.control"],
             capabilities=[
                 "time_generation",
                 "tick_publishing",
@@ -53,18 +53,25 @@ class TimeTickAgent(BaseAgent):
             agent_type="TimeTickAgent",
         )
         self._running = False
+        self._paused = False
         self._tick_thread = None
         # Event used to (a) interrupt the startup delay and (b) wake the
         # inter-tick sleep early when stop() is called.
         self._shutdown_event = threading.Event()
 
     def subscribe(self) -> List[str]:
-        """TimeTickAgent produces only, does not consume."""
-        return []
+        """Subscribe to acis.control to pause/resume ticks."""
+        return ["acis.control"]
 
     def process_event(self, event: Event) -> None:
-        """TimeTickAgent does not process incoming events."""
-        pass
+        """Process incoming control events to pause or resume time ticking."""
+        event_type = event.event_type
+        if event_type in ("time.pause", "system.freeze", "freeze.all"):
+            self._paused = True
+            logger.info("[TimeTickAgent] Time tick generator PAUSED by freeze event")
+        elif event_type in ("time.resume", "scenario.resume", "system.resume"):
+            self._paused = False
+            logger.info("[TimeTickAgent] Time tick generator RESUMED by control event")
 
     def start(self) -> None:
         """Start the time tick agent with full lifecycle."""
@@ -109,6 +116,10 @@ class TimeTickAgent(BaseAgent):
         tick_count = 0
         while self._running:
             try:
+                if self._paused:
+                    self._shutdown_event.wait(timeout=0.2)
+                    continue
+
                 current_time = datetime.now(timezone.utc).replace(tzinfo=None)
                 tick_count += 1
 
@@ -128,9 +139,14 @@ class TimeTickAgent(BaseAgent):
                     f"[TimeTickAgent] Published tick #{tick_count}: {current_time.isoformat()}"
                 )
 
-                # Sleep for tick interval, but wake immediately on shutdown.
-                self._shutdown_event.wait(timeout=self.TICK_INTERVAL_SECONDS)
+                # Sleep for tick interval in 0.2s increments to react immediately on pause/shutdown
+                elapsed = 0.0
+                while elapsed < self.TICK_INTERVAL_SECONDS and self._running:
+                    if self._paused:
+                        break
+                    self._shutdown_event.wait(timeout=0.2)
+                    elapsed += 0.2
 
             except Exception as e:
                 logger.error(f"[TimeTickAgent] Error in tick loop: {e}")
-                self._shutdown_event.wait(timeout=1)  # Back off on error
+                self._shutdown_event.wait(timeout=0.5)  # Back off on error

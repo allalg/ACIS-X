@@ -72,7 +72,9 @@ class BaseAgent(ABC):
         self.agent_type = agent_type or agent_name
         self.agent_version = agent_version
         self.group_id = group_id
-        self.subscribed_topics = subscribed_topics
+        self.subscribed_topics = list(subscribed_topics) if subscribed_topics else []
+        if "acis.control" not in self.subscribed_topics:
+            self.subscribed_topics.append("acis.control")
         self.capabilities = capabilities
         self.kafka_client = kafka_client
         self.max_retries = max_retries
@@ -86,6 +88,7 @@ class BaseAgent(ABC):
 
         # State management
         self._running = False
+        self._paused = False
         self._shutdown_event = threading.Event()
         # OrderedDict used as an insertion-ordered set for O(1) duplicate detection
         # and O(1) FIFO eviction once the cap is reached (popitem(last=False)).
@@ -176,7 +179,10 @@ class BaseAgent(ABC):
         self._start_time = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Subscribe to topics FIRST (so registry has correct topic list)
-        topics = self.subscribe()
+        raw_topics = self.subscribe()
+        topics = list(raw_topics) if raw_topics else []
+        if "acis.control" not in topics:
+            topics.append("acis.control")
         self.subscribed_topics = topics
 
         if topics:
@@ -285,7 +291,11 @@ class BaseAgent(ABC):
                         self.kafka_client.commit(message)
                         logger.debug(f"Committed offset {message.offset} for {message.topic}")
                     except Exception as e:
-                        logger.warning(f"Failed to commit offset: {e}")
+                        err_str = str(e)
+                        if "UNKNOWN_MEMBER_ID" in err_str or "Unknown member" in err_str:
+                            logger.debug(f"Offset commit deferred during consumer rebalance: {e}")
+                        else:
+                            logger.warning(f"Failed to commit offset: {e}")
                         # Don't break on commit failure - continue processing
 
             except Exception as e:
@@ -327,6 +337,16 @@ class BaseAgent(ABC):
             if event is None:
                 # DIAGNOSTIC: Message was dropped due to validation failure
                 logger.warning(f"[{self.agent_name}] Dropping message from {topic}:{getattr(message, 'partition', '?')}:{getattr(message, 'offset', '?')} - validation failed")
+                return
+
+            # Check control events
+            if event.event_type in ("scenario.pause", "system.pause", "simulation.pause"):
+                self._paused = True
+                logger.info(f"[{self.agent_name}] Agent PAUSED via control event")
+                return
+            elif event.event_type in ("scenario.resume", "system.resume", "simulation.resume"):
+                self._paused = False
+                logger.info(f"[{self.agent_name}] Agent RESUMED via control event")
                 return
 
             if (

@@ -2,7 +2,7 @@ from datetime import timezone
 import sqlite3
 import json
 
-conn = sqlite3.connect('acis.db')
+conn = sqlite3.connect('file:acis.db?nolock=1', uri=True)
 conn.row_factory = sqlite3.Row
 
 # ── 1. risk_explanations overview ──────────────────────────────────────

@@ -94,6 +94,13 @@ ACIS_TOPIC_CONFIGS = {
         retention_ms=14 * 24 * 3600 * 1000,  # 14 days
         cleanup_policy="delete",
     ),
+    "acis.predictions": TopicConfig(
+        name="acis.predictions",
+        partitions=3,
+        replication_factor=3,
+        retention_ms=7 * 24 * 3600 * 1000,  # 7 days
+        cleanup_policy="delete",
+    ),
     "acis.policy": TopicConfig(
         name="acis.policy",
         partitions=2,
@@ -164,6 +171,13 @@ ACIS_TOPIC_CONFIGS = {
         partitions=3,
         replication_factor=3,
         retention_ms=7 * 24 * 3600 * 1000,
+        cleanup_policy="delete",
+    ),
+    "acis.control": TopicConfig(
+        name="acis.control",
+        partitions=1,
+        replication_factor=3,
+        retention_ms=1 * 24 * 3600 * 1000,
         cleanup_policy="delete",
     ),
 
@@ -337,7 +351,8 @@ class TopicAdmin:
                 logger.info(f"Topic created: {topic}")
                 return True
             except Exception as e:
-                if "TopicExistsError" in str(e):
+                err_str = str(e)
+                if "TopicExistsError" in err_str or "TOPIC_ALREADY_EXISTS" in err_str or "already exists" in err_str:
                     logger.info(f"Topic already exists: {topic}")
                     return True
                 logger.error(f"Failed to create topic {topic}: {e}")

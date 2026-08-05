@@ -124,7 +124,7 @@ class ScenarioGeneratorAgent(BaseAgent):
             agent_name="ScenarioGeneratorAgent",
             agent_version="1.0.0",
             group_id="scenario-generator-group",
-            subscribed_topics=[],
+            subscribed_topics=["acis.control"],
             capabilities=[
                 "customer_generation",
                 "invoice_generation",
@@ -139,6 +139,7 @@ class ScenarioGeneratorAgent(BaseAgent):
         self.customers_per_batch = customers_per_batch
         self.invoices_per_batch = invoices_per_batch
         self.payments_per_batch = payments_per_batch
+        self._paused = False
 
         # In-memory state for data relationships
         self._customers: Dict[str, Dict[str, Any]] = {}
@@ -163,12 +164,18 @@ class ScenarioGeneratorAgent(BaseAgent):
     # -------------------------------------------------------------------------
 
     def subscribe(self) -> List[str]:
-        """ScenarioGenerator doesn't consume any topics."""
-        return []
+        """Subscribe to control topic to receive pause/resume events."""
+        return ["acis.control"]
 
     def process_event(self, event: Event) -> None:
-        """ScenarioGenerator doesn't process events."""
-        pass
+        """Process incoming scenario pause/resume control events."""
+        event_type = event.event_type
+        if event_type in ("scenario.pause", "system.freeze", "freeze.all"):
+            self._paused = True
+            logger.info("[ScenarioGeneratorAgent] Simulation PAUSED by control event")
+        elif event_type in ("scenario.resume", "system.resume"):
+            self._paused = False
+            logger.info("[ScenarioGeneratorAgent] Simulation RESUMED by control event")
 
     # -------------------------------------------------------------------------
     # Lifecycle overrides
@@ -217,13 +224,21 @@ class ScenarioGeneratorAgent(BaseAgent):
         logger.info("Generation loop started")
 
         while self._running:
-            try:
-                self._generate_batch()
-            except Exception as e:
-                logger.error(f"Error in generation loop: {e}")
+            if not self._paused:
+                try:
+                    self._generate_batch()
+                except Exception as e:
+                    logger.error(f"Error in generation loop: {e}")
+            else:
+                logger.debug("Scenario generator is paused, skipping batch generation")
 
-            # Wait for next interval or shutdown
-            self._shutdown_event.wait(timeout=self.generation_interval)
+            # Sleep in short 0.2s increments to react immediately to pause/resume/shutdown
+            elapsed = 0.0
+            while elapsed < self.generation_interval and self._running:
+                if self._paused:
+                    break
+                self._shutdown_event.wait(timeout=0.2)
+                elapsed += 0.2
 
         logger.info("Generation loop stopped")
 

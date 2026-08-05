@@ -3,9 +3,10 @@ import { AgentActivityCard } from './AgentActivityCard'
 
 type AgentActivityPanelProps = {
   agents: AgentInfo[]
+  onSelectAgent?: (agentName: string) => void
 }
 
-export function AgentActivityPanel({ agents }: AgentActivityPanelProps) {
+export function AgentActivityPanel({ agents, onSelectAgent }: AgentActivityPanelProps) {
   return (
     <section className="agent-activity-panel surface-card">
       <header>
@@ -13,7 +14,11 @@ export function AgentActivityPanel({ agents }: AgentActivityPanelProps) {
       </header>
       <div className="agent-activity-list">
         {agents.map((agent) => (
-          <AgentActivityCard key={agent.agent_id} agent={agent} />
+          <AgentActivityCard
+            key={agent.agent_id}
+            agent={agent}
+            onClick={() => onSelectAgent?.(agent.agent_name)}
+          />
         ))}
       </div>
     </section>

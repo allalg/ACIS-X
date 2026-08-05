@@ -9,6 +9,7 @@ import { PacketOrchestrator } from './PacketOrchestrator'
 type KafkaBusCanvasProps = {
   events: EventEnvelope[]
   focusAgent: string
+  onSelectAgent?: (agent: string) => void
 }
 
 // Map pipeline agents to their assigned color classes
@@ -22,7 +23,7 @@ const pipelineColors = [
   'agent-color-collections',
 ]
 
-export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
+export function KafkaBusCanvas({ events, focusAgent, onSelectAgent }: KafkaBusCanvasProps) {
   const [recoveryBeams, setRecoveryBeams] = useState<{ id: string; target: string; action: string }[]>([])
 
   // Determine outer ring agents (exclude SelfHealingAgent as it's centered)
@@ -152,6 +153,8 @@ export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
             status = 'error'
           }
 
+          const isFocusedNode = focusAgent ? agent === focusAgent : undefined
+
           return (
             <AgentNode
               key={agent}
@@ -162,6 +165,8 @@ export function KafkaBusCanvas({ events, focusAgent }: KafkaBusCanvasProps) {
               status={status}
               size={pos.size}
               labelAngle={pos.size === 'center' ? undefined : pos.angle}
+              isFocused={isFocusedNode}
+              onClick={() => onSelectAgent?.(agent)}
             />
           )
         })}

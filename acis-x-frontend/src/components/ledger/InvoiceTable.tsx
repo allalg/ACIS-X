@@ -28,10 +28,6 @@ export function InvoiceTable({
       .sort((left, right) => left.due_date.localeCompare(right.due_date))
   }, [invoices, statusFilter])
 
-  if (!loading && rows.length === 0) {
-    return <EmptyState description="No invoices have been generated yet." />
-  }
-
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id))
   }
@@ -52,7 +48,10 @@ export function InvoiceTable({
           ))}
         </div>
       </header>
-      <div className="table-wrap">
+      {!loading && rows.length === 0 ? (
+        <EmptyState description={`No ${statusFilter === 'all' ? '' : statusFilter + ' '}invoices found.`} />
+      ) : (
+        <div className="table-wrap">
         <table>
           <thead>
             <tr>
@@ -132,6 +131,7 @@ export function InvoiceTable({
           </tbody>
         </table>
       </div>
+      )}
     </section>
   )
 }

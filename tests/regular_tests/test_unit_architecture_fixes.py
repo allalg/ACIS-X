@@ -748,7 +748,7 @@ def test_db_agent_repair_payment_integrity_backfills_orphans_and_clamps_paid(
 @pytest.mark.unit
 def test_external_scraping_news_analysis_uses_description_keywords(mock_kafka_client):
     """ExternalScrapingAgent should detect relevance from description text too."""
-    from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
+    from agents.intelligence.external_scraping_agent import ExternalScrapingAgent
 
     agent = ExternalScrapingAgent(kafka_client=mock_kafka_client)
     articles = [

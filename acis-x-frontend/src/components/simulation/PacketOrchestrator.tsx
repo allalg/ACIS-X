@@ -9,13 +9,17 @@ type PacketOrchestratorProps = {
 }
 
 export function PacketOrchestrator({ events, positionMap, focusAgent }: PacketOrchestratorProps) {
-  const recentEvents = events.slice(-5)
+  // Exclude background system heartbeats/metrics from data packet animations
+  const businessEvents = events.filter(
+    (e) => e.event_type !== 'agent.heartbeat' && e.event_type !== 'agent.metrics.updated'
+  )
+  const recentEvents = businessEvents.slice(-5)
 
   return (
     <AnimatePresence>
       {recentEvents
         .filter((event) => (focusAgent ? event.event_source === focusAgent : true))
-        .map((event, index) => {
+        .map((event) => {
           const position = positionMap[event.event_source]
           if (!position) {
             return null

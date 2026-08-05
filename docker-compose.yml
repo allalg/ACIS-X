@@ -1,6 +1,6 @@
 version: '3.8'
 
-# ACIS-X Multi-Broker Kafka Cluster (KRaft mode, replication_factor=3)
+# ACIS-X Full Stack: Kafka Cluster + Core Engine + API Gateway + Frontend
 # Survives single broker failure with zero data loss.
 # Usage: docker-compose up -d
 
@@ -28,6 +28,8 @@ x-kafka-common-env: &kafka-common-env
   CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
 services:
+
+  # ── Kafka Brokers ──────────────────────────────────────────────────────
 
   kafka1:
     image: confluentinc/cp-kafka:7.5.0
@@ -101,6 +103,61 @@ services:
         condition: service_healthy
       kafka3:
         condition: service_healthy
+
+  # ── Application Services ───────────────────────────────────────────────
+
+  acis-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: acis-engine
+    environment:
+      ACIS_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29094,kafka3:29095
+      ACIS_KAFKA_BACKEND: confluent
+      ACIS_DB_PATH: /app/acis.db
+      ACIS_OFFSET_RESET: latest
+    volumes:
+      - ./:/app
+    depends_on:
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_healthy
+      kafka3:
+        condition: service_healthy
+    restart: unless-stopped
+
+  acis-bff:
+    build:
+      context: ./acis-api-bff
+      dockerfile: Dockerfile
+    container_name: acis-bff
+    working_dir: /app/acis-api-bff
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      ACIS_API_KEY: ${ACIS_API_KEY:-change_me}
+      ACIS_DB_PATH: /app/acis.db
+      ACIS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173,http://localhost:3001
+      ACIS_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29094,kafka3:29095
+      ACIS_ENV: ${ACIS_ENV:-development}
+    volumes:
+      - ./:/app
+    depends_on:
+      - acis-engine
+    restart: unless-stopped
+
+  acis-frontend:
+    build:
+      context: ./acis-x-frontend
+      dockerfile: Dockerfile
+    container_name: acis-frontend
+    ports:
+      - "${FRONTEND_PORT:-3001}:80"
+    depends_on:
+      - acis-bff
+    restart: unless-stopped
 
 volumes:
   kafka1-data:

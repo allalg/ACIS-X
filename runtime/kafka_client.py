@@ -735,8 +735,12 @@ class KafkaClient:
             logger.debug("Offsets committed")
 
         except Exception as e:
-            logger.error(f"Failed to commit offsets: {e}")
-            raise
+            err_str = str(e)
+            if "UNKNOWN_MEMBER_ID" in err_str or "Unknown member" in err_str:
+                logger.debug(f"Offset commit deferred during consumer rebalance: {e}")
+            else:
+                logger.error(f"Failed to commit offsets: {e}")
+                raise
 
     # -------------------------------------------------------------------------
     # Lag tracking

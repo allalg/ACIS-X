@@ -26,13 +26,10 @@ export function LedgerKPIStrip({ summary, invoices, payments }: LedgerKPIStripPr
     (sum, invoice) => sum + (invoice.total_amount - invoice.paid_amount),
     0,
   )
-  const today = new Date().toDateString()
-  const todayPayments = payments.filter(
-    (payment) => new Date(payment.payment_date).toDateString() === today,
-  )
-  const paymentTodayAmount = todayPayments.reduce((sum, payment) => sum + payment.amount, 0)
+  const totalPaymentsAmount = payments.reduce((sum, payment) => sum + payment.amount, 0)
 
-  const ratio = summary?.on_time_ratio ?? 0
+  const calculatedRatio = invoices.length > 0 ? (invoices.length - overdueInvoices.length) / invoices.length : 1.0
+  const ratio = summary?.on_time_ratio && summary.on_time_ratio > 0 ? summary.on_time_ratio : calculatedRatio
   const donutData = [
     { name: 'On-Time', value: ratio },
     { name: 'Late', value: Math.max(0, 1 - ratio) },
@@ -57,11 +54,11 @@ export function LedgerKPIStrip({ summary, invoices, payments }: LedgerKPIStripPr
       </article>
 
       <article className="surface-card kpi-card">
-        <h4>Payments Received Today</h4>
+        <h4>Total Payments Received</h4>
         <p className="kpi-value kpi-success numeric">
-          <AnimatedCounter value={paymentTodayAmount} formatter={(value) => formatCurrency(value)} />
+          <AnimatedCounter value={totalPaymentsAmount} formatter={(value) => formatCurrency(value)} />
         </p>
-        <small>{todayPayments.length} transactions</small>
+        <small>{payments.length} transactions</small>
       </article>
 
       <article className="surface-card kpi-card kpi-donut">

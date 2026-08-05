@@ -11,7 +11,7 @@ Exports the four analytical agents that drive enrichment and risk intelligence:
 from agents.intelligence.aggregator_agent import AggregatorAgent
 from agents.intelligence.customer_state_agent import CustomerStateAgent
 from agents.intelligence.external_data_agent import ExternalDataAgent
-from agents.intelligence.external_scrapping_agent import ExternalScrapingAgent
+from agents.intelligence.external_scraping_agent import ExternalScrapingAgent
 
 __all__ = [
     "AggregatorAgent",

@@ -1,0 +1,69 @@
+services:
+  # ── 1. Frontend Web App (100% Free Static Site) ─────────────────────────
+  - type: web
+    name: acis-frontend
+    runtime: static
+    buildCommand: cd acis-x-frontend && npm ci && npm run build
+    staticPublishPath: ./acis-x-frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: acis-backend
+          property: url
+
+  # ── 2. Combined Engine + API Backend Web Service ─────────────────────────
+  - type: web
+    name: acis-backend
+    env: docker
+    dockerContext: .
+    dockerfilePath: Dockerfile.prod
+    plan: free
+    envVars:
+      - key: ACIS_API_KEY
+        generateValue: true
+      - key: ACIS_ENV
+        value: production
+      - key: ACIS_DB_PATH
+        value: /app/data/acis.db
+      - key: ACIS_KAFKA_BOOTSTRAP_SERVERS
+        value: acis-kafka:9092
+      - key: ACIS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: acis-frontend
+          property: url
+    disk:
+      name: acis-db-disk
+      mountPath: /app/data
+      sizeGB: 1
+
+  # ── 3. Internal Kafka Event Bus (Private Service - No Public Port) ──────
+  - type: pserv
+    name: acis-kafka
+    env: docker
+    dockerContext: .
+    image:
+      url: apache/kafka:latest
+    plan: free
+    envVars:
+      - key: KAFKA_NODE_ID
+        value: "1"
+      - key: KAFKA_PROCESS_ROLES
+        value: "broker,controller"
+      - key: KAFKA_LISTENERS
+        value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      - key: KAFKA_ADVERTISED_LISTENERS
+        value: "PLAINTEXT://acis-kafka:9092"
+      - key: KAFKA_CONTROLLER_LISTENER_NAMES
+        value: "CONTROLLER"
+      - key: KAFKA_CONTROLLER_QUORUM_VOTERS
+        value: "1@acis-kafka:9093"
+      - key: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+        value: "1"
+      - key: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+        value: "1"
+      - key: KAFKA_MIN_INSYNC_REPLICAS
+        value: "1"
+      - key: CLUSTER_ID
+        value: "MkU3OEVBNTcwNTJENDM2Qk"
