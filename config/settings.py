@@ -43,6 +43,22 @@ class ACISSettings(BaseSettings):
         default='latest',
         description='Consumer auto-offset reset: "latest" or "earliest"',
     )
+    kafka_security_protocol: str = Field(
+        default='PLAINTEXT',
+        description='Kafka security protocol (PLAINTEXT, SASL_SSL, SASL_PLAINTEXT)',
+    )
+    kafka_sasl_mechanism: str | None = Field(
+        default=None,
+        description='SASL mechanism (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)',
+    )
+    kafka_sasl_username: str | None = Field(
+        default=None,
+        description='SASL username / API key',
+    )
+    kafka_sasl_password: str | None = Field(
+        default=None,
+        description='SASL password / API secret',
+    )
 
     # ── Agent ──────────────────────────────────────────────────────────────
     default_max_replicas: int = Field(default=3)
