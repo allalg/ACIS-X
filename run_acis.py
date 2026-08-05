@@ -53,6 +53,7 @@ from runtime.placement_engine import PlacementEngine
 from runtime.runtime_manager import RuntimeManager
 from runtime.topic_manager import TopicAdmin
 from self_healing.core.self_healing_agent import SelfHealingAgent
+from config.settings import settings
 
 
 def _configure_console_streams() -> None:
