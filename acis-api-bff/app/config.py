@@ -21,6 +21,10 @@ class Settings:
     allowed_origins: list[str]
     kafka_bootstrap_servers: str
     env: str
+    kafka_security_protocol: str = 'PLAINTEXT'
+    kafka_sasl_mechanism: str | None = None
+    kafka_sasl_username: str | None = None
+    kafka_sasl_password: str | None = None
 
 
 def _validate_api_key(key: str | None) -> str:
