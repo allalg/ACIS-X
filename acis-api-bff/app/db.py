@@ -10,14 +10,14 @@ from .config import load_settings
 
 @contextmanager
 def get_connection():
+    import os
     settings = load_settings()
-    db_path = settings.db_path
-    if not db_path.startswith("file:"):
-        import os
-        abs_path = os.path.abspath(db_path).replace("\\", "/")
-        if not abs_path.startswith("/"):
-            abs_path = "/" + abs_path
-        db_path = f"file:{abs_path}?nolock=1"
+    raw_path = settings.db_path or "acis.db"
+    abs_path = os.path.abspath(raw_path)
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    
+    # Standard SQLite URI syntax
+    db_path = f"file:{abs_path}?nolock=1"
     conn = sqlite3.connect(db_path, uri=True, timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
