@@ -52,6 +52,17 @@ _sse_clients: Set[asyncio.Queue] = set()
 _sse_consumer_started = False
 
 
+def _get_kafka_common_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {'bootstrap_servers': settings.kafka_bootstrap_servers}
+    if settings.kafka_security_protocol and settings.kafka_security_protocol.upper() != 'PLAINTEXT':
+        kwargs['security_protocol'] = settings.kafka_security_protocol.upper()
+        if settings.kafka_sasl_mechanism:
+            kwargs['sasl_mechanism'] = settings.kafka_sasl_mechanism.upper()
+            kwargs['sasl_plain_username'] = settings.kafka_sasl_username
+            kwargs['sasl_plain_password'] = settings.kafka_sasl_password
+    return kwargs
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat().replace('+00:00', 'Z')
 
@@ -60,9 +71,9 @@ async def _consume_agent_status() -> None:
     """Background task: track agent registration & heartbeat events."""
     consumer = AIOKafkaConsumer(
         'acis.registry', 'acis.agent.health',
-        bootstrap_servers=settings.kafka_bootstrap_servers,
         group_id='bff-status-group',
         auto_offset_reset='latest',
+        **_get_kafka_common_kwargs(),
     )
     while True:
         try:
@@ -116,10 +127,10 @@ async def _consume_sse_events() -> None:
     global _sse_consumer_started
     _sse_consumer_started = True
     consumer = AIOKafkaConsumer(
-        bootstrap_servers=settings.kafka_bootstrap_servers,
         group_id='bff-sse-shared',
         auto_offset_reset='latest',
         enable_auto_commit=False,
+        **_get_kafka_common_kwargs(),
     )
     consumer.subscribe(pattern=r'^acis\..*')
     while True:

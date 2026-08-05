@@ -69,10 +69,19 @@ def load_settings() -> Settings:
         if origin.strip()
     ]
     kafka_bootstrap_servers = os.getenv('ACIS_KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+    kafka_security_protocol = os.getenv('ACIS_KAFKA_SECURITY_PROTOCOL', 'PLAINTEXT')
+    kafka_sasl_mechanism = os.getenv('ACIS_KAFKA_SASL_MECHANISM', None)
+    kafka_sasl_username = os.getenv('ACIS_KAFKA_SASL_USERNAME', None)
+    kafka_sasl_password = os.getenv('ACIS_KAFKA_SASL_PASSWORD', None)
+
     return Settings(
         api_key=api_key,
         db_path=db_path,
         allowed_origins=allowed_origins,
         kafka_bootstrap_servers=kafka_bootstrap_servers,
         env=ACIS_ENV,
+        kafka_security_protocol=kafka_security_protocol,
+        kafka_sasl_mechanism=kafka_sasl_mechanism,
+        kafka_sasl_username=kafka_sasl_username,
+        kafka_sasl_password=kafka_sasl_password,
     )

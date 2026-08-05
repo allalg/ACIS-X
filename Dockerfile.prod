@@ -1,30 +1,20 @@
-# Production Dockerfile for ACIS-X Unified Container (Kafka + Engine + BFF)
+# Production Dockerfile for ACIS-X Unified Container (Engine + BFF)
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV KAFKA_HEAP_OPTS="-Xms64m -Xmx96m"
-ENV MALLOC_ARENA_MAX=2
 
-# Install system dependencies & OpenJDK JRE for embedded KRaft Kafka
+# Install system C-compilation dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     librdkafka-dev \
     libxml2-dev \
     libxslt1-dev \
     supervisor \
-    default-jre-headless \
-    wget \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Download and extract Apache Kafka 3.7.0 (KRaft mode)
-RUN wget -q https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz && \
-    tar -xzf kafka_2.13-3.7.0.tgz && \
-    mv kafka_2.13-3.7.0 /opt/kafka && \
-    rm kafka_2.13-3.7.0.tgz
 
 # Copy requirement files
 COPY requirements.txt .
@@ -37,25 +27,22 @@ RUN pip install --no-cache-dir -r bff_requirements.txt
 # Copy application source code
 COPY . .
 
-# Create data directory for SQLite & Kafka logs
-RUN mkdir -p /app/data /tmp/kraft-combined-logs
-
-# Make entrypoint executable
-RUN chmod +x /app/entrypoint.sh
+# Create data directory for SQLite
+RUN mkdir -p /app/data
 
 # Expose BFF API Port
 EXPOSE 8000
 
-# Create supervisor configuration to run Kafka, acis-engine, and acis-bff
+# Create supervisor configuration to run acis-engine and acis-bff
 RUN echo '[supervisord]\n\
 user=root\n\
 nodaemon=true\n\
 logfile=/dev/null\n\
 logfile_maxbytes=0\n\
 \n\
-[program:kafka]\n\
-command=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties\n\
-directory=/opt/kafka\n\
+[program:acis-engine]\n\
+command=python run_acis.py\n\
+directory=/app\n\
 autostart=true\n\
 autorestart=true\n\
 priority=1\n\
@@ -64,27 +51,16 @@ stdout_logfile_maxbytes=0\n\
 stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 \n\
-[program:acis-engine]\n\
-command=sh -c "sleep 12 && python run_acis.py"\n\
-directory=/app\n\
+[program:acis-bff]\n\
+command=uvicorn app.main:app --host 0.0.0.0 --port 8000\n\
+directory=/app/acis-api-bff\n\
 autostart=true\n\
 autorestart=true\n\
 priority=2\n\
 stdout_logfile=/dev/stdout\n\
 stdout_logfile_maxbytes=0\n\
 stderr_logfile=/dev/stderr\n\
-stderr_logfile_maxbytes=0\n\
-\n\
-[program:acis-bff]\n\
-command=sh -c "sleep 12 && uvicorn app.main:app --host 0.0.0.0 --port 8000"\n\
-directory=/app/acis-api-bff\n\
-autostart=true\n\
-autorestart=true\n\
-priority=3\n\
-stdout_logfile=/dev/stdout\n\
-stdout_logfile_maxbytes=0\n\
-stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n'\
 > /etc/supervisor/conf.d/supervisord.conf
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

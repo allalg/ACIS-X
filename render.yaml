@@ -9,7 +9,7 @@ services:
       - key: VITE_API_BASE_URL
         value: https://acis-backend.onrender.com
 
-  # ── 2. Unified Backend Web Service (Kafka + Engine + BFF All-In-One) ────
+  # ── 2. Unified Engine + API Backend Web Service ─────────────────────────
   - type: web
     name: acis-backend
     env: docker
@@ -25,7 +25,15 @@ services:
       - key: ACIS_DB_PATH
         value: /app/data/acis.db
       - key: ACIS_KAFKA_BOOTSTRAP_SERVERS
-        value: localhost:9092
+        value: pkc-9q8rv.ap-south-2.aws.confluent.cloud:9092
+      - key: ACIS_KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: ACIS_KAFKA_SASL_MECHANISM
+        value: PLAIN
+      - key: ACIS_KAFKA_SASL_USERNAME
+        value: EP77W2ZJMCUA2ZJF
+      - key: ACIS_KAFKA_SASL_PASSWORD
+        value: cfltWMn2amz1yjltz8gPJKx4ZyKeSa/ChBKAM2uLuZQ30776z9YRpK2P4kFnTjBg
       - key: ACIS_KAFKA_BACKEND
         value: kafka-python
       - key: ACIS_ALLOWED_ORIGINS
