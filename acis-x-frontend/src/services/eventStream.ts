@@ -1,3 +1,4 @@
+import type { EventEnvelope, EventStreamStatus } from '../types/events'
 import { getApiBaseUrl, API_KEY } from './api'
 
 export type EventCallback = (event: EventEnvelope) => void

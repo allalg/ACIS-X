@@ -147,4 +147,4 @@ export const api = {
   },
 }
 
-export { API_BASE_URL, API_KEY, USE_STUBS }
+export { USE_STUBS }
