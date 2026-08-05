@@ -32,52 +32,67 @@ def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
 
 def get_dashboard_summary() -> dict:
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
-    with get_connection() as conn:
-        cursor = conn.cursor()
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        total_customers = cursor.execute('SELECT COUNT(*) FROM customers').fetchone()[0]
-        total_invoices = cursor.execute('SELECT COUNT(*) FROM invoices').fetchone()[0]
-        open_invoices = cursor.execute("SELECT COUNT(*) FROM invoices WHERE status != 'paid'").fetchone()[0]
-        overdue_invoices = cursor.execute("SELECT COUNT(*) FROM invoices WHERE status = 'overdue'").fetchone()[0]
-        total_outstanding = cursor.execute(
-            'SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM invoices WHERE status != \'paid\''
-        ).fetchone()[0]
+            total_customers = cursor.execute('SELECT COUNT(*) FROM customers').fetchone()[0]
+            total_invoices = cursor.execute('SELECT COUNT(*) FROM invoices').fetchone()[0]
+            open_invoices = cursor.execute("SELECT COUNT(*) FROM invoices WHERE status != 'paid'").fetchone()[0]
+            overdue_invoices = cursor.execute("SELECT COUNT(*) FROM invoices WHERE status = 'overdue'").fetchone()[0]
+            total_outstanding = cursor.execute(
+                'SELECT COALESCE(SUM(total_amount - paid_amount), 0) FROM invoices WHERE status != \'paid\''
+            ).fetchone()[0]
 
-        metrics = cursor.execute(
-            'SELECT COALESCE(AVG(avg_delay), 0), COALESCE(AVG(on_time_ratio), 0) FROM customer_metrics'
-        ).fetchone()
+            metrics = cursor.execute(
+                'SELECT COALESCE(AVG(avg_delay), 0), COALESCE(AVG(on_time_ratio), 0) FROM customer_metrics'
+            ).fetchone()
 
-        db_on_time_ratio = float(metrics[1] or 0)
-        if db_on_time_ratio <= 0 and total_invoices > 0:
-            on_time_ratio = float((total_invoices - overdue_invoices) / total_invoices)
-        elif total_invoices == 0:
-            on_time_ratio = 1.0
-        else:
-            on_time_ratio = db_on_time_ratio
+            db_on_time_ratio = float(metrics[1] or 0)
+            if db_on_time_ratio <= 0 and total_invoices > 0:
+                on_time_ratio = float((total_invoices - overdue_invoices) / total_invoices)
+            elif total_invoices == 0:
+                on_time_ratio = 1.0
+            else:
+                on_time_ratio = db_on_time_ratio
 
-        risk_counts = cursor.execute(
-            """
-            SELECT
-              COALESCE(SUM(CASE WHEN severity IN ('high', 'critical') THEN 1 ELSE 0 END), 0) AS high_risk_count,
-              COALESCE(SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END), 0) AS medium_risk_count,
-              COALESCE(SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END), 0) AS low_risk_count
-            FROM customer_risk_profile
-            """
-        ).fetchone()
+            risk_counts = cursor.execute(
+                """
+                SELECT
+                  COALESCE(SUM(CASE WHEN severity IN ('high', 'critical') THEN 1 ELSE 0 END), 0) AS high_risk_count,
+                  COALESCE(SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END), 0) AS medium_risk_count,
+                  COALESCE(SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END), 0) AS low_risk_count
+                FROM customer_risk_profile
+                """
+            ).fetchone()
 
-    return {
-        'timestamp': now,
-        'total_customers': total_customers,
-        'total_invoices': total_invoices,
-        'open_invoices': open_invoices,
-        'overdue_invoices': overdue_invoices,
-        'total_outstanding': float(total_outstanding or 0),
-        'avg_delay': float(metrics[0] or 0),
-        'on_time_ratio': on_time_ratio,
-        'high_risk_count': int(risk_counts[0] or 0),
-        'medium_risk_count': int(risk_counts[1] or 0),
-        'low_risk_count': int(risk_counts[2] or 0),
-    }
+        return {
+            'timestamp': now,
+            'total_customers': total_customers,
+            'total_invoices': total_invoices,
+            'open_invoices': open_invoices,
+            'overdue_invoices': overdue_invoices,
+            'total_outstanding': float(total_outstanding or 0),
+            'avg_delay': float(metrics[0] or 0),
+            'on_time_ratio': on_time_ratio,
+            'high_risk_count': int(risk_counts[0] or 0),
+            'medium_risk_count': int(risk_counts[1] or 0),
+            'low_risk_count': int(risk_counts[2] or 0),
+        }
+    except Exception:
+        return {
+            'timestamp': now,
+            'total_customers': 0,
+            'total_invoices': 0,
+            'open_invoices': 0,
+            'overdue_invoices': 0,
+            'total_outstanding': 0.0,
+            'avg_delay': 0.0,
+            'on_time_ratio': 1.0,
+            'high_risk_count': 0,
+            'medium_risk_count': 0,
+            'low_risk_count': 0,
+        }
 
 
 def get_customers(search: str | None = None) -> list[dict]:
@@ -106,9 +121,12 @@ def get_customers(search: str | None = None) -> list[dict]:
 
     query += ' ORDER BY combined_risk DESC'
 
-    with get_connection() as conn:
-        rows = conn.execute(query, params).fetchall()
-        return rows_to_dicts(rows)
+    try:
+        with get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return rows_to_dicts(rows)
+    except Exception:
+        return []
 
 
 def get_customer_by_id(customer_id: str) -> dict | None:
