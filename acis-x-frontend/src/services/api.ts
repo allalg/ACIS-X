@@ -9,8 +9,19 @@ import type { AgentsStatusResponse } from '../types/agent'
 import type { InvoiceResponse, PaymentResponse } from '../types/ledger'
 import type { MetricsResult } from '../types/metrics'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-const API_KEY = import.meta.env.VITE_API_KEY ?? ''
+export function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL
+  if (envUrl && !envUrl.includes('localhost')) {
+    return envUrl
+  }
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('onrender.com')) {
+    return 'https://acis-backend.onrender.com'
+  }
+  return envUrl || 'http://localhost:8000'
+}
+
+export const API_BASE_URL = getApiBaseUrl()
+export const API_KEY = import.meta.env.VITE_API_KEY ?? ''
 const USE_STUBS = false // Keeping constant exported for backward compatibility if used elsewhere
 
 export class ApiError extends Error {

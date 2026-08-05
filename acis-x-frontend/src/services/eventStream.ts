@@ -1,11 +1,16 @@
-import type { EventEnvelope, EventStreamStatus } from '../types/events'
-import { API_KEY } from './api'
+import { getApiBaseUrl, API_KEY } from './api'
 
 export type EventCallback = (event: EventEnvelope) => void
 export type StatusCallback = (status: EventStreamStatus) => void
 
-const STREAM_URL =
-  import.meta.env.VITE_STREAM_URL ?? 'http://localhost:8000/api/v1/events/stream'
+function getStreamUrl(): string {
+  const envStreamUrl = import.meta.env.VITE_STREAM_URL
+  if (envStreamUrl && !envStreamUrl.includes('localhost')) {
+    return envStreamUrl
+  }
+  const baseUrl = getApiBaseUrl()
+  return `${baseUrl}/api/v1/events/stream`
+}
 
 class EventStreamService {
   private source: EventSource | null = null
@@ -23,7 +28,7 @@ class EventStreamService {
 
     this.setStatus('reconnecting')
 
-    const url = new URL(STREAM_URL)
+    const url = new URL(getStreamUrl())
     if (API_KEY) {
       // Native EventSource does not support custom headers, so key is passed in query.
       url.searchParams.set('api_key', API_KEY)
