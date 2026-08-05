@@ -275,20 +275,31 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
     async def log_generator():
         import os
         import asyncio
-        log_path = "/app/acis.log"
-        if not os.path.exists(log_path):
-            yield "data: [BFF] Log file not found\n\n"
-            return
-        
-        with open(log_path, 'r', encoding='utf-8') as f:
-            f.seek(0, os.SEEK_END)
-            while True:
-                line = f.readline()
-                if not line:
-                    await asyncio.sleep(0.5)
-                    continue
-                yield f"data: {line.strip()}\n\n"
-                
+        log_paths = ["/app/acis.log", "acis.log", "../acis.log"]
+        log_path = None
+        for p in log_paths:
+            if os.path.exists(p):
+                log_path = p
+                break
+        if not log_path:
+            log_path = "/app/acis.log"
+            try:
+                open(log_path, 'a').close()
+            except Exception:
+                pass
+
+        try:
+            with open(log_path, 'r', encoding='utf-8') as f:
+                f.seek(0, os.SEEK_END)
+                while True:
+                    line = f.readline()
+                    if not line:
+                        await asyncio.sleep(0.5)
+                        continue
+                    yield f"data: {line.strip()}\n\n"
+        except Exception:
+            yield "data: [BFF] System logs initializing...\n\n"
+
     return StreamingResponse(log_generator(), media_type='text/event-stream')
 
 
