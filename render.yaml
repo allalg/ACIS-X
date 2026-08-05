@@ -25,5 +25,7 @@ services:
         value: /app/data/acis.db
       - key: ACIS_KAFKA_BOOTSTRAP_SERVERS
         value: localhost:9092
+      - key: ACIS_KAFKA_BACKEND
+        value: kafka-python
       - key: ACIS_ALLOWED_ORIGINS
         value: "*"
