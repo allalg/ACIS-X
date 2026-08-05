@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+export KAFKA_HEAP_OPTS="-Xms64m -Xmx96m"
+export MALLOC_ARENA_MAX=2
+
 # Format KRaft Kafka storage directory if not already initialized
 if [ ! -f /tmp/kraft-combined-logs/meta.properties ]; then
   echo "[ENTRYPOINT] Formatting KRaft Kafka storage..."
