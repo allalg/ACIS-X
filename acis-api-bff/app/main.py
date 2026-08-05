@@ -37,10 +37,6 @@ app.add_middleware(
     allow_methods=['GET', 'POST', 'OPTIONS'],
     allow_headers=['X-API-Key', 'Content-Type', 'Authorization'],
 )
-@app.get('/')
-@app.get('/health')
-def health_check():
-    return {'status': 'healthy', 'timestamp': now_iso()}
 
 AGENTS_STATE: dict[str, dict[str, Any]] = {}
 
@@ -52,17 +48,6 @@ _sse_clients: Set[asyncio.Queue] = set()
 _sse_consumer_started = False
 
 
-def _get_kafka_common_kwargs() -> dict[str, Any]:
-    kwargs: dict[str, Any] = {'bootstrap_servers': settings.kafka_bootstrap_servers}
-    if settings.kafka_security_protocol and settings.kafka_security_protocol.upper() != 'PLAINTEXT':
-        kwargs['security_protocol'] = settings.kafka_security_protocol.upper()
-        if settings.kafka_sasl_mechanism:
-            kwargs['sasl_mechanism'] = settings.kafka_sasl_mechanism.upper()
-            kwargs['sasl_plain_username'] = settings.kafka_sasl_username
-            kwargs['sasl_plain_password'] = settings.kafka_sasl_password
-    return kwargs
-
-
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat().replace('+00:00', 'Z')
 
@@ -71,18 +56,11 @@ async def _consume_agent_status() -> None:
     """Background task: track agent registration & heartbeat events."""
     consumer = AIOKafkaConsumer(
         'acis.registry', 'acis.agent.health',
+        bootstrap_servers=settings.kafka_bootstrap_servers,
         group_id='bff-status-group',
         auto_offset_reset='latest',
-        **_get_kafka_common_kwargs(),
     )
-    while True:
-        try:
-            await consumer.start()
-            break
-        except Exception as e:
-            logging.warning(f"Kafka not ready for status consumer ({e}). Retrying in 3s...")
-            await asyncio.sleep(3)
-
+    await consumer.start()
     try:
         async for msg in consumer:
             if msg.value:
@@ -127,19 +105,13 @@ async def _consume_sse_events() -> None:
     global _sse_consumer_started
     _sse_consumer_started = True
     consumer = AIOKafkaConsumer(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
         group_id='bff-sse-shared',
         auto_offset_reset='latest',
         enable_auto_commit=False,
-        **_get_kafka_common_kwargs(),
     )
     consumer.subscribe(pattern=r'^acis\..*')
-    while True:
-        try:
-            await consumer.start()
-            break
-        except Exception as e:
-            logging.warning(f"Kafka not ready for SSE consumer ({e}). Retrying in 3s...")
-            await asyncio.sleep(3)
+    await consumer.start()
     logger.info('Shared SSE consumer started (group=bff-sse-shared)')
     try:
         async for msg in consumer:
@@ -275,31 +247,20 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
     async def log_generator():
         import os
         import asyncio
-        log_paths = ["/app/acis.log", "acis.log", "../acis.log"]
-        log_path = None
-        for p in log_paths:
-            if os.path.exists(p):
-                log_path = p
-                break
-        if not log_path:
-            log_path = "/app/acis.log"
-            try:
-                open(log_path, 'a').close()
-            except Exception:
-                pass
-
-        try:
-            with open(log_path, 'r', encoding='utf-8') as f:
-                f.seek(0, os.SEEK_END)
-                while True:
-                    line = f.readline()
-                    if not line:
-                        await asyncio.sleep(0.5)
-                        continue
-                    yield f"data: {line.strip()}\n\n"
-        except Exception:
-            yield "data: [BFF] System logs initializing...\n\n"
-
+        log_path = "/app/acis.log"
+        if not os.path.exists(log_path):
+            yield "data: [BFF] Log file not found\n\n"
+            return
+        
+        with open(log_path, 'r', encoding='utf-8') as f:
+            f.seek(0, os.SEEK_END)
+            while True:
+                line = f.readline()
+                if not line:
+                    await asyncio.sleep(0.5)
+                    continue
+                yield f"data: {line.strip()}\n\n"
+                
     return StreamingResponse(log_generator(), media_type='text/event-stream')
 
 

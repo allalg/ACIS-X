@@ -8,6 +8,7 @@ h11==0.16.0
 idna==3.11
 
 kafka-python==2.3.0
+confluent-kafka==2.3.0
 
 pydantic==2.12.5
 pydantic_core==2.41.5

@@ -86,7 +86,7 @@ class DBAgent(BaseAgent):
             agent_type="DBAgent",
         )
 
-        self._db_path = db_path or os.getenv("ACIS_DB_PATH", self.DB_PATH)
+        self._db_path = db_path or self.DB_PATH
         self._db_lock = threading.Lock()
 
         # Idempotency: track processed risk profile event IDs (bounded OrderedDict)

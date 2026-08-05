@@ -53,7 +53,6 @@ from runtime.placement_engine import PlacementEngine
 from runtime.runtime_manager import RuntimeManager
 from runtime.topic_manager import TopicAdmin
 from self_healing.core.self_healing_agent import SelfHealingAgent
-from config.settings import settings
 
 
 def _configure_console_streams() -> None:
@@ -142,17 +141,10 @@ def _reset_consumer_group_offsets_on_first_run(bootstrap_servers: List[str]) -> 
     logger.info("[ConsumerGroup] First run detected - deleting committed consumer groups")
 
     try:
-        admin_kwargs = {
-            "bootstrap_servers": bootstrap_servers,
-            "client_id": "acis-consumer-group-init",
-        }
-        if settings.kafka_security_protocol and settings.kafka_security_protocol.upper() != "PLAINTEXT":
-            admin_kwargs["security_protocol"] = settings.kafka_security_protocol.upper()
-            if settings.kafka_sasl_mechanism:
-                admin_kwargs["sasl_mechanism"] = settings.kafka_sasl_mechanism.upper()
-                admin_kwargs["sasl_plain_username"] = settings.kafka_sasl_username
-                admin_kwargs["sasl_plain_password"] = settings.kafka_sasl_password
-        admin = KafkaAdminClient(**admin_kwargs)
+        admin = KafkaAdminClient(
+            bootstrap_servers=bootstrap_servers,
+            client_id="acis-consumer-group-init"
+        )
 
         consumer_groups_to_reset = [
             "db-agent-group",
@@ -207,18 +199,10 @@ def _reset_control_plane_consumer_groups(bootstrap_servers: List[str]) -> None:
     ]
 
     try:
-        admin_kwargs: Dict[str, Any] = {
-            "bootstrap_servers": bootstrap_servers,
-            "client_id": "acis-control-plane-reset",
-        }
-        if settings.kafka_security_protocol and settings.kafka_security_protocol.upper() != "PLAINTEXT":
-            admin_kwargs["security_protocol"] = settings.kafka_security_protocol.upper()
-            if settings.kafka_sasl_mechanism:
-                admin_kwargs["sasl_mechanism"] = settings.kafka_sasl_mechanism.upper()
-                admin_kwargs["sasl_plain_username"] = settings.kafka_sasl_username
-                admin_kwargs["sasl_plain_password"] = settings.kafka_sasl_password
-
-        admin = KafkaAdminClient(**admin_kwargs)
+        admin = KafkaAdminClient(
+            bootstrap_servers=bootstrap_servers,
+            client_id="acis-control-plane-reset"
+        )
         try:
             deleted = 0
             for group_id in control_plane_groups:
@@ -239,24 +223,13 @@ def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
     config = KafkaConfig(
         bootstrap_servers=_bootstrap_servers(),
         consumer_auto_offset_reset=auto_offset_reset,
-        security_protocol=settings.kafka_security_protocol,
-        sasl_mechanism=settings.kafka_sasl_mechanism,
-        sasl_username=settings.kafka_sasl_username,
-        sasl_password=settings.kafka_sasl_password,
     )
     return KafkaClient(config=config, backend=_kafka_backend())
 
 
 def _create_topics() -> Dict[str, bool]:
     try:
-        admin = TopicAdmin(
-            bootstrap_servers=_bootstrap_servers(),
-            backend=_kafka_backend(),
-            security_protocol=settings.kafka_security_protocol,
-            sasl_mechanism=settings.kafka_sasl_mechanism,
-            sasl_username=settings.kafka_sasl_username,
-            sasl_password=settings.kafka_sasl_password,
-        )
+        admin = TopicAdmin(bootstrap_servers=_bootstrap_servers(), backend=_kafka_backend())
         try:
             results = admin.create_all_acis_topics()
             failed = [topic for topic, ok in results.items() if not ok]
@@ -466,7 +439,7 @@ def main() -> None:
 
     # Start health-check HTTP server (daemon thread, port 9090)
     from runtime.health_server import start_health_server
-    process_registry = {name: proc for name, proc in supervisor.processes.items() if proc is not None}
+    process_registry = {name: proc for name, proc in supervisor._processes.items() if proc is not None}
     start_health_server(port=int(os.getenv("ACIS_HEALTH_PORT", "9090")), process_registry=process_registry)
 
     try:

@@ -14,19 +14,22 @@ def require_api_key(
     """Validate the incoming API key against the configured key.
 
     Accepts the key from either the ``X-API-Key`` header or the ``api_key``
-    query parameter. If configured with 'change_me' or empty, bypasses strict auth for browser dashboard clients.
+    query parameter.
     """
     settings = load_settings()
-    if not settings.api_key or settings.api_key.lower() in ('change_me', 'none', 'false', ''):
-        return 'allowed'
-
     provided = x_api_key or api_key_query
 
-    if not provided or provided != settings.api_key:
-        logger.warning('Rejected request with invalid API key (first 4 chars: %s…)', (provided or '')[:4])
+    if not provided:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='Invalid or missing API key.',
+            detail='Missing API key. Provide it via X-API-Key header or api_key query param.',
+        )
+
+    if provided != settings.api_key:
+        logger.warning('Rejected request with invalid API key (first 4 chars: %s…)', provided[:4])
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Invalid API key.',
         )
 
     return provided

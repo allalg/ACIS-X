@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { getApiBaseUrl, API_KEY } from '../../services/api'
+import { API_KEY } from '../../services/api'
 
-function getLogsUrl(): string {
-  const envLogsUrl = import.meta.env.VITE_LOGS_URL
-  if (envLogsUrl && !envLogsUrl.includes('localhost')) {
-    return envLogsUrl
-  }
-  const baseUrl = getApiBaseUrl()
-  return `${baseUrl}/api/v1/system/logs/stream`
-}
+const LOGS_URL =
+  import.meta.env.VITE_LOGS_URL ?? 'http://localhost:8000/api/v1/system/logs/stream'
 
 type LogEntry = {
   ts?: string
@@ -23,7 +17,7 @@ export function LogConsole() {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const url = new URL(getLogsUrl())
+    const url = new URL(LOGS_URL)
     if (API_KEY) {
       url.searchParams.set('api_key', API_KEY)
     }

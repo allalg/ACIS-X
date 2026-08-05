@@ -21,17 +21,39 @@ class Settings:
     allowed_origins: list[str]
     kafka_bootstrap_servers: str
     env: str
-    kafka_security_protocol: str = 'PLAINTEXT'
-    kafka_sasl_mechanism: str | None = None
-    kafka_sasl_username: str | None = None
-    kafka_sasl_password: str | None = None
 
 
 def _validate_api_key(key: str | None) -> str:
     """Validate the API key based on the current environment mode."""
-    if not key or key == 'change_me':
-        logger.warning('Using default API key "change_me"')
+    if not key:
+        if ACIS_ENV == 'production':
+            raise ValueError(
+                'ACIS_API_KEY is required in production mode. '
+                'Set ACIS_ENV=development to use default keys for local dev.'
+            )
+        logger.warning(
+            '⚠️  ACIS_API_KEY is not set — falling back to default key. '
+            'Do NOT use this in production.'
+        )
         return 'change_me'
+
+    if key == 'change_me':
+        if ACIS_ENV == 'production':
+            raise ValueError(
+                'ACIS_API_KEY cannot be "change_me" in production mode. '
+                'Set a strong key (32+ characters) or use ACIS_ENV=development.'
+            )
+        logger.warning(
+            '⚠️  Using default API key "change_me". '
+            'Set a strong ACIS_API_KEY before deploying.'
+        )
+
+    if ACIS_ENV == 'production' and len(key) < 32:
+        raise ValueError(
+            f'ACIS_API_KEY is too short ({len(key)} chars). '
+            'Production keys must be at least 32 characters.'
+        )
+
     return key
 
 
@@ -47,19 +69,10 @@ def load_settings() -> Settings:
         if origin.strip()
     ]
     kafka_bootstrap_servers = os.getenv('ACIS_KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
-    kafka_security_protocol = os.getenv('ACIS_KAFKA_SECURITY_PROTOCOL', 'PLAINTEXT')
-    kafka_sasl_mechanism = os.getenv('ACIS_KAFKA_SASL_MECHANISM', None)
-    kafka_sasl_username = os.getenv('ACIS_KAFKA_SASL_USERNAME', None)
-    kafka_sasl_password = os.getenv('ACIS_KAFKA_SASL_PASSWORD', None)
-
     return Settings(
         api_key=api_key,
         db_path=db_path,
         allowed_origins=allowed_origins,
         kafka_bootstrap_servers=kafka_bootstrap_servers,
         env=ACIS_ENV,
-        kafka_security_protocol=kafka_security_protocol,
-        kafka_sasl_mechanism=kafka_sasl_mechanism,
-        kafka_sasl_username=kafka_sasl_username,
-        kafka_sasl_password=kafka_sasl_password,
     )
