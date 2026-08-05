@@ -63,7 +63,7 @@ stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 \n\
 [program:acis-engine]\n\
-command=sh -c "sleep 6 && python run_acis.py"\n\
+command=sh -c "sleep 12 && python run_acis.py"\n\
 directory=/app\n\
 autostart=true\n\
 autorestart=true\n\
@@ -74,7 +74,7 @@ stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 \n\
 [program:acis-bff]\n\
-command=sh -c "sleep 6 && uvicorn app.main:app --host 0.0.0.0 --port 8000"\n\
+command=sh -c "sleep 12 && uvicorn app.main:app --host 0.0.0.0 --port 8000"\n\
 directory=/app/acis-api-bff\n\
 autostart=true\n\
 autorestart=true\n\

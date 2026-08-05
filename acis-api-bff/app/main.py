@@ -64,7 +64,14 @@ async def _consume_agent_status() -> None:
         group_id='bff-status-group',
         auto_offset_reset='latest',
     )
-    await consumer.start()
+    while True:
+        try:
+            await consumer.start()
+            break
+        except Exception as e:
+            logging.warning(f"Kafka not ready for status consumer ({e}). Retrying in 3s...")
+            await asyncio.sleep(3)
+
     try:
         async for msg in consumer:
             if msg.value:
@@ -115,7 +122,13 @@ async def _consume_sse_events() -> None:
         enable_auto_commit=False,
     )
     consumer.subscribe(pattern=r'^acis\..*')
-    await consumer.start()
+    while True:
+        try:
+            await consumer.start()
+            break
+        except Exception as e:
+            logging.warning(f"Kafka not ready for SSE consumer ({e}). Retrying in 3s...")
+            await asyncio.sleep(3)
     logger.info('Shared SSE consumer started (group=bff-sse-shared)')
     try:
         async for msg in consumer:
