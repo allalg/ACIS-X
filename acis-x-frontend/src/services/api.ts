@@ -15,7 +15,7 @@ export function getApiBaseUrl(): string {
     return envUrl
   }
   if (typeof window !== 'undefined' && window.location.hostname.endsWith('onrender.com')) {
-    return 'https://acis-backend.onrender.com'
+    return 'https://acis-backend-zxal.onrender.com'
   }
   return envUrl || 'http://localhost:8000'
 }

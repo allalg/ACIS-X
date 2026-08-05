@@ -7,7 +7,7 @@ services:
     staticPublishPath: ./acis-x-frontend/dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://acis-backend.onrender.com
+        value: https://acis-backend-zxal.onrender.com
 
   # ── 2. Unified Engine + API Backend Web Service ─────────────────────────
   - type: web
