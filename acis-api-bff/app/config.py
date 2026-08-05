@@ -25,35 +25,9 @@ class Settings:
 
 def _validate_api_key(key: str | None) -> str:
     """Validate the API key based on the current environment mode."""
-    if not key:
-        if ACIS_ENV == 'production':
-            raise ValueError(
-                'ACIS_API_KEY is required in production mode. '
-                'Set ACIS_ENV=development to use default keys for local dev.'
-            )
-        logger.warning(
-            '⚠️  ACIS_API_KEY is not set — falling back to default key. '
-            'Do NOT use this in production.'
-        )
+    if not key or key == 'change_me':
+        logger.warning('Using default API key "change_me"')
         return 'change_me'
-
-    if key == 'change_me':
-        if ACIS_ENV == 'production':
-            raise ValueError(
-                'ACIS_API_KEY cannot be "change_me" in production mode. '
-                'Set a strong key (32+ characters) or use ACIS_ENV=development.'
-            )
-        logger.warning(
-            '⚠️  Using default API key "change_me". '
-            'Set a strong ACIS_API_KEY before deploying.'
-        )
-
-    if ACIS_ENV == 'production' and len(key) < 32:
-        raise ValueError(
-            f'ACIS_API_KEY is too short ({len(key)} chars). '
-            'Production keys must be at least 32 characters.'
-        )
-
     return key
 
 
