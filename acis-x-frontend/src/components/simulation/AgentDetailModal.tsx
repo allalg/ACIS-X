@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { AGENT_KNOWLEDGE_BASE } from '../../data/agentKnowledge'
 import type { EventEnvelope } from '../../types/events'
 import { api } from '../../services/api'
+import { TableViewerModal } from './TableViewerModal'
 
 type AgentDetailModalProps = {
   agentName: string | null
@@ -19,6 +20,7 @@ export function AgentDetailModal({
   onClose,
 }: AgentDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'workflow' | 'formulas' | 'data'>('overview')
+  const [selectedTable, setSelectedTable] = useState<string | null>(null)
 
   if (!agentName) return null
 
@@ -284,49 +286,64 @@ export function AgentDetailModal({
                     <div className="surface-card" style={{ padding: '1rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.4rem' }}>CPU UTILIZATION</div>
                       <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--accent-cyan)' }}>
-                        {agentInstance.metrics?.cpu_percent ?? 0.0}%
+                        {agentInstance.metrics?.cpu_percent != null
+                          ? `${Number(agentInstance.metrics.cpu_percent).toFixed(1)}%`
+                          : '0.0%'}
                       </div>
                     </div>
                     <div className="surface-card" style={{ padding: '1rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.4rem' }}>MEMORY USAGE</div>
                       <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--accent-blue)' }}>
-                        {agentInstance.metrics?.memory_percent ?? 0.0}%
+                        {agentInstance.metrics?.memory_percent != null
+                          ? `${Number(agentInstance.metrics.memory_percent).toFixed(6)}%`
+                          : '0.000000%'}
                       </div>
                     </div>
                     <div className="surface-card" style={{ padding: '1rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.4rem' }}>QUEUE DEPTH</div>
                       <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--accent-amber)' }}>
-                        {agentInstance.metrics?.queue_depth ?? 0}
+                        {agentInstance.metrics?.queue_depth ?? agentInstance.queue_depth ?? 0}
                       </div>
                     </div>
                     <div className="surface-card" style={{ padding: '1rem' }}>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.4rem' }}>RESTART COUNT</div>
                       <div className="mono" style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--accent-green)' }}>
-                        {agentInstance.restart_count ?? 0}
+                        {agentInstance.restart_count ?? agentInstance.metrics?.restart_count ?? 0}
                       </div>
                     </div>
                   </div>
                 )}
 
                 <div style={{ backgroundColor: 'var(--bg-elevated)', padding: '1.2rem', borderRadius: '8px', border: '1px solid var(--bg-border)' }}>
-                  <h4 style={{ margin: '0 0 0.8rem 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>DATABASE TABLES MODIFIED / QUERIED</h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                    <h4 style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>DATABASE TABLES MODIFIED / QUERIED</h4>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>💡 Click any table to inspect live records</span>
+                  </div>
                   {knowledge.databaseTables.length > 0 ? (
                     <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
                       {knowledge.databaseTables.map((tbl) => (
-                        <span
+                        <button
                           key={tbl}
-                          className="mono"
+                          onClick={() => setSelectedTable(tbl)}
+                          className="mono surface-card-hover"
                           style={{
                             backgroundColor: 'rgba(59, 130, 246, 0.12)',
                             color: 'var(--accent-blue)',
                             border: '1px solid var(--accent-blue)',
-                            padding: '0.3rem 0.8rem',
+                            padding: '0.4rem 0.9rem',
                             borderRadius: '6px',
                             fontSize: '0.85rem',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            transition: 'all 0.2s',
                           }}
+                          title={`Click to view live records in ${tbl}`}
                         >
-                          🗄️ {tbl}
-                        </span>
+                          🗄️ <strong>{tbl}</strong>
+                          <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>🔍</span>
+                        </button>
                       ))}
                     </div>
                   ) : (
@@ -390,33 +407,79 @@ export function AgentDetailModal({
                         padding: '1.2rem',
                         borderRadius: '8px',
                         border: '1px solid var(--accent-blue)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.8rem',
                       }}
                     >
-                      <h4 style={{ margin: '0 0 0.6rem 0', color: 'var(--accent-cyan)', fontSize: '0.95rem' }}>{f.title}</h4>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h4 style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '0.95rem', fontWeight: 'bold' }}>
+                          {f.title}
+                        </h4>
+                        {f.modelType && (
+                          <span
+                            className="mono"
+                            style={{
+                              fontSize: '0.72rem',
+                              padding: '0.2rem 0.6rem',
+                              borderRadius: '10px',
+                              backgroundColor: f.modelType.includes('MACHINE LEARNING')
+                                ? 'rgba(168, 85, 247, 0.2)'
+                                : 'rgba(59, 130, 246, 0.15)',
+                              color: f.modelType.includes('MACHINE LEARNING')
+                                ? '#c084fc'
+                                : 'var(--accent-blue)',
+                              border: '1px solid currentColor',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {f.modelType}
+                          </span>
+                        )}
+                      </div>
+
                       <div
-                        className="mono"
                         style={{
-                          backgroundColor: '#0d1117',
-                          padding: '1rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--bg-border)',
-                          color: '#58a6ff',
-                          fontSize: '0.95rem',
-                          textAlign: 'center',
-                          marginBottom: '0.8rem',
-                          overflowX: 'auto',
+                          backgroundColor: '#090d16',
+                          padding: '1rem 1.2rem',
+                          borderRadius: '8px',
+                          borderLeft: '4px solid var(--accent-amber)',
+                          color: '#e6edf3',
+                          fontSize: '0.92rem',
+                          fontFamily: 'var(--font-mono, monospace)',
+                          lineHeight: 1.6,
+                          whiteSpace: 'pre-wrap',
                         }}
                       >
-                        {f.latex}
+                        {f.plainEnglishFormula}
                       </div>
-                      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                        {f.description}
+
+                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                        💡 <strong>Description:</strong> {f.description}
                       </p>
+
+                      {f.weightRationale && (
+                        <div
+                          style={{
+                            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            borderRadius: '6px',
+                            padding: '0.8rem 1rem',
+                            fontSize: '0.83rem',
+                            color: 'var(--text-primary)',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <strong style={{ color: 'var(--accent-blue)' }}>🎯 Rationale & Weight Rationale:</strong>{' '}
+                          {f.weightRationale}
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (
                   <div style={{ backgroundColor: 'var(--bg-elevated)', padding: '2rem', borderRadius: '8px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No specific mathematical formula defined for this agent type.
+                    No specific mathematical calculation required for this infrastructure service.
                   </div>
                 )}
               </div>
@@ -458,6 +521,8 @@ export function AgentDetailModal({
           </div>
         </motion.div>
       </div>
+
+      <TableViewerModal tableName={selectedTable} onClose={() => setSelectedTable(null)} />
     </AnimatePresence>
   )
 }

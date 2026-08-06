@@ -134,6 +134,10 @@ export const api = {
       body: JSON.stringify({ instance_id: instanceId }),
     })
   },
+
+  getDatabaseTableData(tableName: string, limit: number = 50): Promise<{ table_name: string; total: number; rows: any[] }> {
+    return apiRequest<{ table_name: string; total: number; rows: any[] }>(`/api/v1/database/tables/${tableName}?limit=${limit}`)
+  },
 }
 
 export { API_BASE_URL, API_KEY, USE_STUBS }

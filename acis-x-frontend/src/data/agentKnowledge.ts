@@ -4,7 +4,7 @@ export type AgentKnowledge = {
   title: string
   purpose: string
   workflow: string[]
-  formulas: { title: string; latex: string; description: string }[]
+  formulas: { title: string; plainEnglishFormula: string; description: string; modelType?: string; weightRationale?: string }[]
   consumedEvents: string[]
   emittedEvents: string[]
   databaseTables: string[]
@@ -25,13 +25,17 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     formulas: [
       {
         title: 'Invoice Due Date Calculation',
-        latex: '\\text{Due Date} = \\text{Invoice Date} + \\text{Payment Terms (Days)}',
-        description: 'Calculates due date based on customer credit terms (NET 15, NET 30, NET 60).',
+        plainEnglishFormula: 'Invoice Due Date = Invoice Creation Date + Payment Terms Period (e.g. 15, 30, or 60 Days)',
+        description: 'Determines the exact calendar date when an invoice is expected to be settled based on agreed customer terms.',
+        modelType: 'DETERMINISTIC RULE',
+        weightRationale: 'Uses agreed credit contract terms (NET 15, NET 30, NET 60) standard in B2B enterprise sales.',
       },
       {
         title: 'Random Payment Amount Distribution',
-        latex: '\\text{Payment Amount} = U(0.2, 1.0) \\times \\text{Invoice Total Amount}',
-        description: 'Simulates partial or full invoice payments using uniform random scaling.',
+        plainEnglishFormula: 'Payment Amount = Random Percentage (between 20% and 100%) × Total Invoice Amount',
+        description: 'Simulates partial or full B2B customer payments across generated invoice batches.',
+        modelType: 'PROBABILISTIC STOCHASTIC SAMPLING',
+        weightRationale: 'Uniform random sampling between 20% and 100% models realistic enterprise partial payment behaviors.',
       },
     ],
     consumedEvents: ['acis.control (scenario.pause, scenario.resume)'],
@@ -52,18 +56,24 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     formulas: [
       {
         title: 'Outstanding Balance Aggregation',
-        latex: '\\text{Outstanding} = \\sum_{i \\in \\text{Unpaid}} \\text{Invoice Total}_i - \\sum_{j \\in \\text{Payments}} \\text{Payment Amount}_j',
-        description: 'Sum of all unpaid invoice amounts minus partial payments received.',
+        plainEnglishFormula: 'Total Outstanding Balance = (Sum of All Issued Invoice Amounts) - (Sum of All Payments Received)',
+        description: 'Net unpaid balance remaining across all historical and active customer invoices.',
+        modelType: 'DETERMINISTIC ACCOUNTING AGGREGATION',
+        weightRationale: 'Exact double-entry accounting identity to ensure financial ledger accuracy.',
       },
       {
         title: 'Average Payment Delay (Days)',
-        latex: '\\text{Avg Delay} = \\frac{1}{N} \\sum_{k=1}^N \\max(0, \\text{Payment Date}_k - \\text{Due Date}_k)',
-        description: 'Mean number of days payments were received past the due date across past N settled invoices.',
+        plainEnglishFormula: 'Average Payment Delay = Total Delay Days across Settled Invoices / Total Number of Settled Invoices',
+        description: 'Average number of days a customer takes past the due date to complete their payments.',
+        modelType: 'HISTORICAL ROLLING AVERAGE',
+        weightRationale: 'Rolling mean across past settled invoices provides a stable baseline for customer payment punctuality.',
       },
       {
         title: 'On-Time Payment Ratio',
-        latex: 'R_{\\text{on\\_time}} = \\frac{\\text{Number of On-Time Payments}}{\\text{Total Settled Payments}}',
-        description: 'Proportion of historical payments received on or before the due date.',
+        plainEnglishFormula: 'On-Time Payment Percentage = (Number of Invoices Paid On or Before Due Date / Total Settled Invoices) × 100%',
+        description: 'Percentage of past invoices settled without crossing the due date threshold.',
+        modelType: 'HISTORICAL RATIO',
+        weightRationale: 'Direct ratio quantifying customer reliability and adherence to credit terms.',
       },
     ],
     consumedEvents: ['customer.created', 'invoice.created', 'payment.created'],
@@ -84,8 +94,10 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     formulas: [
       {
         title: 'Credit Utilization Ratio',
-        latex: 'U_{\\text{credit}} = \\frac{\\text{Total Outstanding Balance}}{\\text{Assigned Credit Limit}}',
-        description: 'Ratio of active AR balance relative to allocated credit ceiling.',
+        plainEnglishFormula: 'Credit Utilization Percentage = (Current Outstanding Balance / Total Approved Credit Limit) × 100%',
+        description: 'Measures how much of the customer\'s authorized credit line is currently tied up in unpaid invoices.',
+        modelType: 'DETERMINISTIC CAPACITY RATIO',
+        weightRationale: 'Standard treasury metric to detect customers operating near or beyond their pre-approved credit ceiling.',
       },
     ],
     consumedEvents: ['customer.metrics.updated', 'risk.scored'],
@@ -97,22 +109,26 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     name: 'PaymentPredictionAgent',
     category: 'business',
     title: 'Payment Delay ML Prediction Engine',
-    purpose: 'Predicts the probability of payment delay and estimated delay days for open invoices.',
+    purpose: 'Predicts the probability of payment delay and estimated delay days for open invoices using machine learning.',
     workflow: [
       'Consumes invoice.created and customer.metrics.updated.',
-      'Applies ML regression & heuristic models on historical delay, invoice size, and customer tier.',
+      'Applies ML regression & SHAP (SHapley Additive exPlanations) models on historical delay, invoice size, and customer tier.',
       'Emits payment.risk.predicted to acis.predictions.',
     ],
     formulas: [
       {
-        title: 'Logistic Payment Delay Probability',
-        latex: 'P(\\text{Delay}) = \\frac{1}{1 + e^{-(\\beta_0 + \\beta_1 \\cdot \\text{AvgDelay} + \\beta_2 \\cdot \\text{Utilization} + \\beta_3 \\cdot \\text{OverdueRatio})}}',
-        description: 'Sigmoid activation calculating probability of payment default or delay past 30 days.',
+        title: 'Payment Delay Probability Score',
+        plainEnglishFormula: 'Delay Probability = ML Model Score combining (Customer\'s Historical Avg Delay + Credit Utilization + Overdue Percentage + Invoice Amount)',
+        description: 'Calculates the likelihood (0% to 100%) that an open invoice will default or be delayed past 30 days.',
+        modelType: 'MACHINE LEARNING (LOGISTIC REGRESSION & XGBOOST)',
+        weightRationale: 'Uses dynamic machine learning weights trained on historical payment settlement data rather than static rules, dynamically adapting to changing customer payment behaviors.',
       },
       {
-        title: 'Top Risk Driver Identification',
-        latex: '\\text{Driver}_k = \\arg\\max_i |\\beta_i \\cdot X_i|',
-        description: 'Identifies which financial factor contributes most heavily to the predicted delay.',
+        title: 'Primary Risk Driver Identification (SHAP)',
+        plainEnglishFormula: 'Top Risk Driver = SHAP Value Feature Attribution identifying the single factor contributing most heavily to predicted delay',
+        description: 'Pinpoints the exact reason (e.g. High Credit Line Usage or Historical Payment Delays) why a customer or invoice received a high risk classification.',
+        modelType: 'MACHINE LEARNING EXPLAINABILITY (SHAP VALUES)',
+        weightRationale: 'SHAP (SHapley Additive exPlanations) provides mathematical explainability for regulatory compliance, decomposing the ML prediction into individual feature contribution weights.',
       },
     ],
     consumedEvents: ['invoice.created', 'customer.metrics.updated'],
@@ -134,18 +150,24 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     formulas: [
       {
         title: 'Composite Risk Weighting',
-        latex: '\\text{Combined Risk} = 0.60 \\times \\text{Financial Risk} + 0.40 \\times \\text{Litigation Risk}',
-        description: 'Weighted combination of internal payment performance (60%) and external legal/court filings (40%).',
+        plainEnglishFormula: 'Combined Risk Score = (60% × Internal Financial Risk Score) + (40% × External Legal & Litigation Risk Score)',
+        description: 'Weighted combination combining internal invoice payment performance with external court cases and legal filings.',
+        modelType: 'STATIC WEIGHTED MODEL',
+        weightRationale: 'Internal financial performance carries 60% weight as the primary direct measure of working capital risk, while external litigation carries 40% weight to serve as an early warning hedge against potential corporate insolvency or legal disputes.',
       },
       {
-        title: 'Financial Risk Sub-score',
-        latex: '\\text{Financial Risk} = 0.40 \\cdot R_{\\text{delay}} + 0.35 \\cdot U_{\\text{credit}} + 0.25 \\cdot (1 - R_{\\text{on\\_time}})',
-        description: 'Decomposition of financial risk into delay probability, credit utilization, and late payment frequency.',
+        title: 'Financial Risk Breakdown',
+        plainEnglishFormula: 'Internal Financial Risk = (40% × Predicted Payment Delay) + (35% × Credit Line Utilization) + (25% × Late Payment Frequency)',
+        description: 'Decomposes internal financial risk into payment delay likelihood, credit line usage, and historical late payments.',
+        modelType: 'STATIC WEIGHTED MODEL',
+        weightRationale: 'Predicted payment delay (40%) is the single strongest indicator of default risk, credit line utilization (35%) measures financial strain, and late payment frequency (25%) reflects historical reliability.',
       },
       {
-        title: 'Confidence Adjustment',
-        latex: 'S_{\\text{refined}} = S_{\\text{base}} \\times (0.7 + 0.3 \\times C_{\\text{data}})',
-        description: 'Scales raw risk score by data completeness confidence score C_data.',
+        title: 'Data Completeness Confidence Adjustment',
+        plainEnglishFormula: 'Final Adjusted Risk Score = Base Risk Score × [ 70% + (30% × Data Completeness Factor) ]',
+        description: 'Adjusts the final risk score based on how complete the available customer data is.',
+        modelType: 'STATIC CONFIDENCE BLENDING',
+        weightRationale: 'Guarantees at least 70% baseline confidence while scaling the remaining 30% dynamically based on data availability, preventing incomplete data from causing false low-risk scores.',
       },
     ],
     consumedEvents: ['payment.risk.predicted', 'external.data.updated'],
@@ -165,9 +187,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Credit Hold Condition',
-        latex: '\\text{Credit Hold} = (S_{\\text{risk}} > 0.85) \\lor (U_{\\text{credit}} > 1.00) \\lor (\\text{Max Overdue Days} > 90)',
-        description: 'Boolean rule triggering automated credit hold when risk or overdue metrics cross thresholds.',
+        title: 'Automated Credit Hold Rule',
+        plainEnglishFormula: 'Trigger Credit Hold = IF (Risk Score exceeds 85%) OR (Credit Utilization exceeds 100%) OR (Overdue Days exceed 90 Days)',
+        description: 'Automated policy rule that places customer orders on hold if financial risk or overdue balances cross safety thresholds.',
+        modelType: 'STATIC BUSINESS POLICY BREAKERS',
+        weightRationale: 'Policy thresholds (85% Risk, 100% Utilization, 90 Days Overdue) are set based on enterprise risk management standards to halt new credit sales before bad debt write-offs occur.',
       },
     ],
     consumedEvents: ['risk.scored', 'customer.profile.updated'],
@@ -187,9 +211,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Collections Escalation Stage Matrix',
-        latex: '\\text{Stage} = \\begin{cases} \\text{Reminder} & 1 \\le D_{\\text{overdue}} \\le 15 \\\\ \\text{Formal Dunning} & 16 \\le D_{\\text{overdue}} \\le 30 \\\\ \\text{Executive Notice} & 31 \\le D_{\\text{overdue}} \\le 60 \\\\ \\text{Legal Escalation} & D_{\\text{overdue}} > 60 \\end{cases}',
-        description: 'Categorizes collection action intensity based on days overdue and risk stage.',
+        title: 'Collections Escalation Strategy Schedule',
+        plainEnglishFormula: '• Overdue 1 to 15 Days: Friendly Payment Reminder (Email/SMS)\n• Overdue 16 to 30 Days: Formal Dunning Letter & Invoice Statement\n• Overdue 31 to 60 Days: Executive Warning & Credit Limit Hold\n• Overdue 60+ Days: Final Legal Escalation & Formal Litigation Notice',
+        description: 'Escalates outreach intensity step-by-step based on how long an invoice remains past due.',
+        modelType: 'DETERMINISTIC DUNNING MATRIX',
+        weightRationale: 'Industry-standard dunning timeline balances customer relationship preservation during early delays (1-15 days) with aggressive legal enforcement during severe delays (60+ days).',
       },
     ],
     consumedEvents: ['risk.scored', 'invoice.overdue'],
@@ -209,9 +235,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Overdue Condition',
-        latex: '\\text{Is Overdue} = (T_{\\text{current}} > T_{\\text{due}}) \\land (\\text{Status} \\ne \\text{\'paid\'})',
-        description: 'Identifies open invoices that have passed their payment due date.',
+        title: 'Overdue Detection Trigger Rule',
+        plainEnglishFormula: 'Mark Invoice Overdue = IF (Current Simulated Date IS LATER THAN Invoice Due Date) AND (Status IS NOT \'Paid\')',
+        description: 'Identifies active invoices that have passed their agreed payment deadline.',
+        modelType: 'DETERMINISTIC TEMPORAL RULE',
+        weightRationale: 'Binary calendar evaluation ensuring instant trigger as soon as an invoice passes its contractually agreed payment date.',
       },
     ],
     consumedEvents: ['time.tick'],
@@ -231,9 +259,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Litigation Severity Score',
-        latex: 'S_{\\text{litigation}} = 0.50 \\cdot N_{\\text{pending\\_cases}} + 0.30 \\cdot \\frac{\\text{Claim Amount}}{\\text{Annual Revenue}} + 0.20 \\cdot S_{\\text{adverse\\_news}}',
-        description: 'Quantifies external legal exposure based on active court cases and claim magnitude.',
+        title: 'External Legal Exposure Score',
+        plainEnglishFormula: 'Litigation Exposure Score = (50% × Active Court Cases Count) + (30% × Legal Claim Amount vs Revenue Ratio) + (20% × Adverse News Sentiment)',
+        description: 'Quantifies external legal and court risk based on public filings, lawsuit claim sizes, and press coverage.',
+        modelType: 'STATIC WEIGHTED MODEL',
+        weightRationale: 'Active court case count (50%) is the strongest predictor of impending legal disruption, claim ratio (30%) reflects financial severity relative to customer size, and media sentiment (20%) acts as a early public signal.',
       },
     ],
     consumedEvents: ['customer.metrics.updated'],
@@ -253,9 +283,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Simulated Time Step',
-        latex: 'T_{k+1} = T_k + \\Delta t_{\\text{step}}',
-        description: 'Advances internal clock by simulated step increment on each real-world tick interval.',
+        title: 'Clock Step Increment',
+        plainEnglishFormula: 'Next Simulated Date = Current Simulated Date + 1 Simulated Time Step',
+        description: 'Advances the internal simulated calendar clock on each real-world timer tick interval.',
+        modelType: 'DETERMINISTIC CLOCK ACCELERATOR',
+        weightRationale: 'Fixed time step allows real-time acceleration of multi-month B2B credit cycles into manageable simulation windows.',
       },
     ],
     consumedEvents: ['acis.control (time.pause, time.resume)'],
@@ -275,9 +307,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'WAL SQLite URI Lock Avoidance',
-        latex: '\\text{URI} = \\text{file:/data/acis.db?nolock=1\\&check\\_same\\_thread=False}',
-        description: 'Uses special URI parameters to prevent WSL2/Docker volume SQLite locking bugs.',
+        title: 'Database Transaction Lock Prevention',
+        plainEnglishFormula: 'Database Connection = file:/data/acis.db?nolock=1 (Disables OS-level file locking for WSL2/Docker volume compatibility)',
+        description: 'Ensures database writes execute cleanly across concurrent Docker containers without file locking errors.',
+        modelType: 'INFRASTRUCTURE CONFIGURATION RULE',
+        weightRationale: 'Disabling OS file locking prevents WSL2 virtual filesystem deadlocks during high concurrent database writes.',
       },
     ],
     consumedEvents: ['customer.*', 'invoice.*', 'payment.*', 'risk.*', 'collections.*'],
@@ -296,9 +330,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'LRU Cache Hit Ratio',
-        latex: 'H_{\\text{cache}} = \\frac{\\text{Cache Hits}}{\\text{Cache Hits} + \\text{Cache Misses}}',
-        description: 'Tracks in-memory caching efficiency.',
+        title: 'Memory Cache Hit Rate',
+        plainEnglishFormula: 'Cache Efficiency Percentage = (Requests Served from RAM / Total Data Requests Received) × 100%',
+        description: 'Measures how efficiently data requests are answered directly from high-speed memory without touching the disk.',
+        modelType: 'INFRASTRUCTURE METRIC RATIO',
+        weightRationale: 'Monitors memory efficiency to ensure agent query latency stays below 5 milliseconds.',
       },
     ],
     consumedEvents: ['customer.*', 'invoice.*', 'payment.*'],
@@ -315,7 +351,15 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
       'Queries acis.db and MemoryAgent cache.',
       'Serves REST queries for dashboard overview, customer ledgers, and metrics.',
     ],
-    formulas: [],
+    formulas: [
+      {
+        title: 'Read-Model Response Speed',
+        plainEnglishFormula: 'Average API Response Time = Total Elapsed Time for All Data Queries / Total Number of Requests Handled',
+        description: 'Tracks the speed and responsiveness of backend data endpoints serving the user interface.',
+        modelType: 'INFRASTRUCTURE LATENCY METRIC',
+        weightRationale: 'Maintains low API latency (<20ms) for real-time frontend dashboard rendering.',
+      },
+    ],
     consumedEvents: [],
     emittedEvents: [],
     databaseTables: ['customers', 'invoices', 'payments', 'customer_metrics', 'customer_risk_profile'],
@@ -333,9 +377,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Lag Anomaly Z-Score',
-        latex: 'Z_{\\text{lag}} = \\frac{L_{\\text{current}} - \\mu_{\\text{lag}}}{\\sigma_{\\text{lag}}}',
-        description: 'Measures consumer lag deviation relative to historical baseline.',
+        title: 'Consumer Lag Anomaly Z-Score',
+        plainEnglishFormula: 'Lag Anomaly Indicator (Z-Score) = (Current Message Backlog - Average Historical Backlog) / Standard Backlog Deviation',
+        description: 'Detects if an agent is falling behind on processing messages compared to its normal baseline.',
+        modelType: 'STATISTICAL Z-SCORE ANOMALY MODEL',
+        weightRationale: 'Z-score thresholding (> 3.0 standard deviations) provides dynamic anomaly detection without requiring hardcoded static lag limits across different workloads.',
       },
     ],
     consumedEvents: ['agent.heartbeat', 'agent.metrics.updated'],
@@ -355,9 +401,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'Exponential Backoff Restart Delay',
-        latex: 'T_{\\text{backoff}} = \\min(T_{\\text{max}}, T_{\\text{base}} \\times 2^{R_{\\text{count}}})',
-        description: 'Prevents restart loops by doubling wait time between consecutive failures.',
+        title: 'Recovery Wait Time Between Restarts',
+        plainEnglishFormula: 'Restart Delay = Wait 2 Seconds × (2 ^ Number of Consecutive Restarts) [Capped at 300 Seconds Max]',
+        description: 'Uses exponential backoff waiting intervals between consecutive restart attempts to prevent crash loops.',
+        modelType: 'EXPONENTIAL BACKOFF ALGORITHM',
+        weightRationale: 'Exponential scaling (2s, 4s, 8s, 16s...) prevents continuous tight-loop restarting when external dependencies (like Kafka or SQLite) are temporarily unavailable.',
       },
     ],
     consumedEvents: ['agent.restart.requested', 'acis.control (agent.reboot)'],
@@ -377,9 +425,11 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     formulas: [
       {
-        title: 'DLQ Exception Frequency Ratio',
-        latex: 'E_{\\text{rate}} = \\frac{N_{\\text{DLQ Events}}}{N_{\\text{Total Events Published}}}',
-        description: 'Ratio of failed events relative to total bus traffic.',
+        title: 'Dead-Letter Failure Percentage',
+        plainEnglishFormula: 'System Failure Rate = (Total Failed Dead-Letter Events / Total Bus Event Traffic) × 100%',
+        description: 'Calculates the percentage of total event messages that failed validation or processing.',
+        modelType: 'STATISTICAL ERROR RATIO',
+        weightRationale: 'Monitors system health to alert operators if event validation failures exceed 1% of total traffic.',
       },
     ],
     consumedEvents: ['acis.dlq'],

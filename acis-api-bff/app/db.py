@@ -330,3 +330,27 @@ def get_customer_external_intelligence(customer_id: str) -> dict | None:
         if not row:
             return None
         return dict(row)
+
+
+ALLOWED_TABLES = {
+    "customers",
+    "invoices",
+    "payments",
+    "customer_metrics",
+    "customer_risk_profile",
+    "collections_log",
+    "risk_explanations",
+    "external_intelligence_cache",
+}
+
+
+def get_table_rows(table_name: str, limit: int = 50) -> dict:
+    table_clean = table_name.lower().strip()
+    if table_clean not in ALLOWED_TABLES:
+        return {"error": f"Invalid or restricted table '{table_name}'", "rows": [], "total": 0}
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        count = cursor.execute(f"SELECT COUNT(*) FROM {table_clean}").fetchone()[0]
+        rows = cursor.execute(f"SELECT * FROM {table_clean} ORDER BY ROWID DESC LIMIT ?", (limit,)).fetchall()
+        return {"table_name": table_clean, "total": count, "rows": rows_to_dicts(rows)}
+

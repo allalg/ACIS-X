@@ -24,6 +24,7 @@ from .db import (
     get_customer_collections,
     get_customer_risk_explanation,
     get_customer_external_intelligence,
+    get_table_rows,
 )
 from .security import require_api_key
 
@@ -73,6 +74,9 @@ async def _consume_agent_status() -> None:
                 if event['event_type'] == 'registry.agent.deregistered':
                     AGENTS_STATE.pop(agent_id, None)
                 else:
+                    metrics_data = payload.get('metrics', {})
+                    restart_cnt = payload.get('restart_count', metrics_data.get('restart_count', 0))
+
                     if agent_id not in AGENTS_STATE:
                         AGENTS_STATE[agent_id] = {
                             'agent_id': agent_id,
@@ -84,11 +88,17 @@ async def _consume_agent_status() -> None:
                             'topics': payload.get('topics', {}),
                             'capabilities': payload.get('capabilities', []),
                             'version': payload.get('version', '1.0.0'),
+                            'restart_count': restart_cnt,
+                            'metrics': metrics_data,
                         }
                     else:
                         if 'status' in payload:
                             AGENTS_STATE[agent_id]['status'] = payload['status']
                         AGENTS_STATE[agent_id]['last_heartbeat'] = now_iso()
+                        if metrics_data:
+                            AGENTS_STATE[agent_id]['metrics'] = metrics_data
+                        if restart_cnt:
+                            AGENTS_STATE[agent_id]['restart_count'] = restart_cnt
     except asyncio.CancelledError:
         pass
     finally:
@@ -240,6 +250,14 @@ def customer_external_intelligence(customer_id: str, _: str = Depends(require_ap
     if row is None:
         raise HTTPException(status_code=404, detail="External intelligence not found")
     return row
+
+
+@app.get('/api/v1/database/tables/{table_name}')
+def database_table_data(table_name: str, limit: int = Query(default=50, ge=1, le=200), _: str = Depends(require_api_key)):
+    data = get_table_rows(table_name, limit)
+    if "error" in data:
+        raise HTTPException(status_code=400, detail=data["error"])
+    return data
 
 
 @app.get('/api/v1/system/logs/stream')
