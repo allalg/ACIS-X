@@ -1,4 +1,5 @@
 import type { RiskProfile } from '../../../types/metrics'
+import { formatTime } from '../../../lib/utils'
 import { SeverityBadge } from '../../ui/SeverityBadge'
 
 type RiskScoreTableProps = {
@@ -33,7 +34,7 @@ export function RiskScoreTable({ rows, onSelectCustomer }: RiskScoreTableProps) 
               <td className="numeric">{Math.round(row.financial_risk * 100)}</td>
               <td className="numeric">{Math.round(row.litigation_risk * 100)}</td>
               <td className="numeric">{Math.round(row.confidence * 100)}%</td>
-              <td className="numeric">{new Date(row.updated_at).toLocaleTimeString()}</td>
+              <td className="numeric">{formatTime(row.updated_at)}</td>
             </tr>
           ))}
         </tbody>

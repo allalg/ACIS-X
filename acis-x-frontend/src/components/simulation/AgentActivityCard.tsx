@@ -9,7 +9,7 @@ type AgentActivityCardProps = {
 export function AgentActivityCard({ agent, onClick }: AgentActivityCardProps) {
   return (
     <article
-      className={`agent-activity-card status-${agent.status.toLowerCase()} surface-card-hover`}
+      className={`agent-activity-card status-${(agent.status || '').toLowerCase()} surface-card-hover`}
       onClick={onClick}
       style={{ cursor: 'pointer' }}
     >

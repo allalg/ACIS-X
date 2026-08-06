@@ -154,10 +154,10 @@ def test_producer_only_agent_lifecycle():
     assert hasattr(TimeTickAgent, 'start'), "TimeTickAgent should have start() method"
     assert hasattr(TimeTickAgent, 'stop'), "TimeTickAgent should have stop() method"
 
-    # The subscribe() method should return empty list (producer-only)
+    # The subscribe() method returns control topic for pause/resume signals
     agent = TimeTickAgent(kafka_client=None)
     topics = agent.subscribe()
-    assert topics == [], "Producer-only agent should subscribe to 0 topics"
+    assert topics == ["acis.control"], "TimeTickAgent subscribes to acis.control"
 
 
 @pytest.mark.unit

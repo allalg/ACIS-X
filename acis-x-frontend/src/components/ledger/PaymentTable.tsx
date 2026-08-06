@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '../../lib/utils'
 import type { Payment } from '../../types/ledger'
 import { EmptyState } from '../ui/EmptyState'
 import { StatusBadge } from './StatusBadge'
@@ -56,10 +56,10 @@ export function PaymentTable({ payments, loading, onHoverInvoiceId }: PaymentTab
                     <td>{payment.customer_name}</td>
                     <td className="mono">{payment.invoice_id}</td>
                     <td className="numeric">{formatCurrency(payment.amount, payment.currency)}</td>
-                    <td className="numeric">{new Date(payment.payment_date).toLocaleDateString('en-IN')}</td>
+                    <td className="numeric">{formatDate(payment.payment_date)}</td>
                     <td className="payment-method-cell">
                       <PaymentMethodIcon method={payment.payment_method} />
-                      <span>{payment.payment_method.replace('_', ' ')}</span>
+                      <span>{(payment.payment_method || '').replace('_', ' ')}</span>
                     </td>
                     <td>
                       <StatusBadge status={payment.status} />
@@ -84,15 +84,15 @@ export function PaymentTable({ payments, loading, onHoverInvoiceId }: PaymentTab
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Payment Method</span>
-                              <span className="detail-value">{payment.payment_method.replace('_', ' ')}</span>
+                              <span className="detail-value">{(payment.payment_method || '').replace('_', ' ')}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Payment Date</span>
-                              <span className="detail-value numeric">{new Date(payment.payment_date).toLocaleString('en-IN')}</span>
+                              <span className="detail-value numeric">{formatDateTime(payment.payment_date)}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Created</span>
-                              <span className="detail-value numeric">{new Date(payment.created_at).toLocaleString('en-IN')}</span>
+                              <span className="detail-value numeric">{formatDateTime(payment.created_at)}</span>
                             </div>
                           </div>
                         </div>

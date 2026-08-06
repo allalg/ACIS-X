@@ -172,7 +172,7 @@ class SelfHealingAgent(BaseAgent):
             agent_name="SelfHealingAgent",
             agent_version=agent_version,
             group_id="self-healing-group",
-            subscribed_topics=["acis.system", "acis.agent.health", "acis.registry"],
+            subscribed_topics=["acis.system", "acis.agent.health", "acis.registry", "acis.control"],
             capabilities=[
                 "recovery_decisioning",
                 "restart_decisioning",
@@ -207,7 +207,7 @@ class SelfHealingAgent(BaseAgent):
 
     def subscribe(self) -> List[str]:
         """Return subscribed Kafka topics."""
-        return ["acis.system", "acis.agent.health", "acis.registry"]
+        return ["acis.system", "acis.agent.health", "acis.registry", "acis.control"]
 
     def start(self) -> None:
         """Start agent and periodic evaluation loop."""

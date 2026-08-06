@@ -5,6 +5,7 @@ import { MetricsCanvas } from '../components/metrics/MetricsCanvas'
 import { TopProgressBar } from '../components/ui/TopProgressBar'
 import { useCustomerProfile } from '../hooks/useCustomerProfile'
 import { useComputeMetrics, useMetricsResult } from '../hooks/useMetrics'
+import { formatTime } from '../lib/utils'
 
 export default function MetricsPage() {
   const [jobId, setJobId] = useState<string | null>(null)
@@ -13,15 +14,20 @@ export default function MetricsPage() {
   const metricsQuery = useMetricsResult(jobId)
   const selectedCustomer = useCustomerProfile(selectedCustomerId ?? '')
 
-  // Auto-compute on first load so the page isn't empty
   useEffect(() => {
-    if (!jobId && !computeMutation.isPending) {
-      computeMutation.mutateAsync().then((result) => {
-        setJobId(result.job_id)
-      })
+    if (!jobId) {
+      handleCompute()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleCompute = () => {
+    computeMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        setJobId(data.job_id)
+      },
+    })
+  }
 
   const computing = computeMutation.isPending || metricsQuery.data?.status === 'computing'
 
@@ -30,11 +36,6 @@ export default function MetricsPage() {
     () => metricsQuery.data?.data.customer_metrics ?? [],
     [metricsQuery.data],
   )
-
-  const handleCompute = async () => {
-    const result = await computeMutation.mutateAsync()
-    setJobId(result.job_id)
-  }
 
   return (
     <div className="metrics-page">
@@ -46,7 +47,7 @@ export default function MetricsPage() {
         </div>
         <div className="metrics-header-actions">
           <span className="mono page-subtitle">
-            Last computed: {metricsQuery.data?.computed_at ? new Date(metricsQuery.data.computed_at).toLocaleTimeString() : 'loading…'}
+            Last computed: {metricsQuery.data?.computed_at ? formatTime(metricsQuery.data.computed_at) : 'loading…'}
           </span>
           <ComputeButton onClick={handleCompute} loading={computeMutation.isPending} />
         </div>

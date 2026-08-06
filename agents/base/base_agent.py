@@ -73,7 +73,7 @@ class BaseAgent(ABC):
         self.agent_version = agent_version
         self.group_id = group_id
         self.subscribed_topics = list(subscribed_topics) if subscribed_topics else []
-        if "acis.control" not in self.subscribed_topics:
+        if self.subscribed_topics and "acis.control" not in self.subscribed_topics:
             self.subscribed_topics.append("acis.control")
         self.capabilities = capabilities
         self.kafka_client = kafka_client
@@ -181,7 +181,7 @@ class BaseAgent(ABC):
         # Subscribe to topics FIRST (so registry has correct topic list)
         raw_topics = self.subscribe()
         topics = list(raw_topics) if raw_topics else []
-        if "acis.control" not in topics:
+        if topics and "acis.control" not in topics:
             topics.append("acis.control")
         self.subscribed_topics = topics
 

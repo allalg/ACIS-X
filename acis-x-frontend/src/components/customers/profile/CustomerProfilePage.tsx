@@ -12,6 +12,8 @@ import { SeverityBadge } from '../../ui/SeverityBadge'
 import { RiskBreakdownBar } from './RiskBreakdownBar'
 import { RiskHistoryChart } from './RiskHistoryChart'
 
+import { formatDate, formatDateTime } from '../../../lib/utils'
+
 const tabs = ['overview', 'invoices', 'payments', 'risk history', 'collections'] as const
 
 function ARAgingBuckets({ data }: { data: any }) {
@@ -280,7 +282,7 @@ export function CustomerProfilePage() {
     try {
       const parsed = JSON.parse(riskExplanation.shap_values)
       return Object.entries(parsed).map(([key, value]) => ({
-        name: key.replace(/_/g, ' ').toUpperCase(),
+        name: (key || '').replace(/_/g, ' ').toUpperCase(),
         weight: value as number,
       })).sort((a, b) => b.weight - a.weight)
     } catch {
@@ -323,7 +325,7 @@ export function CustomerProfilePage() {
                 <h3 className="numeric">₹{Math.round(data.total_outstanding).toLocaleString()}</h3>
                 <p>Avg Delay: {data.avg_delay.toFixed(1)}d</p>
                 <p>On-Time Ratio: {Math.round(data.on_time_ratio * 100)}%</p>
-                <p>Last Payment: {new Date(data.last_payment_date).toLocaleDateString()}</p>
+                <p>Last Payment: {formatDate(data.last_payment_date)}</p>
                 <ARAgingBuckets data={data} />
                 <FinancialRiskExplanationPanel data={data} />
               </div>
@@ -387,7 +389,7 @@ export function CustomerProfilePage() {
                         {col.action.toUpperCase()}
                       </strong>
                       <span className="text-secondary mono" style={{ fontSize: '0.85rem' }}>
-                        {new Date(col.timestamp).toLocaleString()}
+                        {formatDateTime(col.timestamp)}
                       </span>
                     </div>
                     <p style={{ margin: '0.4rem 0', color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.4' }}>{col.reason}</p>

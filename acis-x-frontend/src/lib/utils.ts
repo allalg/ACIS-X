@@ -17,12 +17,37 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-IN').format(value)
 }
 
-export function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString)
+export function safeDate(input: string | number | Date | null | undefined): Date | null {
+  if (!input) return null
+  const d = new Date(input)
+  return isNaN(d.getTime()) ? null : d
+}
+
+export function formatDate(input: string | number | Date | null | undefined, locale = 'en-IN'): string {
+  const d = safeDate(input)
+  if (!d) return '—'
+  return d.toLocaleDateString(locale)
+}
+
+export function formatDateTime(input: string | number | Date | null | undefined, locale = 'en-IN'): string {
+  const d = safeDate(input)
+  if (!d) return '—'
+  return d.toLocaleString(locale)
+}
+
+export function formatTime(input: string | number | Date | null | undefined, locale = 'en-IN'): string {
+  const d = safeDate(input)
+  if (!d) return '—'
+  return d.toLocaleTimeString(locale)
+}
+
+export function formatRelativeTime(isoString: string | null | undefined): string {
+  const date = safeDate(isoString)
+  if (!date) return '—'
   const diffMs = Date.now() - date.getTime()
   const diffSec = Math.round(diffMs / 1000)
   if (diffSec < 60) {
-    return `${diffSec}s ago`
+    return `${Math.max(0, diffSec)}s ago`
   }
   const diffMin = Math.round(diffSec / 60)
   if (diffMin < 60) {
@@ -36,8 +61,9 @@ export function formatRelativeTime(isoString: string): string {
   return `${diffDay}d ago`
 }
 
-export function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString)
+export function formatTimestamp(isoString: string | null | undefined): string {
+  const date = safeDate(isoString)
+  if (!date) return '—'
   return new Intl.DateTimeFormat('en-IN', {
     hour: '2-digit',
     minute: '2-digit',

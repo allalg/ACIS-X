@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '../../lib/utils'
 import type { Invoice } from '../../types/ledger'
 import { EmptyState } from '../ui/EmptyState'
 import { StatusBadge } from './StatusBadge'
@@ -81,7 +81,7 @@ export function InvoiceTable({
                     <td>{invoice.customer_name}</td>
                     <td className="numeric">{formatCurrency(invoice.total_amount, invoice.currency)}</td>
                     <td className="numeric">{formatCurrency(invoice.paid_amount, invoice.currency)}</td>
-                    <td className="numeric">{new Date(invoice.due_date).toLocaleDateString('en-IN')}</td>
+                    <td className="numeric">{formatDate(invoice.due_date)}</td>
                     <td>
                       <StatusBadge status={invoice.status} />
                     </td>
@@ -106,19 +106,19 @@ export function InvoiceTable({
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Issued Date</span>
-                              <span className="detail-value numeric">{new Date(invoice.issued_date).toLocaleDateString('en-IN')}</span>
+                              <span className="detail-value numeric">{formatDate(invoice.issued_date)}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Due Date</span>
-                              <span className="detail-value numeric">{new Date(invoice.due_date).toLocaleDateString('en-IN')}</span>
+                              <span className="detail-value numeric">{formatDate(invoice.due_date)}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Created</span>
-                              <span className="detail-value numeric">{new Date(invoice.created_at).toLocaleString('en-IN')}</span>
+                              <span className="detail-value numeric">{formatDateTime(invoice.created_at)}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Last Updated</span>
-                              <span className="detail-value numeric">{new Date(invoice.updated_at).toLocaleString('en-IN')}</span>
+                              <span className="detail-value numeric">{formatDateTime(invoice.updated_at)}</span>
                             </div>
                           </div>
                         </div>

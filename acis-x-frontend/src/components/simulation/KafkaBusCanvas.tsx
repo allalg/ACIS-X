@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PIPELINE_AGENTS, OPERATIONAL_AGENTS } from '../../types/agent'
 import type { EventEnvelope } from '../../types/events'
+import { safeDate } from '../../lib/utils'
 import { AgentNode } from './AgentNode'
 import { BusLine } from './BusLine'
 import { PacketOrchestrator } from './PacketOrchestrator'
@@ -135,9 +136,8 @@ export function KafkaBusCanvas({ events, focusAgent, onSelectAgent }: KafkaBusCa
         {/* Draw all agents */}
         {Array.from(positions.entries()).map(([agent, pos]) => {
           const sourceEvent = lastEventsBySource.get(agent)
-          const ageMs = sourceEvent
-            ? now - new Date(sourceEvent.event_time).getTime()
-            : Number.MAX_SAFE_INTEGER
+          const eventDate = sourceEvent ? safeDate(sourceEvent.event_time) : null
+          const ageMs = eventDate ? now - eventDate.getTime() : Number.MAX_SAFE_INTEGER
           
           let status: 'idle' | 'active' | 'processing' | 'error' = 'idle'
           

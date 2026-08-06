@@ -37,14 +37,14 @@ export function EventLog({ events, focusAgent }: EventLogProps) {
       </header>
       <div className="event-list-wrap">
         {filtered.slice(-240).map((event) => {
-          const source = event.event_source.replace('Agent', '')
+          const source = (event.event_source || '').replace('Agent', '')
           const isRestart = event.event_type === 'agent.restart.requested'
           const isPauseResume = event.event_type === 'scenario.pause' || event.event_type === 'scenario.resume'
           const isHeartbeat = event.event_type === 'agent.heartbeat' || event.event_type === 'agent.metrics.updated'
 
           return (
             <div
-              key={event.event_id}
+              key={event.event_id || Math.random().toString()}
               className="event-row"
               style={{
                 backgroundColor: isRestart
@@ -57,7 +57,7 @@ export function EventLog({ events, focusAgent }: EventLogProps) {
               }}
             >
               <span className="event-time numeric">{formatTimestamp(event.event_time)}</span>
-              <span className="event-id mono">{event.event_id.slice(0, 8)}...</span>
+              <span className="event-id mono">{(event.event_id || '').slice(0, 8)}...</span>
               <span
                 className="event-type mono"
                 style={{
