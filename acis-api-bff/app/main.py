@@ -271,13 +271,19 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
             yield "data: [BFF] Log file not found\n\n"
             return
         
+        idle_ticks = 0
         with open(log_path, 'r', encoding='utf-8') as f:
             f.seek(0, os.SEEK_END)
             while True:
                 line = f.readline()
                 if not line:
                     await asyncio.sleep(0.5)
+                    idle_ticks += 1
+                    if idle_ticks >= 6:
+                        yield "data: [BFF] ping\n\n"
+                        idle_ticks = 0
                     continue
+                idle_ticks = 0
                 yield f"data: {line.strip()}\n\n"
                 
     return StreamingResponse(
@@ -439,13 +445,21 @@ async def _client_stream_generator():
     queue: asyncio.Queue = asyncio.Queue(maxsize=256)
     _sse_clients.add(queue)
     try:
-        yield ': ping\n\n'
+        init_evt = json.dumps({
+            "event_id": "evt_init",
+            "event_type": "system.connected",
+            "event_time": datetime.now(timezone.utc).isoformat() + "Z",
+            "entity_type": "system",
+            "entity_id": "bff",
+            "payload": {"status": "connected"}
+        })
+        yield f"event: acis_event\ndata: {init_evt}\n\n"
         while True:
             try:
-                data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                data = await asyncio.wait_for(queue.get(), timeout=3.0)
                 yield data
             except asyncio.TimeoutError:
-                yield ': heartbeat\n\n'
+                yield 'event: ping\ndata: {"status":"alive"}\n\n'
     except asyncio.CancelledError:
         logger.info('SSE client disconnected')
         raise
