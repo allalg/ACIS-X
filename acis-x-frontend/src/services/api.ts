@@ -31,6 +31,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY,
+      'bypass-tunnel-reminder': 'true',
+      'ngrok-skip-browser-warning': 'true',
       ...(init?.headers ?? {}),
     },
   })

@@ -1,11 +1,11 @@
 import type { EventEnvelope, EventStreamStatus } from '../types/events'
-import { API_KEY } from './api'
+import { API_BASE_URL, API_KEY } from './api'
 
 export type EventCallback = (event: EventEnvelope) => void
 export type StatusCallback = (status: EventStreamStatus) => void
 
 const STREAM_URL =
-  import.meta.env.VITE_STREAM_URL ?? 'http://localhost:8000/api/v1/events/stream'
+  import.meta.env.VITE_STREAM_URL ?? `${API_BASE_URL}/api/v1/events/stream`
 
 class EventStreamService {
   private source: EventSource | null = null
@@ -28,6 +28,8 @@ class EventStreamService {
       // Native EventSource does not support custom headers, so key is passed in query.
       url.searchParams.set('api_key', API_KEY)
     }
+    url.searchParams.set('bypass-tunnel-reminder', 'true')
+    url.searchParams.set('ngrok-skip-browser-warning', 'true')
 
     this.source = new EventSource(url.toString())
 
