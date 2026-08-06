@@ -44,7 +44,7 @@ export function getRuntimeApiUrl(): string {
 }
 
 export const API_BASE_URL = getResolvedApiBaseUrl()
-const API_KEY = import.meta.env.VITE_API_KEY ?? ''
+export const API_KEY = import.meta.env.VITE_API_KEY || 'change_me'
 const USE_STUBS = false // Keeping constant exported for backward compatibility if used elsewhere
 
 export class ApiError extends Error {
@@ -177,4 +177,4 @@ export const api = {
   },
 }
 
-export { API_KEY, USE_STUBS }
+export { USE_STUBS }

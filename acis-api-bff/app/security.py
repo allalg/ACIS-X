@@ -20,6 +20,8 @@ def require_api_key(
     provided = x_api_key or api_key_query
 
     if not provided:
+        if settings.env == 'development':
+            return settings.api_key
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Missing API key. Provide it via X-API-Key header or api_key query param.',
