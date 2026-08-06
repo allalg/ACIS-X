@@ -265,6 +265,7 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
     async def log_generator():
         import os
         import asyncio
+        yield "data: [BFF] Log stream connected\n\n"
         log_path = "/app/acis.log"
         if not os.path.exists(log_path):
             yield "data: [BFF] Log file not found\n\n"
@@ -279,7 +280,15 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
                     continue
                 yield f"data: {line.strip()}\n\n"
                 
-    return StreamingResponse(log_generator(), media_type='text/event-stream')
+    return StreamingResponse(
+        log_generator(),
+        media_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        },
+    )
 
 
 def _broadcast_sse_event(event_dict: dict) -> None:
@@ -430,6 +439,7 @@ async def _client_stream_generator():
     queue: asyncio.Queue = asyncio.Queue(maxsize=256)
     _sse_clients.add(queue)
     try:
+        yield ': ping\n\n'
         while True:
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=15.0)
@@ -445,4 +455,12 @@ async def _client_stream_generator():
 
 @app.get('/api/v1/events/stream')
 async def events_stream(_: str = Depends(require_api_key)):
-    return StreamingResponse(_client_stream_generator(), media_type='text/event-stream')
+    return StreamingResponse(
+        _client_stream_generator(),
+        media_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        },
+    )
