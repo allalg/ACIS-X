@@ -9,8 +9,41 @@ import type { AgentsStatusResponse } from '../types/agent'
 import type { InvoiceResponse, PaymentResponse } from '../types/ledger'
 import type { MetricsResult } from '../types/metrics'
 
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '')
+function getResolvedApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search)
+    const paramUrl = urlParams.get('api_url')
+    if (paramUrl) {
+      const cleanParam = paramUrl.trim().replace(/\/+$/, '')
+      localStorage.setItem('acis_api_url', cleanParam)
+      return cleanParam
+    }
+
+    const storedUrl = localStorage.getItem('acis_api_url')
+    if (storedUrl) {
+      return storedUrl.trim().replace(/\/+$/, '')
+    }
+  }
+
+  const rawBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  return rawBaseUrl.trim().replace(/\/+$/, '')
+}
+
+export function setRuntimeApiUrl(url: string) {
+  const clean = url.trim().replace(/\/+$/, '')
+  if (clean) {
+    localStorage.setItem('acis_api_url', clean)
+  } else {
+    localStorage.removeItem('acis_api_url')
+  }
+  window.location.reload()
+}
+
+export function getRuntimeApiUrl(): string {
+  return getResolvedApiBaseUrl()
+}
+
+export const API_BASE_URL = getResolvedApiBaseUrl()
 const API_KEY = import.meta.env.VITE_API_KEY ?? ''
 const USE_STUBS = false // Keeping constant exported for backward compatibility if used elsewhere
 
@@ -27,7 +60,8 @@ export class ApiError extends Error {
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const baseUrl = getRuntimeApiUrl()
+  const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -143,4 +177,4 @@ export const api = {
   },
 }
 
-export { API_BASE_URL, API_KEY, USE_STUBS }
+export { API_KEY, USE_STUBS }
