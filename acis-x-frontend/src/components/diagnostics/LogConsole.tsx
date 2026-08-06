@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { API_KEY } from '../../services/api'
+import { API_BASE_URL, API_KEY } from '../../services/api'
 
 const LOGS_URL =
-  import.meta.env.VITE_LOGS_URL ?? 'http://localhost:8000/api/v1/system/logs/stream'
+  import.meta.env.VITE_LOGS_URL ?? `${API_BASE_URL}/api/v1/system/logs/stream`
 
 type LogEntry = {
   ts?: string
@@ -21,6 +21,8 @@ export function LogConsole() {
     if (API_KEY) {
       url.searchParams.set('api_key', API_KEY)
     }
+    url.searchParams.set('bypass-tunnel-reminder', 'true')
+    url.searchParams.set('ngrok-skip-browser-warning', 'true')
 
     const source = new EventSource(url.toString())
 

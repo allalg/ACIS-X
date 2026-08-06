@@ -9,7 +9,8 @@ import type { AgentsStatusResponse } from '../types/agent'
 import type { InvoiceResponse, PaymentResponse } from '../types/ledger'
 import type { MetricsResult } from '../types/metrics'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '')
 const API_KEY = import.meta.env.VITE_API_KEY ?? ''
 const USE_STUBS = false // Keeping constant exported for backward compatibility if used elsewhere
 
