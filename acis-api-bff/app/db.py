@@ -1,19 +1,85 @@
 from __future__ import annotations
-from datetime import timezone
 
+import os
+import re
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .config import load_settings
+
+_PLACEHOLDER_RE = re.compile(r"\?")
+
+
+class _CompatRow(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+class _PgCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, sql, params=None):
+        self._cursor.execute(_PLACEHOLDER_RE.sub("%s", sql), params or ())
+        return self
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        return _CompatRow(row) if isinstance(row, dict) else row
+
+    def fetchall(self):
+        return [
+            _CompatRow(row) if isinstance(row, dict) else row
+            for row in self._cursor.fetchall()
+        ]
+
+
+class _PgConn:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return _PgCursor(self._conn.cursor())
+
+    def execute(self, sql, params=None):
+        cur = self.cursor()
+        cur.execute(sql, params)
+        return cur
+
+    def close(self):
+        self._conn.close()
+
+
+def _is_postgres() -> bool:
+    settings = load_settings()
+    url = settings.database_url or os.getenv("ACIS_DATABASE_URL") or os.getenv("DATABASE_URL")
+    return bool(url and url.startswith(("postgres://", "postgresql://")))
 
 
 @contextmanager
 def get_connection():
     settings = load_settings()
+    database_url = settings.database_url or os.getenv("ACIS_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if database_url and database_url.startswith(("postgres://", "postgresql://")):
+        import psycopg
+        from psycopg.rows import dict_row
+
+        url = database_url
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://") :]
+        raw = psycopg.connect(url, row_factory=dict_row)
+        conn = _PgConn(raw)
+        try:
+            yield conn
+        finally:
+            conn.close()
+        return
+
     db_path = settings.db_path
     if not db_path.startswith("file:"):
-        import os
         abs_path = os.path.abspath(db_path).replace("\\", "/")
         if not abs_path.startswith("/"):
             abs_path = "/" + abs_path
@@ -26,7 +92,7 @@ def get_connection():
         conn.close()
 
 
-def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
+def rows_to_dicts(rows) -> list[dict]:
     return [dict(row) for row in rows]
 
 
@@ -88,8 +154,18 @@ def get_customers(search: str | None = None) -> list[dict]:
             c.credit_limit,
             c.risk_score,
             c.status,
-            COALESCE(rp.combined_risk, c.risk_score, 0) AS combined_risk,
-            COALESCE(rp.severity, 'low') AS severity,
+            CASE
+              WHEN rp.customer_id IS NULL THEN NULL
+              ELSE COALESCE(rp.combined_risk, c.risk_score, 0)
+            END AS combined_risk,
+            CASE
+              WHEN rp.customer_id IS NULL THEN 'pending'
+              ELSE COALESCE(rp.severity, 'low')
+            END AS severity,
+            CASE
+              WHEN rp.customer_id IS NULL THEN 'pending'
+              ELSE 'ready'
+            END AS enrichment_status,
             COALESCE(cm.total_outstanding, 0) AS total_outstanding,
             COALESCE(cm.avg_delay, 0) AS avg_delay,
             COALESCE(cm.on_time_ratio, 0) AS on_time_ratio,
@@ -104,7 +180,7 @@ def get_customers(search: str | None = None) -> list[dict]:
         query += ' WHERE c.name LIKE ? OR c.customer_id LIKE ?'
         params.extend([f'%{search}%', f'%{search}%'])
 
-    query += ' ORDER BY combined_risk DESC'
+    query += ' ORDER BY (combined_risk IS NULL), combined_risk DESC'
 
     with get_connection() as conn:
         rows = conn.execute(query, params).fetchall()
@@ -128,11 +204,24 @@ def get_customer_by_id(customer_id: str) -> dict | None:
             COALESCE(cm.aging_90_plus, 0) AS aging_90_plus,
             COALESCE((SELECT COUNT(*) FROM invoices i WHERE i.customer_id = c.customer_id AND i.status = 'overdue'), 0) AS overdue_count,
             COALESCE(cm.last_payment_date, c.updated_at) AS last_payment_date,
-            COALESCE(rp.financial_risk, 0) AS financial_risk,
-            COALESCE(rp.litigation_risk, 0) AS litigation_risk,
-            COALESCE(rp.combined_risk, c.risk_score, 0) AS combined_risk,
-            COALESCE(rp.severity, 'low') AS severity,
-            COALESCE(rp.confidence, 0.5) AS confidence,
+            rp.financial_risk AS financial_risk,
+            rp.litigation_risk AS litigation_risk,
+            CASE
+              WHEN rp.customer_id IS NULL THEN NULL
+              ELSE COALESCE(rp.combined_risk, c.risk_score, 0)
+            END AS combined_risk,
+            CASE
+              WHEN rp.customer_id IS NULL THEN 'pending'
+              ELSE COALESCE(rp.severity, 'low')
+            END AS severity,
+            CASE
+              WHEN rp.customer_id IS NULL THEN 'pending'
+              ELSE 'ready'
+            END AS enrichment_status,
+            CASE
+              WHEN rp.customer_id IS NULL THEN NULL
+              ELSE COALESCE(rp.confidence, 0.5)
+            END AS confidence,
             COALESCE(rp.updated_at, c.updated_at, c.created_at) AS updated_at
         FROM customers c
         LEFT JOIN customer_metrics cm ON cm.customer_id = c.customer_id
@@ -161,6 +250,19 @@ def get_invoices(customer_id: str | None, status: str | None, page: int, limit: 
 
     where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ''
 
+    if _is_postgres():
+        days_overdue = (
+            "CASE WHEN i.status = 'overdue' "
+            "THEN GREATEST(0, (CURRENT_DATE - NULLIF(i.due_date, '')::date)) "
+            "ELSE 0 END"
+        )
+    else:
+        days_overdue = (
+            "CASE WHEN i.status = 'overdue' "
+            "THEN CAST(julianday('now') - julianday(i.due_date) AS INTEGER) "
+            "ELSE 0 END"
+        )
+
     query = f"""
         SELECT
             i.invoice_id,
@@ -172,10 +274,7 @@ def get_invoices(customer_id: str | None, status: str | None, page: int, limit: 
             i.issued_date,
             i.due_date,
             i.status,
-            CASE
-              WHEN i.status = 'overdue' THEN CAST(julianday('now') - julianday(i.due_date) AS INTEGER)
-              ELSE 0
-            END AS days_overdue,
+            {days_overdue} AS days_overdue,
             i.created_at,
             i.updated_at
         FROM invoices i
@@ -340,7 +439,9 @@ ALLOWED_TABLES = {
     "customer_risk_profile",
     "collections_log",
     "risk_explanations",
-    "external_intelligence_cache",
+    "external_litigation",
+    "external_financials",
+    "event_log",
 }
 
 
@@ -348,9 +449,25 @@ def get_table_rows(table_name: str, limit: int = 50) -> dict:
     table_clean = table_name.lower().strip()
     if table_clean not in ALLOWED_TABLES:
         return {"error": f"Invalid or restricted table '{table_name}'", "rows": [], "total": 0}
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        count = cursor.execute(f"SELECT COUNT(*) FROM {table_clean}").fetchone()[0]
-        rows = cursor.execute(f"SELECT * FROM {table_clean} ORDER BY ROWID DESC LIMIT ?", (limit,)).fetchall()
-        return {"table_name": table_clean, "total": count, "rows": rows_to_dicts(rows)}
+    order = "ORDER BY created_at DESC NULLS LAST" if _is_postgres() else "ORDER BY ROWID DESC"
+    # Some tables lack created_at — fall back to unordered limit on Postgres
+    if _is_postgres() and table_clean in {"external_financials", "customer_metrics", "customer_risk_profile"}:
+        order = "ORDER BY updated_at DESC NULLS LAST"
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            count = cursor.execute(f"SELECT COUNT(*) FROM {table_clean}").fetchone()[0]
+            try:
+                rows = cursor.execute(
+                    f"SELECT * FROM {table_clean} {order} LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            except Exception:
+                rows = cursor.execute(
+                    f"SELECT * FROM {table_clean} LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return {"table_name": table_clean, "total": count, "rows": rows_to_dicts(rows)}
+    except Exception as exc:
+        return {"error": str(exc), "rows": [], "total": 0}
 

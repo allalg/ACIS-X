@@ -1,5 +1,6 @@
 from datetime import timezone
 import logging
+import os
 import random
 import threading
 from datetime import datetime
@@ -34,7 +35,7 @@ class CustomerStateAgent(BaseAgent):
     TOPIC_INVOICES = "acis.invoices"
     TOPIC_PAYMENTS = "acis.payments"
     TOPIC_METRICS = "acis.metrics"
-    DB_PATH = "acis.db"
+    DB_PATH = os.getenv("ACIS_DB_PATH", "acis.db")
     IGNORE_STALE_EVENTS_ON_STARTUP = True
 
     def __init__(

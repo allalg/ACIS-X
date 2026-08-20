@@ -49,6 +49,7 @@
   --risk-medium: #f59e0b;
   --risk-high: #ef4444;
   --risk-critical: #dc2626;
+  --risk-pending: #94a3b8;
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -190,6 +191,36 @@ select {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid transparent;
+}
+
+.badge.severity-pending {
+  color: var(--risk-pending);
+  border-color: color-mix(in srgb, var(--risk-pending) 45%, transparent);
+  background: color-mix(in srgb, var(--risk-pending) 12%, transparent);
+}
+
+.badge.severity-low {
+  color: var(--risk-low);
+  border-color: color-mix(in srgb, var(--risk-low) 45%, transparent);
+  background: color-mix(in srgb, var(--risk-low) 12%, transparent);
+}
+
+.badge.severity-medium {
+  color: var(--risk-medium);
+  border-color: color-mix(in srgb, var(--risk-medium) 45%, transparent);
+  background: color-mix(in srgb, var(--risk-medium) 12%, transparent);
+}
+
+.badge.severity-high {
+  color: var(--risk-high);
+  border-color: color-mix(in srgb, var(--risk-high) 45%, transparent);
+  background: color-mix(in srgb, var(--risk-high) 12%, transparent);
+}
+
+.badge.severity-critical {
+  color: var(--risk-critical);
+  border-color: color-mix(in srgb, var(--risk-critical) 45%, transparent);
+  background: color-mix(in srgb, var(--risk-critical) 12%, transparent);
 }
 
 .input-dark,

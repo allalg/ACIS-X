@@ -1,5 +1,6 @@
 from datetime import timezone
 import logging
+import os
 import threading
 import sqlite3
 from collections import deque
@@ -83,7 +84,7 @@ class MemoryAgent(BaseAgent):
         # Reference to QueryAgent (DB source of truth)
 
         # SQLite for metrics persistence (optional but recommended)
-        self._db_path = "acis.db"
+        self._db_path = os.getenv("ACIS_DB_PATH", "acis.db")
         self._db_lock = threading.Lock()
         self._persistent_conn = None
         logger.info("QueryAgent reference set for state recomputation")
@@ -91,21 +92,23 @@ class MemoryAgent(BaseAgent):
     def _get_uri_path(self) -> str:
         if self._db_path.startswith("file:"):
             return self._db_path
-        import os
-        abs_path = os.path.abspath(self._db_path).replace("\\", "/")
+        import os as _os
+        abs_path = _os.path.abspath(self._db_path).replace("\\", "/")
         if not abs_path.startswith("/"):
             abs_path = "/" + abs_path
         return f"file:{abs_path}?nolock=1"
 
-    def _get_persistent_conn(self) -> sqlite3.Connection:
+    def _get_db_connection(self):
+        from utils.db_connection import connect as db_connect
+        return db_connect(self._db_path)
+
+    def _get_persistent_conn(self):
         if self._persistent_conn is None:
-            self._persistent_conn = sqlite3.connect(
-                self._get_uri_path(),
-                uri=True,
-                check_same_thread=False
-            )
-            self._persistent_conn.execute("PRAGMA foreign_keys = ON")
-            self._persistent_conn.execute("PRAGMA journal_mode = DELETE")
+            from utils.db_connection import connect as db_connect, is_postgres
+            self._persistent_conn = db_connect(self._db_path)
+            if not is_postgres():
+                self._persistent_conn.execute("PRAGMA foreign_keys = ON")
+                self._persistent_conn.execute("PRAGMA journal_mode = DELETE")
         return self._persistent_conn
 
     def subscribe(self) -> List[str]:
@@ -568,8 +571,9 @@ class MemoryAgent(BaseAgent):
             now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
+                INSERT INTO customers (customer_id, name, created_at, updated_at)
                 VALUES (?, ?, ?, ?)
+                ON CONFLICT(customer_id) DO NOTHING
                 """,
                 (customer_id, customer_id, now, now),
             )

@@ -1,0 +1,72 @@
+{
+  "dataset": "synthetic_n500_seed42_train70_test30",
+  "label_rule": "will_default if gt_risk>0.50; gt includes behavioural+external terms",
+  "note": "XGBoost not installed; GradientBoostingClassifier used as boosted-tree baseline",
+  "results": [
+    {
+      "name": "LogisticRegression_basic",
+      "f1": 0.9441,
+      "auc": 0.9909,
+      "n_train": 350,
+      "n_test": 150
+    },
+    {
+      "name": "LogisticRegression_enriched",
+      "f1": 0.9937,
+      "auc": 0.9998,
+      "n_train": 350,
+      "n_test": 150
+    },
+    {
+      "name": "RandomForest_basic",
+      "f1": 0.8929,
+      "auc": 0.9634,
+      "n_train": 350,
+      "n_test": 150
+    },
+    {
+      "name": "RandomForest_enriched",
+      "f1": 0.9375,
+      "auc": 0.9801,
+      "n_train": 350,
+      "n_test": 150
+    },
+    {
+      "name": "GradientBoosting_basic",
+      "f1": 0.9375,
+      "auc": 0.9761,
+      "n_train": 350,
+      "n_test": 150
+    },
+    {
+      "name": "GradientBoosting_enriched",
+      "f1": 0.95,
+      "auc": 0.9909,
+      "n_train": 350,
+      "n_test": 150
+    },
+    {
+      "name": "NaiveUtilisationThreshold",
+      "f1": 0.5484,
+      "auc": null,
+      "n_train": 0,
+      "n_test": 150
+    },
+    {
+      "name": "ACIS_X_RiskScoring_enriched_context",
+      "f1": 0.7869,
+      "auc": 0.8197,
+      "n_train": 0,
+      "n_test": 150
+    }
+  ],
+  "ci_intelligence_n100": {
+    "n": 100,
+    "f1_acis": 0.8244,
+    "f1_naive": 0.6531,
+    "rho_acis": 0.719,
+    "rho_ar": 0.6481,
+    "rho_overdue": 0.4182,
+    "rho_behavior": 0.5498
+  }
+}

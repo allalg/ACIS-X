@@ -83,10 +83,11 @@ def handle_payment_received(agent: "DBAgent", event: Event) -> None:
 
             if invoice_id:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO invoices (
+                    INSERT INTO invoices (
                         invoice_id, customer_id, total_amount, paid_amount,
                         issued_date, due_date, status, created_at, updated_at
                     ) VALUES (?, ?, 0.0, 0.0, ?, ?, 'pending', ?, ?)
+                    ON CONFLICT(invoice_id) DO NOTHING
                 """, (invoice_id, customer_id, now, now, now, now))
                 if cursor.rowcount > 0:
                     logger.info(
@@ -96,9 +97,10 @@ def handle_payment_received(agent: "DBAgent", event: Event) -> None:
 
             # Insert payment (idempotent)
             cursor.execute("""
-                INSERT OR IGNORE INTO payments (
+                INSERT INTO payments (
                     payment_id, invoice_id, customer_id, amount, payment_date, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(payment_id) DO NOTHING
             """, (payment_id, invoice_id, customer_id, amount, payment_date, now))
 
             if cursor.rowcount > 0:

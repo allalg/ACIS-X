@@ -268,7 +268,7 @@ export const AGENT_KNOWLEDGE_BASE: Record<string, AgentKnowledge> = {
     ],
     consumedEvents: ['customer.metrics.updated'],
     emittedEvents: ['external.data.updated'],
-    databaseTables: ['external_intelligence_cache'],
+    databaseTables: ['external_litigation', 'external_financials'],
   },
 
   TimeTickAgent: {

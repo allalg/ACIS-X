@@ -323,7 +323,13 @@ class TestExternalEnrichmentAblation:
     ground truth (no self-fulfilling setup).
     """
 
-    def _run_aggregation(self, companies: List[Dict], enable_financial: bool) -> List[float]:
+    def _run_aggregation(
+        self,
+        companies: List[Dict],
+        enable_financial: bool,
+        financial_weight: float = 0.6,
+        litigation_weight: float = 0.4,
+    ) -> List[float]:
         from agents.intelligence.aggregator_agent import AggregatorAgent
 
         kafka = MagicMock()
@@ -334,7 +340,11 @@ class TestExternalEnrichmentAblation:
             return True
 
         kafka.publish.side_effect = capture
-        agent = AggregatorAgent(kafka_client=kafka)
+        agent = AggregatorAgent(
+            kafka_client=kafka,
+            financial_weight=financial_weight,
+            litigation_weight=litigation_weight,
+        )
         per_customer: Dict[str, float] = {}
 
         for company in companies:
@@ -430,3 +440,47 @@ class TestExternalEnrichmentAblation:
             f"Enriched ρ={rho_enriched:.4f} must be strictly > ablated ρ={rho_ablated:.4f}. "
             f"If equal, the financial signal is not being incorporated by AggregatorAgent."
         )
+
+    def test_fusion_weight_sensitivity(self):
+        """
+        Sensitivity analysis across alternative fusion weights (50/50, 60/40, 70/30).
+        Demonstrates ranking stability under weight perturbations.
+        """
+        companies = [
+            {
+                "customer_id": f"cust_sens_{i:03d}",
+                "name": f"Corp {i:03d}",
+                "ground_truth_risk": 0.1 + (i / 50) * 0.8,
+                "litigation_risk": 0.15 + (i % 8) * 0.08,
+            }
+            for i in range(50)
+        ]
+        ground_truth = [c["ground_truth_risk"] for c in companies]
+
+        # Evaluate 50/50, 60/40, 70/30
+        weights = [(0.50, 0.50), (0.60, 0.40), (0.70, 0.30)]
+        rhos = {}
+
+        for fin_w, lit_w in weights:
+            scores = self._run_aggregation(
+                companies,
+                enable_financial=True,
+                financial_weight=fin_w,
+                litigation_weight=lit_w,
+            )
+            n = min(len(ground_truth), len(scores))
+            rho = _spearman(ground_truth[:n], scores[:n])
+            rhos[f"{int(fin_w*100)}/{int(lit_w*100)}"] = rho
+
+        logger.info(f"\n  Weight Sensitivity Spearman ρ: {rhos}")
+
+        print(f"\nWeight Sensitivity Results: {rhos}")
+
+        # Assert all weights produce strong rank correlation (> 0.75)
+        for label, rho_val in rhos.items():
+            assert rho_val > 0.75, f"Weight configuration {label} produced weak correlation {rho_val}"
+
+        # Assert 60/40 and 70/30 both provide strong predictive correlation
+        assert rhos["60/40"] > 0.85
+        assert rhos["70/30"] > 0.90
+

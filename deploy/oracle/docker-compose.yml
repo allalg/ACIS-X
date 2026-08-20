@@ -1,0 +1,28 @@
+# Engine-only stack for Oracle Always Free ARM (or any always-on VM).
+# Uses Confluent Cloud + Supabase — no local Kafka/SQLite.
+#
+# Usage on the VM:
+#   cp .env.cloud .env
+#   docker compose -f deploy/oracle/docker-compose.yml --env-file .env up -d --build
+
+services:
+  acis-engine:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: acis-engine:oracle
+    container_name: acis-engine
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      ACIS_DEPLOY_MODE: oracle
+      ACIS_KAFKA_BACKEND: confluent
+      ACIS_LOG_PATH: /data/acis.log
+      # DB comes from DATABASE_URL / ACIS_DATABASE_URL in .env (Supabase)
+    volumes:
+      - acis-engine-logs:/data
+    # Outbound only — Confluent + Supabase
+
+volumes:
+  acis-engine-logs:

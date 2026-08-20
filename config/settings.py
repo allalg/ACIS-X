@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -25,7 +25,7 @@ class ACISSettings(BaseSettings):
 
     model_config = {
         'env_prefix': 'ACIS_',
-        'env_file': '.env',
+        'env_file': ('.env', '.env.cloud'),
         'env_file_encoding': 'utf-8',
         'extra': 'ignore',
     }
@@ -38,6 +38,22 @@ class ACISSettings(BaseSettings):
     kafka_backend: str = Field(
         default='confluent',
         description='Kafka client backend: "confluent" or "kafka-python"',
+    )
+    kafka_security_protocol: str = Field(
+        default='PLAINTEXT',
+        description='PLAINTEXT for local Docker; SASL_SSL for Confluent Cloud',
+    )
+    kafka_sasl_mechanism: str | None = Field(
+        default=None,
+        description='SASL mechanism (PLAIN for Confluent Cloud API keys)',
+    )
+    kafka_sasl_username: str | None = Field(
+        default=None,
+        description='SASL username (Confluent API key)',
+    )
+    kafka_sasl_password: str | None = Field(
+        default=None,
+        description='SASL password (Confluent API secret)',
     )
     offset_reset: str = Field(
         default='latest',
@@ -66,7 +82,15 @@ class ACISSettings(BaseSettings):
     critical_lag_threshold: int = Field(default=200)
 
     # ── Database ───────────────────────────────────────────────────────────
-    db_path: str = Field(default='acis.db', description='Path to the SQLite database file')
+    database_url: str | None = Field(
+        default=None,
+        description='Postgres URL (Supabase). When set, used instead of SQLite.',
+    )
+    db_path: str = Field(default='acis.db', description='SQLite path when DATABASE_URL is unset')
+    deploy_mode: str = Field(
+        default='local',
+        description='local | oracle | cloud — informational label for logs/docs',
+    )
 
     # ── Logging ────────────────────────────────────────────────────────────
     log_level: str = Field(default='INFO')
@@ -93,6 +117,16 @@ class ACISSettings(BaseSettings):
         if v not in valid:
             raise ValueError(f'Invalid Kafka backend "{v}". Must be one of: {valid}')
         return v
+
+    @model_validator(mode='before')
+    @classmethod
+    def accept_database_url_aliases(cls, data: object) -> object:
+        """Allow DATABASE_URL / ACIS_DATABASE_URL without requiring the ACIS_ prefix alone."""
+        if not isinstance(data, dict):
+            return data
+        if not data.get('database_url'):
+            data['database_url'] = os.getenv('ACIS_DATABASE_URL') or os.getenv('DATABASE_URL')
+        return data
 
 
 @lru_cache(maxsize=1)

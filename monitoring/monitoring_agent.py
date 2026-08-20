@@ -10,7 +10,7 @@ without directly querying the registry or triggering self-healing actions.
 import logging
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from agents.base.base_agent import BaseAgent
@@ -36,6 +36,11 @@ class AgentObservation:
     last_heartbeat: Optional[datetime] = None
     last_metrics_at: Optional[datetime] = None
     last_timeout_at: Optional[datetime] = None
+    # When this observation was first created — used for post-restart grace
+    first_seen_at: Optional[datetime] = None
+    # Reset when agent re-registers after spawn/restart so heartbeat gaps
+    # during dynamic re-discovery don't immediately flip CRITICAL.
+    grace_until: Optional[datetime] = None
 
     cpu_percent: Optional[float] = None
     memory_percent: Optional[float] = None
@@ -99,6 +104,9 @@ class MonitoringAgent(BaseAgent):
     HEARTBEAT_TIMEOUT_SECONDS = 60
     HEARTBEAT_CRITICAL_SECONDS = 120
     EVALUATION_INTERVAL_SECONDS = 10
+    # After register/restart, ignore missing-heartbeat criticals while the
+    # agent re-joins consumer groups and resumes heartbeats (dynamic discovery).
+    STARTUP_GRACE_SECONDS = 90
 
     LAG_THRESHOLD = 50            # FIX 3: was 5000 — matches ACIS_LAG_SCALE_THRESHOLD
     CRITICAL_LAG_THRESHOLD = 200  # FIX 3: was 10000 — matches ACIS_CRITICAL_LAG_THRESHOLD
@@ -317,6 +325,10 @@ class MonitoringAgent(BaseAgent):
             agent.registered = True
             agent.last_event_at = event.event_time
             agent.update_identity(payload)
+            # Fresh registration after restart/spawn — suppress heartbeat-gap criticals
+            # while the agent re-joins consumer groups (dynamic discovery).
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            agent.grace_until = now + timedelta(seconds=self.STARTUP_GRACE_SECONDS)
 
             topics = payload.get("topics")
             if isinstance(topics, dict):
@@ -344,9 +356,12 @@ class MonitoringAgent(BaseAgent):
 
         with self._agents_lock:
             if agent_id not in self._agents:
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
                 self._agents[agent_id] = AgentObservation(
                     agent_id=agent_id,
                     agent_name=agent_name,
+                    first_seen_at=now,
+                    grace_until=now + timedelta(seconds=self.STARTUP_GRACE_SECONDS),
                 )
             return self._agents[agent_id]
 
@@ -380,12 +395,16 @@ class MonitoringAgent(BaseAgent):
     def _evaluate_agent(self, agent_id: str, reason: str) -> None:
         """Evaluate one agent against health thresholds."""
         age_seconds = None
+        in_grace = False
         with self._agents_lock:
             agent = self._agents.get(agent_id)
             if agent is None or agent.agent_name == self.agent_name:
                 return
 
             now = datetime.now(timezone.utc).replace(tzinfo=None)
+            if agent.grace_until is not None and now < agent.grace_until:
+                in_grace = True
+
             missing_heartbeat = False
             critical_heartbeat = False
             if agent.last_heartbeat is not None:
@@ -422,6 +441,17 @@ class MonitoringAgent(BaseAgent):
 
         if overloaded:
             self._publish_overloaded_if_needed(agent_id, reason=reason)
+
+        # During post-register grace, only act on hard errors/lag — not heartbeat gaps
+        # caused by restart/spawn rebalance in the dynamic discovery path.
+        if in_grace and (missing_heartbeat or critical_heartbeat) and not (
+            timeout_detected or lag >= self.CRITICAL_LAG_THRESHOLD or error_rate >= self.CRITICAL_ERROR_RATE_THRESHOLD
+        ):
+            logger.debug(
+                "Skipping heartbeat health escalation for %s (startup grace active)",
+                agent_id,
+            )
+            return
 
         if timeout_detected or critical_heartbeat or lag >= self.CRITICAL_LAG_THRESHOLD or error_rate >= self.CRITICAL_ERROR_RATE_THRESHOLD:
             cause = "timeout_detected" if timeout_detected else "critical_monitoring_condition"

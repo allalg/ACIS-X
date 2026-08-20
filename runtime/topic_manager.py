@@ -6,10 +6,17 @@ Provides topic creation, configuration, and admin operations.
 """
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+# Environment-driven defaults for local dev flexibility.
+# 3-broker Docker Compose → RF=3, ISR=2 (default, production-like).
+# Single-broker dev       → set ACIS_REPLICATION_FACTOR=1, ACIS_MIN_INSYNC_REPLICAS=1.
+_DEFAULT_RF = int(os.getenv("ACIS_REPLICATION_FACTOR", "3"))
+_DEFAULT_ISR = int(os.getenv("ACIS_MIN_INSYNC_REPLICAS", "2"))
 
 
 # =============================================================================
@@ -22,15 +29,16 @@ class TopicConfig:
 
     name: str
     partitions: int = 3
-    # replication_factor=3: tolerates loss of 1 broker in the 3-node KRaft cluster.
-    # Set to 1 for single-broker local dev (override via env var ACIS_REPLICATION_FACTOR).
-    replication_factor: int = 3
+    # replication_factor: tolerates loss of (RF-1) brokers.
+    # Override via env var ACIS_REPLICATION_FACTOR for single-broker local dev.
+    replication_factor: int = field(default_factory=lambda: _DEFAULT_RF)
     retention_ms: Optional[int] = None  # None = infinite
     retention_bytes: Optional[int] = None
     cleanup_policy: str = "delete"  # delete or compact
     compression_type: str = "gzip"
-    # min_insync_replicas=2: writes succeed if at least 2/3 brokers acknowledge.
-    min_insync_replicas: int = 2
+    # min_insync_replicas: writes succeed if at least ISR brokers acknowledge.
+    # Override via env var ACIS_MIN_INSYNC_REPLICAS.
+    min_insync_replicas: int = field(default_factory=lambda: _DEFAULT_ISR)
 
     # Additional topic configs
     segment_ms: Optional[int] = None
@@ -266,16 +274,34 @@ DEFAULT_TOPICS = ACIS_TOPIC_CONFIGS
 class TopicAdmin:
     """Admin operations for Kafka topics."""
 
-    def __init__(self, bootstrap_servers: List[str], backend: str = "confluent"):
+    def __init__(
+        self,
+        bootstrap_servers: List[str],
+        backend: str = "confluent",
+        security_protocol: str = "PLAINTEXT",
+        sasl_mechanism: Optional[str] = None,
+        sasl_username: Optional[str] = None,
+        sasl_password: Optional[str] = None,
+    ):
         """
         Initialize topic admin client.
 
         Args:
             bootstrap_servers: Kafka broker addresses
             backend: Kafka library (confluent or kafka-python)
+            security_protocol: PLAINTEXT or SASL_SSL (Confluent Cloud)
+            sasl_*: Confluent API key credentials when using SASL_SSL
         """
-        self.bootstrap_servers = bootstrap_servers
+        self.bootstrap_servers = (
+            [s.strip() for s in bootstrap_servers.split(",") if s.strip()]
+            if isinstance(bootstrap_servers, str)
+            else list(bootstrap_servers)
+        )
         self.backend = backend
+        self.security_protocol = security_protocol
+        self.sasl_mechanism = sasl_mechanism
+        self.sasl_username = sasl_username
+        self.sasl_password = sasl_password
         self._admin_client: Optional[Any] = None
 
         if backend == "confluent":
@@ -291,6 +317,12 @@ class TopicAdmin:
             config = {
                 "bootstrap.servers": ",".join(self.bootstrap_servers),
             }
+            if self.security_protocol and self.security_protocol != "PLAINTEXT":
+                config["security.protocol"] = self.security_protocol
+                if self.sasl_mechanism:
+                    config["sasl.mechanism"] = self.sasl_mechanism
+                    config["sasl.username"] = self.sasl_username
+                    config["sasl.password"] = self.sasl_password
             self._admin_client = AdminClient(config)
             logger.info("Confluent Kafka admin client initialized")
 
@@ -303,9 +335,16 @@ class TopicAdmin:
         try:
             from kafka import KafkaAdminClient
 
-            self._admin_client = KafkaAdminClient(
-                bootstrap_servers=self.bootstrap_servers,
-            )
+            kwargs: Dict[str, Any] = {
+                "bootstrap_servers": self.bootstrap_servers,
+            }
+            if self.security_protocol and self.security_protocol != "PLAINTEXT":
+                kwargs["security_protocol"] = self.security_protocol
+                if self.sasl_mechanism:
+                    kwargs["sasl_mechanism"] = self.sasl_mechanism
+                    kwargs["sasl_plain_username"] = self.sasl_username
+                    kwargs["sasl_plain_password"] = self.sasl_password
+            self._admin_client = KafkaAdminClient(**kwargs)
             logger.info("kafka-python admin client initialized")
 
         except ImportError:

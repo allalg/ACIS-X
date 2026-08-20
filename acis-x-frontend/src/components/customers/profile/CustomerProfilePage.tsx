@@ -223,13 +223,17 @@ function FinancialRiskExplanationPanel({ data }: { data: any }) {
 }
 
 function ScoreStageExplanationPanel({ data }: { data: any }) {
-  const finRisk = data.financial_risk || 0
-  const litRisk = data.litigation_risk || 0
-  const combinedPct = Math.round((data.combined_risk || 0) * 100)
-  const severity = (data.severity || 'low').toUpperCase()
+  const pending = data.severity === 'pending' || data.enrichment_status === 'pending'
+  const finRisk = data.financial_risk ?? 0
+  const litRisk = data.litigation_risk ?? 0
+  const combinedPct = data.combined_risk == null ? null : Math.round(data.combined_risk * 100)
+  const severity = (data.severity || 'pending').toUpperCase()
 
   let stageRationale = ''
-  if (severity === 'CRITICAL') {
+  if (pending) {
+    stageRationale =
+      'Enrichment pending — external financial/litigation signals and risk fusion have not landed yet for this customer (eventual consistency in the async pipeline).'
+  } else if (severity === 'CRITICAL') {
     stageRationale = `Assigned to CRITICAL STAGE because Combined Risk (${combinedPct}%) exceeds the 85% critical threshold. Urgent automated collection action & credit hold enforced.`
   } else if (severity === 'HIGH') {
     stageRationale = `Assigned to HIGH STAGE because Combined Risk (${combinedPct}%) reached the 70%-85% high risk window. Escalated collection reminders and credit limit freeze active.`
@@ -246,7 +250,14 @@ function ScoreStageExplanationPanel({ data }: { data: any }) {
         {stageRationale}
       </p>
       <div className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', backgroundColor: 'var(--bg-elevated)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
-        Formula: Combined Risk = (0.6 × Financial Risk {Math.round(finRisk * 100)}%) + (0.4 × Litigation Risk {Math.round(litRisk * 100)}%) = <span style={{ color: 'var(--text-primary)', fontWeight: 'bold' }}>{combinedPct}%</span> ({severity} STAGE)
+        {pending ? (
+          <>Formula: awaiting risk.profile.updated / external enrichment events</>
+        ) : (
+          <>
+            Formula: Combined Risk = (0.6 × Financial Risk {Math.round(finRisk * 100)}%) + (0.4 × Litigation Risk {Math.round(litRisk * 100)}%) ={' '}
+            <span style={{ color: 'var(--text-primary)', fontWeight: 'bold' }}>{combinedPct}%</span> ({severity} STAGE)
+          </>
+        )}
       </div>
     </div>
   )
@@ -330,11 +341,26 @@ export function CustomerProfilePage() {
                 <FinancialRiskExplanationPanel data={data} />
               </div>
               <div>
-                <p>Financial Risk: {Math.round(data.financial_risk * 100)}%</p>
-                <p>Litigation Risk: {Math.round(data.litigation_risk * 100)}%</p>
-                <p>Combined Risk: {Math.round(data.combined_risk * 100)}%</p>
-                <p>Confidence: {Math.round(data.confidence * 100)}%</p>
-                <RiskBreakdownBar financial={data.financial_risk} litigation={data.litigation_risk} />
+                <p>
+                  Financial Risk:{' '}
+                  {data.financial_risk == null ? 'pending' : `${Math.round(data.financial_risk * 100)}%`}
+                </p>
+                <p>
+                  Litigation Risk:{' '}
+                  {data.litigation_risk == null ? 'pending' : `${Math.round(data.litigation_risk * 100)}%`}
+                </p>
+                <p>
+                  Combined Risk:{' '}
+                  {data.combined_risk == null ? 'pending' : `${Math.round(data.combined_risk * 100)}%`}
+                </p>
+                <p>
+                  Confidence:{' '}
+                  {data.confidence == null ? 'pending' : `${Math.round(data.confidence * 100)}%`}
+                </p>
+                <RiskBreakdownBar
+                  financial={data.financial_risk ?? 0}
+                  litigation={data.litigation_risk ?? 0}
+                />
                 <ScoreStageExplanationPanel data={data} />
                 <RiskExplanationPanel explanation={riskExplanation} shapData={shapData} />
               </div>
@@ -343,7 +369,9 @@ export function CustomerProfilePage() {
           </div>
         ) : null}
 
-        {activeTab === 'risk history' ? <RiskHistoryChart currentRisk={data.combined_risk} /> : null}
+        {activeTab === 'risk history' ? (
+          <RiskHistoryChart currentRisk={data.combined_risk ?? 0} />
+        ) : null}
 
         {activeTab === 'invoices' ? (
           <InvoiceTable

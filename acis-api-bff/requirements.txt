@@ -3,3 +3,4 @@ uvicorn==0.42.0
 pydantic==2.12.5
 python-dotenv==1.2.2
 aiokafka==0.11.0
+psycopg[binary]==3.2.6

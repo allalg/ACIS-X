@@ -31,11 +31,21 @@ export function CustomerProfileSheet({ customer, open, onClose }: CustomerProfil
             <SeverityBadge severity={customer.severity} />
           </div>
           <div>
-            <p className="numeric">Risk {Math.round(customer.combined_risk * 100)}%</p>
-            <p className="numeric">Confidence {Math.round(customer.confidence * 100)}%</p>
+            <p className="numeric">
+              Risk{' '}
+              {customer.combined_risk == null
+                ? 'pending'
+                : `${Math.round(customer.combined_risk * 100)}%`}
+            </p>
+            <p className="numeric">
+              Confidence{' '}
+              {customer.confidence == null
+                ? 'pending'
+                : `${Math.round(customer.confidence * 100)}%`}
+            </p>
             <RiskBreakdownBar
-              financial={customer.financial_risk}
-              litigation={customer.litigation_risk}
+              financial={customer.financial_risk ?? 0}
+              litigation={customer.litigation_risk ?? 0}
             />
           </div>
         </div>

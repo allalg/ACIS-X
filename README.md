@@ -161,6 +161,7 @@ python scripts/FINAL_CLEANUP_AND_START.py
 ## Documentation
 
 - **[README.md](README.md)** - This file (overview)
+- **[docs/HOSTING.md](docs/HOSTING.md)** - Dual-mode hosting (Vercel + Render + Confluent + Supabase; laptop or Oracle engine)
 - **[CHANGELOG.md](CHANGELOG.md)** - What was fixed (Sessions 11-15)
 - **[TESTING.md](TESTING.md)** - How to write and run tests
 - **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment
@@ -241,6 +242,20 @@ python run_acis.py
 ```bash
 rm -f acis.db-wal acis.db-shm
 python run_acis.py
+```
+
+### Windows Docker: SQLite disk I/O / restart storms
+Use the named `acis-data` volume (default in `docker-compose.yml`) for `/data/acis.db`
+and `/data/acis.log`. Do **not** put SQLite on a Windows bind mount — concurrent agent
+writes cause `disk I/O error`, which cascades into Monitoring CRITICAL → SelfHealing
+restart storms.
+
+After switching to the volume (or wiping Kafka state), reset for a clean event/DB pair:
+
+```bash
+docker compose down
+python reset_acis.py
+docker compose up --build -d
 ```
 
 See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for more.

@@ -63,10 +63,22 @@ def handle_litigation_event(agent: "DBAgent", event: Event) -> None:
                 )
 
             cursor.execute("""
-                INSERT OR REPLACE INTO external_litigation (
+                INSERT INTO external_litigation (
                     id, customer_id, company_name, litigation_risk, severity,
                     case_count, case_types, cases, evidence, source, confidence, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(customer_id) DO UPDATE SET
+                    id = excluded.id,
+                    company_name = excluded.company_name,
+                    litigation_risk = excluded.litigation_risk,
+                    severity = excluded.severity,
+                    case_count = excluded.case_count,
+                    case_types = excluded.case_types,
+                    cases = excluded.cases,
+                    evidence = excluded.evidence,
+                    source = excluded.source,
+                    confidence = excluded.confidence,
+                    created_at = excluded.created_at
             """, (
                 event.event_id,
                 customer_id,

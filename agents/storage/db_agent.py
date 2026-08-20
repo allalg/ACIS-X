@@ -25,6 +25,8 @@ from agents.storage.handlers import (
     handle_customer_risk_profile,
     handle_risk_scored,
 )
+from utils.db_connection import connect as db_connect, get_db_path, is_postgres
+from utils.db_schema import init_schema
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +36,7 @@ class DBAgent(BaseAgent):
     Database Agent for ACIS-X.
 
     Single DB writer that persists invoice, payment, and collection events
-    to SQLite database. Handles idempotent writes and ensures data consistency.
-
-    Subscribes to:
-    - acis.invoices (invoice.created, invoice.overdue, etc.)
-    - acis.payments (payment.received, payment.partial)
-    - acis.collections (collection.reminder, collection.escalation, collection.action)
-    - acis.customers (customer.profile.updated)
+    to Postgres (Supabase) or SQLite. Handles idempotent writes and ensures data consistency.
     """
 
     TOPIC_INVOICES = "acis.invoices"
@@ -50,7 +46,7 @@ class DBAgent(BaseAgent):
     TOPIC_METRICS = "acis.metrics"
     TOPIC_RISK = "acis.risk"
 
-    DB_PATH = "acis.db"
+    DB_PATH = get_db_path()
     UNIT_SUFFIX_PATTERN = re.compile(r"\s*-\s*Unit\s+\d+\b.*$", re.IGNORECASE)
 
     # Consumer auto_offset_reset for this agent type.
@@ -107,16 +103,14 @@ class DBAgent(BaseAgent):
             abs_path = "/" + abs_path
         return f"file:{abs_path}?nolock=1"
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Create a DB connection with FK enforcement enabled."""
-        conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=30.0, isolation_level="DEFERRED")
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+    def _get_connection(self):
+        """Create a DB connection (Postgres via DATABASE_URL, else SQLite)."""
+        return db_connect(self._db_path)
 
-    def _finalize_handler_connection(self, conn: sqlite3.Connection) -> None:
+    def _finalize_handler_connection(self, conn) -> None:
         """Close a handler connection without committing failed partial writes."""
         try:
-            if conn.in_transaction:
+            if getattr(conn, "in_transaction", False):
                 conn.rollback()
             else:
                 self._maybe_prune_event_log(conn)
@@ -137,79 +131,52 @@ class DBAgent(BaseAgent):
         safe_name = self._sanitize_company_name(name) or customer_id
         conn.execute(
             """
-            INSERT OR IGNORE INTO customers (customer_id, name, created_at, updated_at)
+            INSERT INTO customers (customer_id, name, created_at, updated_at)
             VALUES (?, ?, ?, ?)
+            ON CONFLICT(customer_id) DO NOTHING
             """,
             (customer_id, safe_name, now, now),
         )
         self._backfill_customer_name(conn, customer_id)
 
     def _init_database(self) -> None:
-        """Initialize SQLite database and create tables if not exists.
-
-        Schema DDL is defined in agents.storage.handlers.schema and executed
-        in order.  Migrations (ALTER TABLE) are applied best-effort.
-        """
+        """Initialize database schema (Postgres or SQLite)."""
         with self._db_lock:
-            # FIX #6: Handle corrupted database by detecting and cleaning it up
-            corruption_detected = False
+            if not is_postgres():
+                # SQLite-only: detect and remove corrupted local files
+                corruption_detected = False
+                try:
+                    test_conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=10.0)
+                    test_cursor = test_conn.cursor()
+                    test_cursor.execute("PRAGMA integrity_check")
+                    integrity = test_cursor.fetchone()[0]
+                    test_conn.close()
+                    if integrity != "ok":
+                        logger.warning("Database integrity check failed: %s", integrity)
+                        corruption_detected = True
+                except sqlite3.DatabaseError as e:
+                    if "malformed" in str(e).lower():
+                        logger.warning("Database corrupted, preparing cleanup: %s", e)
+                        corruption_detected = True
 
-            try:
-                test_conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=10.0)
-                test_cursor = test_conn.cursor()
-                test_cursor.execute("PRAGMA integrity_check")
-                integrity = test_cursor.fetchone()[0]
-                test_conn.close()
-
-                if integrity != "ok":
-                    logger.warning(f"Database integrity check failed: {integrity}, removing corrupted file")
-                    corruption_detected = True
-            except sqlite3.DatabaseError as e:
-                if "malformed" in str(e).lower():
-                    logger.warning(f"Database corrupted, preparing cleanup: {e}")
-                    corruption_detected = True
-                test_conn = None
-
-            if corruption_detected:
-                for attempt in range(3):
-                    try:
-                        for suffix in ["", "-wal", "-shm"]:
-                            filepath = self._db_path + suffix
-                            if os.path.exists(filepath):
-                                try:
-                                    os.remove(filepath)
-                                    logger.info(f"Deleted corrupted database file: {filepath}")
-                                except Exception:
-                                    pass
-                        break
-                    except Exception as e:
-                        if attempt < 2:
-                            logger.debug(f"Delete attempt {attempt + 1} failed, retrying: {e}")
-                            time.sleep(0.5)
-                        else:
-                            logger.error(f"Could not remove corrupted database after 3 attempts: {e}")
-                            raise
+                if corruption_detected:
+                    for suffix in ["", "-wal", "-shm"]:
+                        filepath = self._db_path + suffix
+                        if os.path.exists(filepath):
+                            try:
+                                os.remove(filepath)
+                            except Exception:
+                                pass
 
             conn = self._get_connection()
             try:
-                cursor = conn.cursor()
-
-                # Execute all DDL from the schema module
-                for ddl in SCHEMA_DDL:
-                    cursor.execute(ddl)
-
-                # Apply migrations (add columns if missing)
-                for migration in SCHEMA_MIGRATIONS:
-                    try:
-                        cursor.execute(migration)
-                    except sqlite3.OperationalError:
-                        pass  # Column already exists
-
-                self._cleanup_legacy_company_names(conn)
-                self._repair_payment_integrity(conn)
-                conn.commit()
-                logger.info(f"Database initialized at {self._db_path}")
-                logger.info(f"Database schema {SCHEMA_VERSION} ready")
+                init_schema(conn)
+                if not is_postgres():
+                    self._cleanup_legacy_company_names(conn)
+                    self._repair_payment_integrity(conn)
+                    conn.commit()
+                target = "postgres" if is_postgres() else self._db_path
+                logger.info("Database initialized (%s) schema %s", target, SCHEMA_VERSION)
             finally:
                 conn.close()
 

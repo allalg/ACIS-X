@@ -27,13 +27,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for SQLite database (volume mount point)
+# Named volume mount point for SQLite + rotating logs (not a Windows bind mount)
 RUN mkdir -p /data
 
-ENV ACIS_DB_PATH=/app/acis.db
+ENV ACIS_DB_PATH=/data/acis.db
+ENV ACIS_LOG_PATH=/data/acis.log
 ENV PYTHONUNBUFFERED=1
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import os, sys; p = os.getenv('ACIS_DB_PATH', '/app/acis.db'); sys.exit(0 if os.path.exists(p) else 1)"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD python -c "import os, sys; p = os.getenv('ACIS_DB_PATH', '/data/acis.db'); sys.exit(0 if os.path.exists(p) else 1)"
 
 CMD ["python", "run_acis.py"]

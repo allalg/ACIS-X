@@ -52,9 +52,10 @@ def handle_customer_profile(agent: "DBAgent", event: Event) -> None:
             # Step 1: Ensure the customer row exists.
             if name is not None:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO customers
+                    INSERT INTO customers
                         (customer_id, name, risk_score, credit_limit, status, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(customer_id) DO NOTHING
                 """, (
                     customer_id,
                     name,
@@ -65,9 +66,10 @@ def handle_customer_profile(agent: "DBAgent", event: Event) -> None:
                 ))
             else:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO customers
+                    INSERT INTO customers
                         (customer_id, risk_score, credit_limit, status, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(customer_id) DO NOTHING
                 """, (
                     customer_id,
                     risk_score if risk_score is not None else 0.0,

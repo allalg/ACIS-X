@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from .config import load_settings
+from .config import load_settings, kafka_security_kwargs
 from .db import (
     get_customer_by_id,
     get_customer_metrics,
@@ -28,18 +28,41 @@ from .db import (
 )
 from .security import require_api_key
 
+logger = logging.getLogger(__name__)
+
 settings = load_settings()
+_KAFKA_SECURITY = kafka_security_kwargs(settings)
 app = FastAPI(title='acis-api-bff', version='0.1.0')
 
+# allow_credentials cannot be True with wildcard origins (CORS spec).
+_cors_origins = settings.allowed_origins
+_cors_credentials = '*' not in _cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
-    allow_credentials=True,
+    allow_origins=_cors_origins if _cors_origins else ['*'],
+    allow_credentials=_cors_credentials,
     allow_methods=['*'],
     allow_headers=['*'],
 )
 
 AGENTS_STATE: dict[str, dict[str, Any]] = {}
+
+# Event-pipeline observability (DLQ + recent recovery actions)
+PIPELINE_STATE: dict[str, Any] = {
+    'dlq': {
+        'total_dlq_count': 0,
+        'last_60s_count': 0,
+        'top_reasons': {},
+        'updated_at': None,
+    },
+    'recent_recoveries': [],  # capped list of recovery.triggered summaries
+    'consumer_status': {
+        'agent_status': 'starting',
+        'sse': 'starting',
+        'last_error': None,
+    },
+}
+_MAX_RECENT_RECOVERIES = 50
 
 # ── SSE broadcast infrastructure ──────────────────────────────────────────
 # One shared Kafka consumer pushes events into a set of asyncio.Queue objects,
@@ -53,72 +76,148 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat().replace('+00:00', 'Z')
 
 
-async def _consume_agent_status() -> None:
+def _record_recovery_event(event: dict[str, Any]) -> None:
+    """Keep a bounded trail of recovery.triggered events for the dashboard."""
+    if event.get('event_type') != 'recovery.triggered':
+        return
+    payload = event.get('payload') or {}
+    entry = {
+        'event_time': event.get('event_time') or now_iso(),
+        'agent_id': payload.get('agent_id') or event.get('entity_id'),
+        'agent_name': payload.get('agent_name'),
+        'action': payload.get('action') or payload.get('recovery_action'),
+        'rule': payload.get('rule') or payload.get('decision_rule') or payload.get('trigger'),
+        'status': payload.get('status'),
+    }
+    recoveries: list = PIPELINE_STATE['recent_recoveries']
+    recoveries.insert(0, entry)
+    del recoveries[_MAX_RECENT_RECOVERIES:]
+
+
+def _record_dlq_stats(event: dict[str, Any]) -> None:
+    if event.get('event_type') != 'dlq.stats':
+        return
+    payload = event.get('payload') or {}
+    PIPELINE_STATE['dlq'] = {
+        'total_dlq_count': int(payload.get('total_dlq_count') or 0),
+        'last_60s_count': int(payload.get('last_60s_count') or 0),
+        'top_reasons': payload.get('top_reasons') or {},
+        'updated_at': event.get('event_time') or now_iso(),
+    }
+
+
+async def _run_consumer_with_retry(name: str, runner) -> None:
+    """Restart Kafka consumers with exponential backoff after transient failures.
+
+    Topic recreation / broker flaps previously left the BFF projection dead
+    (UnknownTopicOrPartitionError). Retry keeps the live event view recovering.
+    """
+    delay = 2.0
+    while True:
+        try:
+            PIPELINE_STATE['consumer_status'][name] = 'running'
+            PIPELINE_STATE['consumer_status']['last_error'] = None
+            await runner()
+            return
+        except asyncio.CancelledError:
+            PIPELINE_STATE['consumer_status'][name] = 'stopped'
+            raise
+        except Exception as exc:
+            PIPELINE_STATE['consumer_status'][name] = 'retrying'
+            PIPELINE_STATE['consumer_status']['last_error'] = str(exc)
+            logger.warning(
+                'BFF %s consumer failed (%s); retrying in %.0fs',
+                name, exc, delay,
+            )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2.0, 60.0)
+
+
+async def _consume_agent_status_once() -> None:
     """Background task: track agent registration & heartbeat events."""
     consumer = AIOKafkaConsumer(
-        'acis.registry', 'acis.agent.health',
+        'acis.registry', 'acis.agent.health', 'acis.system', 'acis.monitoring',
         bootstrap_servers=settings.kafka_bootstrap_servers,
         group_id='bff-status-group',
         auto_offset_reset='latest',
+        enable_auto_commit=True,
+        **_KAFKA_SECURITY,
     )
     await consumer.start()
     try:
         async for msg in consumer:
-            if msg.value:
-                event = json.loads(msg.value.decode('utf-8'))
-                payload = event.get('payload', {})
-                agent_id = payload.get('agent_id')
-                if not agent_id:
-                    continue
+            if not msg.value:
+                continue
+            event = json.loads(msg.value.decode('utf-8'))
+            event_type = event.get('event_type', '')
+            payload = event.get('payload', {})
 
-                if event['event_type'] == 'registry.agent.deregistered':
-                    AGENTS_STATE.pop(agent_id, None)
-                else:
-                    metrics_data = payload.get('metrics', {})
-                    restart_cnt = payload.get('restart_count', metrics_data.get('restart_count', 0))
+            _record_dlq_stats(event)
+            _record_recovery_event(event)
 
-                    if agent_id not in AGENTS_STATE:
-                        AGENTS_STATE[agent_id] = {
-                            'agent_id': agent_id,
-                            'agent_name': payload.get('agent_name', agent_id),
-                            'agent_type': payload.get('agent_type', 'unknown'),
-                            'status': payload.get('status', 'healthy'),
-                            'registered_at': now_iso(),
-                            'last_heartbeat': now_iso(),
-                            'topics': payload.get('topics', {}),
-                            'capabilities': payload.get('capabilities', []),
-                            'version': payload.get('version', '1.0.0'),
-                            'restart_count': restart_cnt,
-                            'metrics': metrics_data,
-                        }
-                    else:
-                        if 'status' in payload:
-                            AGENTS_STATE[agent_id]['status'] = payload['status']
-                        AGENTS_STATE[agent_id]['last_heartbeat'] = now_iso()
-                        if metrics_data:
-                            AGENTS_STATE[agent_id]['metrics'] = metrics_data
-                        if restart_cnt:
-                            AGENTS_STATE[agent_id]['restart_count'] = restart_cnt
-    except asyncio.CancelledError:
-        pass
+            agent_id = payload.get('agent_id')
+            if not agent_id:
+                continue
+
+            if event_type == 'registry.agent.deregistered':
+                AGENTS_STATE.pop(agent_id, None)
+                continue
+
+            if event_type not in (
+                'registry.agent.registered',
+                'registry.agent.updated',
+                'agent.heartbeat',
+                'agent.health.degraded',
+                'agent.health.critical',
+                'agent.error',
+                'agent.overloaded',
+                'agent.timeout',
+            ) and not event_type.startswith('agent.'):
+                continue
+
+            metrics_data = payload.get('metrics', {})
+            restart_cnt = payload.get('restart_count', metrics_data.get('restart_count', 0))
+
+            if agent_id not in AGENTS_STATE:
+                AGENTS_STATE[agent_id] = {
+                    'agent_id': agent_id,
+                    'agent_name': payload.get('agent_name', agent_id),
+                    'agent_type': payload.get('agent_type', 'unknown'),
+                    'status': payload.get('status', 'healthy'),
+                    'registered_at': now_iso(),
+                    'last_heartbeat': now_iso(),
+                    'topics': payload.get('topics', {}),
+                    'capabilities': payload.get('capabilities', []),
+                    'version': payload.get('version', '1.0.0'),
+                    'restart_count': restart_cnt,
+                    'metrics': metrics_data,
+                }
+            else:
+                if 'status' in payload:
+                    AGENTS_STATE[agent_id]['status'] = payload['status']
+                AGENTS_STATE[agent_id]['last_heartbeat'] = now_iso()
+                if metrics_data:
+                    AGENTS_STATE[agent_id]['metrics'] = metrics_data
+                if restart_cnt:
+                    AGENTS_STATE[agent_id]['restart_count'] = restart_cnt
     finally:
         await consumer.stop()
 
 
-async def _consume_sse_events() -> None:
-    """Single shared Kafka consumer that broadcasts events to all SSE clients.
+async def _consume_agent_status() -> None:
+    await _run_consumer_with_retry('agent_status', _consume_agent_status_once)
 
-    Instead of creating a new consumer group per browser tab (which caused
-    unbounded group proliferation), this runs one consumer and fans out
-    messages to all connected client queues.
-    """
+
+async def _consume_sse_events_once() -> None:
+    """Single shared Kafka consumer that broadcasts events to all SSE clients."""
     global _sse_consumer_started
     _sse_consumer_started = True
     consumer = AIOKafkaConsumer(
         bootstrap_servers=settings.kafka_bootstrap_servers,
         group_id='bff-sse-shared',
         auto_offset_reset='latest',
-        enable_auto_commit=False,
+        enable_auto_commit=True,
+        **_KAFKA_SECURITY,
     )
     consumer.subscribe(pattern=r'^acis\..*')
     await consumer.start()
@@ -127,23 +226,28 @@ async def _consume_sse_events() -> None:
         async for msg in consumer:
             if msg.value:
                 event_data = msg.value.decode('utf-8')
+                try:
+                    parsed = json.loads(event_data)
+                    _record_dlq_stats(parsed)
+                    _record_recovery_event(parsed)
+                except json.JSONDecodeError:
+                    pass
                 sse_line = f"event: acis_event\ndata: {event_data}\n\n"
-                # Fan out to all connected clients
                 dead_queues = []
                 for q in _sse_clients:
                     try:
                         q.put_nowait(sse_line)
                     except asyncio.QueueFull:
                         dead_queues.append(q)
-                # Remove clients whose queues are full (disconnected/slow)
                 for q in dead_queues:
                     _sse_clients.discard(q)
-    except asyncio.CancelledError:
-        pass
     finally:
         await consumer.stop()
         _sse_consumer_started = False
 
+
+async def _consume_sse_events() -> None:
+    await _run_consumer_with_retry('sse', _consume_sse_events_once)
 
 @app.on_event('startup')
 async def startup_event():
@@ -221,12 +325,27 @@ def agents_status(_: str = Depends(require_api_key)):
     }
 
 
+@app.get('/api/v1/system/pipeline')
+def pipeline_health(_: str = Depends(require_api_key)):
+    """DLQ stats + recent self-healing recoveries for event-pipeline observability."""
+    return {
+        'timestamp': now_iso(),
+        'dlq': PIPELINE_STATE['dlq'],
+        'recent_recoveries': PIPELINE_STATE['recent_recoveries'],
+        'consumer_status': PIPELINE_STATE['consumer_status'],
+        'agent_count': len(AGENTS_STATE),
+    }
+
+
 _producer: AIOKafkaProducer | None = None
 
 async def get_producer() -> AIOKafkaProducer:
     global _producer
     if _producer is None:
-        _producer = AIOKafkaProducer(bootstrap_servers=settings.kafka_bootstrap_servers)
+        _producer = AIOKafkaProducer(
+            bootstrap_servers=settings.kafka_bootstrap_servers,
+            **_KAFKA_SECURITY,
+        )
         await _producer.start()
     return _producer
 
@@ -266,11 +385,16 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
         import os
         import asyncio
         yield "data: [BFF] Log stream connected\n\n"
-        log_path = "/app/acis.log"
+        log_path = settings.log_path
+        # Wait briefly for engine to create the log file on a fresh volume
+        for _ in range(20):
+            if os.path.exists(log_path):
+                break
+            await asyncio.sleep(0.5)
         if not os.path.exists(log_path):
-            yield "data: [BFF] Log file not found\n\n"
+            yield f"data: [BFF] Log file not found at {log_path}\n\n"
             return
-        
+
         idle_ticks = 0
         with open(log_path, 'r', encoding='utf-8') as f:
             f.seek(0, os.SEEK_END)
@@ -285,7 +409,7 @@ async def stream_system_logs(_: str = Depends(require_api_key)):
                     continue
                 idle_ticks = 0
                 yield f"data: {line.strip()}\n\n"
-                
+
     return StreamingResponse(
         log_generator(),
         media_type='text/event-stream',
@@ -433,9 +557,6 @@ def compute_metrics(_: str = Depends(require_api_key)):
 @app.get('/api/v1/metrics/result/{job_id}')
 def metrics_result(job_id: str, _: str = Depends(require_api_key)):
     return get_metrics(_)
-
-
-logger = logging.getLogger(__name__)
 
 
 # ── SSE Event Stream ──────────────────────────────────────────────────────

@@ -839,6 +839,35 @@ def validate_spawn_request(data: Dict[str, Any]) -> AgentSpawnRequestPayload:
 
 
 # =============================================================================
+# Model Governance Payloads
+# =============================================================================
+
+class ModelDriftDetectedPayload(BaseModel):
+    """Payload emitted when population stability or feature drift exceeds thresholds."""
+
+    model_name: str = Field(..., description="Name of the evaluated model")
+    psi_score: float = Field(..., description="Population Stability Index score")
+    drift_status: str = Field(..., description="Drift classification: no_drift, moderate_drift, significant_drift")
+    feature_drifts: Dict[str, float] = Field(default_factory=dict, description="Feature drift metrics (e.g. KS-statistic or p-value)")
+    sample_count: int = Field(..., ge=1, description="Number of samples in the evaluation window")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class ModelGovernanceReportPayload(BaseModel):
+    """Payload emitted for scheduled or event-driven model risk governance audits."""
+
+    report_id: str = Field(..., description="Unique report identifier")
+    model_name: str = Field(..., description="Champion model name")
+    challenger_name: Optional[str] = Field(None, description="Challenger model name")
+    champion_metrics: Dict[str, float] = Field(default_factory=dict, description="Champion model performance metrics")
+    challenger_metrics: Dict[str, float] = Field(default_factory=dict, description="Challenger model performance metrics")
+    psi_score: float = Field(..., description="Current Population Stability Index")
+    drift_detected: bool = Field(False, description="True if statistical drift exceeds governance threshold")
+    audit_summary: str = Field(..., description="Summary text for audit logging")
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+# =============================================================================
 # Export all
 # =============================================================================
 
@@ -890,6 +919,10 @@ __all__ = [
     # DLQ
     "DLQErrorInfo",
     "DLQEventPayload",
+
+    # Governance payloads
+    "ModelDriftDetectedPayload",
+    "ModelGovernanceReportPayload",
 
     # Factories
     "create_agent_health_event",

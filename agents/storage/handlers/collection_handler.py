@@ -44,9 +44,10 @@ def handle_collection_action(agent: "DBAgent", event: Event) -> None:
                 logger.debug(f"Skipping duplicate event_id={event.event_id}")
                 return
             cursor.execute("""
-                INSERT OR IGNORE INTO collections_log (
+                INSERT INTO collections_log (
                     id, customer_id, invoice_id, action, stage, priority, reason, timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO NOTHING
             """, (collection_id, customer_id, invoice_id, action, stage, priority, reason, timestamp))
             cursor.execute(
                 "INSERT INTO event_log (event_id, event_type, processed_at) VALUES (?, ?, ?)",

@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from agents.base.base_agent import BaseAgent
 from schemas.event_schema import Event
 from utils.query_client import QueryClient, QueryTimeoutError
+from agents.scenario_generator.lftd_stress_generator import LFTDStressGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class ScenarioGeneratorAgent(BaseAgent):
     - Customer profiles
     - Invoices
     - Payments
+    - LFTD-style jump-diffusion macroeconomic stress scenarios
 
     Produces to:
     - acis.customers
@@ -158,6 +160,9 @@ class ScenarioGeneratorAgent(BaseAgent):
 
         # Generator thread
         self._generator_thread: Optional[threading.Thread] = None
+
+        # LFTD-style latent jump-diffusion stress test harness
+        self.lftd_generator = LFTDStressGenerator(seed=42)
 
     # -------------------------------------------------------------------------
     # BaseAgent abstract methods

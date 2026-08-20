@@ -1,9 +1,10 @@
-type Severity = 'low' | 'medium' | 'high' | 'critical'
+type Severity = 'low' | 'medium' | 'high' | 'critical' | 'pending'
 
 type SeverityBadgeProps = {
-  severity: Severity
+  severity: Severity | string | null | undefined
 }
 
 export function SeverityBadge({ severity }: SeverityBadgeProps) {
-  return <span className={`badge severity severity-${severity}`}>{severity}</span>
+  const value = (severity || 'pending').toLowerCase()
+  return <span className={`badge severity severity-${value}`}>{value}</span>
 }

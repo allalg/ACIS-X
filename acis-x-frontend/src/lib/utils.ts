@@ -19,6 +19,12 @@ export function formatNumber(value: number): string {
 
 export function safeDate(input: string | number | Date | null | undefined): Date | null {
   if (!input) return null
+  // Backend sends ISO timestamps without timezone suffix (e.g. "2026-08-12T14:28:33").
+  // Without 'Z', JS Date() treats them as local time, causing offset bugs.
+  // Append 'Z' to bare ISO strings so they're correctly parsed as UTC.
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+$/.test(input)) {
+    input = input + 'Z'
+  }
   const d = new Date(input)
   return isNaN(d.getTime()) ? null : d
 }

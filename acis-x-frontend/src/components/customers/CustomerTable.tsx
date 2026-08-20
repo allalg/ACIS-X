@@ -4,7 +4,7 @@ import { SeverityBadge } from '../ui/SeverityBadge'
 
 type CustomerTableProps = {
   data: CustomersResponse
-  severityFilter: 'all' | 'low' | 'medium' | 'high' | 'critical'
+  severityFilter: 'all' | 'pending' | 'low' | 'medium' | 'high' | 'critical'
 }
 
 export function CustomerTable({ data, severityFilter }: CustomerTableProps) {
@@ -36,7 +36,11 @@ export function CustomerTable({ data, severityFilter }: CustomerTableProps) {
                 </td>
                 <td>{customer.name}</td>
                 <td className="numeric">{Math.round(customer.credit_limit).toLocaleString()}</td>
-                <td className="numeric">{Math.round(customer.risk_score * 100)}</td>
+                <td className="numeric">
+                  {customer.severity === 'pending' || customer.combined_risk == null
+                    ? '—'
+                    : Math.round((customer.combined_risk ?? customer.risk_score) * 100)}
+                </td>
                 <td>
                   <SeverityBadge severity={customer.severity} />
                 </td>

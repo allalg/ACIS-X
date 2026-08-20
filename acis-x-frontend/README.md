@@ -1,4 +1,14 @@
-# React + TypeScript + Vite
+# ACIS-X Frontend
+
+React + TypeScript + Vite SPA for the ACIS-X dashboard.
+
+## Deploy (Vercel)
+
+1. Set the Vercel project root to `acis-x-frontend`.
+2. Build env: `VITE_API_BASE_URL` (Render BFF URL) and `VITE_API_KEY` (same as BFF `ACIS_API_KEY`).
+3. See [docs/HOSTING.md](../docs/HOSTING.md) for the full dual-mode stack.
+
+---
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

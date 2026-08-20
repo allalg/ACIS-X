@@ -58,7 +58,12 @@ class AggregatorAgent(BaseAgent):
     # external data events are missed.
     OFFSET_RESET = "earliest"
 
-    def __init__(self, kafka_client: Any):
+    def __init__(
+        self,
+        kafka_client: Any,
+        financial_weight: float = 0.6,
+        litigation_weight: float = 0.4,
+    ):
         super().__init__(
             agent_name="AggregatorAgent",
             agent_version="2.0.0",  # Bumped: freshness guard + idempotency + null-safe cache
@@ -72,6 +77,8 @@ class AggregatorAgent(BaseAgent):
             kafka_client=kafka_client,
             agent_type="AggregatorAgent",
         )
+        self.financial_weight = financial_weight
+        self.litigation_weight = litigation_weight
         self._cache: Dict[str, Dict[str, Any]] = {}
 
         # FIX 7: Track last cleanup time
@@ -375,7 +382,7 @@ class AggregatorAgent(BaseAgent):
 
         # Compute combined risk
         if financial_risk is not None:
-            combined_risk = (self.FINANCIAL_WEIGHT * financial_risk) + (self.LITIGATION_WEIGHT * litigation_risk)
+            combined_risk = (self.financial_weight * financial_risk) + (self.litigation_weight * litigation_risk)
         else:
             # Calculate risk based on external litigation agent only if financial data is missing
             combined_risk = litigation_risk

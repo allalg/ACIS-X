@@ -28,6 +28,9 @@ import pathlib
 from dotenv import load_dotenv
 
 load_dotenv()
+# NOTE: .env.cloud loading removed — ACIS-X now runs fully local.
+# To re-enable cloud (Confluent Kafka + Supabase), uncomment the line below:
+# load_dotenv(".env.cloud", override=True)
 
 from kafka.admin import KafkaAdminClient, ConfigResource, ConfigResourceType
 
@@ -46,6 +49,7 @@ from agents.storage.memory_agent import MemoryAgent
 from agents.storage.query_agent import QueryAgent
 from agents.system.time_tick_agent import TimeTickAgent
 from agents.system.dlq_monitor_agent import DLQMonitorAgent
+from agents.governance.model_governance_agent import ModelGovernanceAgent
 from monitoring.monitoring_agent import MonitoringAgent
 from registry.registry_service import RegistryService
 from runtime.kafka_client import KafkaClient, KafkaConfig
@@ -108,13 +112,23 @@ def _setup_logging() -> None:
     ))
     root.addHandler(console)
 
-    # File handler — JSON structured, rotating (10MB × 5 backups)
-    file_handler = RotatingFileHandler(
-        "acis.log", maxBytes=10 * 1024 * 1024, backupCount=5,
-        mode="a", encoding="utf-8",
-    )
-    file_handler.setFormatter(_JSONFormatter())
-    root.addHandler(file_handler)
+    # File handler — JSON structured, rotating (10MB × 5 backups).
+    # ACIS_LOG_PATH defaults to acis.log for host runs; Docker uses /data/acis.log
+    # on the named volume so BFF log streaming and diagnostics share one file.
+    log_path = os.getenv("ACIS_LOG_PATH", "acis.log")
+    try:
+        log_dir = os.path.dirname(os.path.abspath(log_path))
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_path, maxBytes=10 * 1024 * 1024, backupCount=5,
+            mode="a", encoding="utf-8",
+        )
+        file_handler.setFormatter(_JSONFormatter())
+        root.addHandler(file_handler)
+    except OSError as exc:
+        # Never block agent startup if the log volume is unavailable; stdout remains.
+        print(f"Warning: Failed to setup acis.log file handler: {exc}", file=sys.stderr)
 
 
 _setup_logging()
@@ -220,16 +234,31 @@ def _reset_control_plane_consumer_groups(bootstrap_servers: List[str]) -> None:
 
 
 def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
+    from config.settings import get_settings
+    s = get_settings()
     config = KafkaConfig(
         bootstrap_servers=_bootstrap_servers(),
         consumer_auto_offset_reset=auto_offset_reset,
+        security_protocol=s.kafka_security_protocol or "PLAINTEXT",
+        sasl_mechanism=s.kafka_sasl_mechanism,
+        sasl_username=s.kafka_sasl_username,
+        sasl_password=s.kafka_sasl_password,
     )
     return KafkaClient(config=config, backend=_kafka_backend())
 
 
 def _create_topics() -> Dict[str, bool]:
     try:
-        admin = TopicAdmin(bootstrap_servers=_bootstrap_servers(), backend=_kafka_backend())
+        from config.settings import get_settings
+        s = get_settings()
+        admin = TopicAdmin(
+            bootstrap_servers=_bootstrap_servers(),
+            backend=_kafka_backend(),
+            security_protocol=s.kafka_security_protocol or "PLAINTEXT",
+            sasl_mechanism=s.kafka_sasl_mechanism,
+            sasl_username=s.kafka_sasl_username,
+            sasl_password=s.kafka_sasl_password,
+        )
         try:
             results = admin.create_all_acis_topics()
             failed = [topic for topic, ok in results.items() if not ok]
@@ -383,6 +412,8 @@ def _build_components(supervisor_client=None) -> List[Tuple[type, Dict[str, Any]
         (RiskScoringAgent, {}),
         # CustomerProfileAgent: no extra kwargs
         (CustomerProfileAgent, {}),
+        # ModelGovernanceAgent: Layer 6 autonomous model risk governance & drift monitoring
+        (ModelGovernanceAgent, {}),
 
         # ── Simulation / load generation ─────────────────────────────────────
         # ScenarioGeneratorAgent:
@@ -439,7 +470,7 @@ def main() -> None:
 
     # Start health-check HTTP server (daemon thread, port 9090)
     from runtime.health_server import start_health_server
-    process_registry = {name: proc for name, proc in supervisor._processes.items() if proc is not None}
+    process_registry = {p.name: p for p in supervisor.all_processes() if p is not None}
     start_health_server(port=int(os.getenv("ACIS_HEALTH_PORT", "9090")), process_registry=process_registry)
 
     try:

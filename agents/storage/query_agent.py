@@ -1,5 +1,6 @@
 from datetime import timezone
 import logging
+import os
 import sqlite3
 import threading
 from typing import List, Any, Dict, Optional
@@ -21,7 +22,7 @@ class QueryAgent(BaseAgent):
     This is a synchronous helper agent - it does NOT publish events for queries.
     """
 
-    DB_PATH = "acis.db"
+    DB_PATH = os.getenv("ACIS_DB_PATH", "acis.db")
     # Replay from earliest so the invoice cache is correctly populated after
     # a restart without requiring a manual cache warm-up step.
     OFFSET_RESET = "earliest"
@@ -69,10 +70,9 @@ class QueryAgent(BaseAgent):
             abs_path = "/" + abs_path
         return f"file:{abs_path}?nolock=1"
 
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._get_uri_path(), uri=True, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _get_connection(self):
+        from utils.db_connection import connect as db_connect
+        return db_connect(self._db_path)
 
     def set_memory_agent(self, agent: Any) -> None:
         """

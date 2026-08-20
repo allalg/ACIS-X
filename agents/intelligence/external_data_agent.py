@@ -1,5 +1,6 @@
 from datetime import timezone
 import logging
+import os
 import re
 import sqlite3
 import threading
@@ -46,7 +47,7 @@ class ExternalDataAgent(BaseAgent):
 
     TOPIC_INPUT = "acis.metrics"
     TOPIC_OUTPUT = "acis.metrics"
-    DB_PATH = "acis.db"
+    DB_PATH = os.getenv("ACIS_DB_PATH", "acis.db")
     CACHE_TTL_HOURS = 24
     THROTTLE_MIN_HOURS = 24
 
@@ -146,8 +147,8 @@ class ExternalDataAgent(BaseAgent):
         Returns data if exists and updated_at < 24 hours, else None.
         """
         try:
-            conn = sqlite3.connect(self._db_path)
-            conn.row_factory = sqlite3.Row
+            from utils.db_connection import connect as db_connect
+            conn = db_connect(self._db_path)
             cursor = conn.cursor()
             # Try real company name first
             cursor.execute(
@@ -198,7 +199,8 @@ class ExternalDataAgent(BaseAgent):
         ticker    = data.get("ticker") or data.get("company_name")  # slug used as ticker
         source    = data.get("source", "")
         try:
-            conn = sqlite3.connect(self._db_path)
+            from utils.db_connection import connect as db_connect
+            conn = db_connect(self._db_path)
             cursor = conn.cursor()
 
             # Ensure ticker + source columns exist (migration-safe)

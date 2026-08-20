@@ -1,0 +1,26 @@
+# Run the agent engine on your laptop against Confluent + Supabase
+# (same data plane as Oracle / Render / Vercel).
+#
+# Usage:
+#   docker compose -f docker-compose.cloud-engine.yml --env-file .env.cloud up -d --build
+#   # or without Docker:
+#   # set -a; source .env.cloud; set +a; python run_acis.py
+
+services:
+  acis-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: acis-engine-cloud
+    restart: unless-stopped
+    env_file:
+      - .env.cloud
+    environment:
+      ACIS_DEPLOY_MODE: local
+      ACIS_KAFKA_BACKEND: confluent
+      ACIS_LOG_PATH: /data/acis.log
+    volumes:
+      - acis-cloud-engine-logs:/data
+
+volumes:
+  acis-cloud-engine-logs:

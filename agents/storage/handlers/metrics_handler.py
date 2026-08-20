@@ -40,11 +40,22 @@ def handle_metrics_updated(agent: "DBAgent", event: Event) -> None:
 
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO customer_metrics
+                INSERT INTO customer_metrics
                 (customer_id, total_outstanding, avg_delay, on_time_ratio,
                  aging_current, aging_1_30, aging_31_60, aging_61_90, aging_90_plus,
                  last_payment_date, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(customer_id) DO UPDATE SET
+                    total_outstanding = excluded.total_outstanding,
+                    avg_delay = excluded.avg_delay,
+                    on_time_ratio = excluded.on_time_ratio,
+                    aging_current = excluded.aging_current,
+                    aging_1_30 = excluded.aging_1_30,
+                    aging_31_60 = excluded.aging_31_60,
+                    aging_61_90 = excluded.aging_61_90,
+                    aging_90_plus = excluded.aging_90_plus,
+                    last_payment_date = excluded.last_payment_date,
+                    updated_at = excluded.updated_at
                 """,
                 (
                     customer_id,

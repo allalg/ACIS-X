@@ -135,6 +135,28 @@ export const api = {
     return apiRequest<AgentsStatusResponse>('/api/v1/agents/status')
   },
 
+  getPipelineHealth(): Promise<{
+    timestamp: string
+    dlq: {
+      total_dlq_count: number
+      last_60s_count: number
+      top_reasons: Record<string, number>
+      updated_at: string | null
+    }
+    recent_recoveries: Array<{
+      event_time: string
+      agent_id?: string
+      agent_name?: string
+      action?: string
+      rule?: string
+      status?: string
+    }>
+    consumer_status: Record<string, string | null>
+    agent_count: number
+  }> {
+    return apiRequest('/api/v1/system/pipeline')
+  },
+
   computeMetrics(): Promise<MetricsComputeResponse> {
     return apiRequest<MetricsComputeResponse>('/api/v1/metrics/compute', {
       method: 'POST',

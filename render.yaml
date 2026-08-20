@@ -1,0 +1,33 @@
+# ACIS-X BFF on Render
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: acis-bff
+    runtime: python
+    rootDir: acis-api-bff
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ACIS_ENV
+        value: production
+      - key: ACIS_API_KEY
+        sync: false
+      - key: ACIS_ALLOWED_ORIGINS
+        sync: false
+      - key: ACIS_KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: ACIS_KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: ACIS_KAFKA_SASL_MECHANISM
+        value: PLAIN
+      - key: ACIS_KAFKA_SASL_USERNAME
+        sync: false
+      - key: ACIS_KAFKA_SASL_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ACIS_DATABASE_URL
+        sync: false
+      - key: ACIS_LOG_PATH
+        value: /tmp/acis.log

@@ -114,10 +114,14 @@ services:
     environment:
       ACIS_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29094,kafka3:29095
       ACIS_KAFKA_BACKEND: confluent
-      ACIS_DB_PATH: /app/acis.db
+      # Named volume avoids Windows bind-mount SQLite disk I/O errors that
+      # cascade into false CRITICAL_HEALTH → self-healing restart storms.
+      ACIS_DB_PATH: /data/acis.db
+      ACIS_LOG_PATH: /data/acis.log
       ACIS_OFFSET_RESET: latest
     volumes:
       - ./:/app
+      - acis-data:/data
     depends_on:
       kafka1:
         condition: service_healthy
@@ -138,12 +142,14 @@ services:
       - "8000:8000"
     environment:
       ACIS_API_KEY: ${ACIS_API_KEY:-change_me}
-      ACIS_DB_PATH: /app/acis.db
-      ACIS_ALLOWED_ORIGINS: "*"
+      ACIS_DB_PATH: /data/acis.db
+      ACIS_LOG_PATH: /data/acis.log
+      ACIS_ALLOWED_ORIGINS: "http://localhost:3001,http://localhost:5173"
       ACIS_KAFKA_BOOTSTRAP_SERVERS: kafka1:29092,kafka2:29094,kafka3:29095
       ACIS_ENV: ${ACIS_ENV:-development}
     volumes:
       - ./:/app
+      - acis-data:/data
     depends_on:
       - acis-engine
     restart: unless-stopped
@@ -163,3 +169,4 @@ volumes:
   kafka1-data:
   kafka2-data:
   kafka3-data:
+  acis-data:

@@ -30,8 +30,9 @@ export type CustomersResponse = {
     credit_limit: number
     risk_score: number
     status: string
-    combined_risk: number
-    severity: 'low' | 'medium' | 'high' | 'critical'
+    combined_risk: number | null
+    severity: 'low' | 'medium' | 'high' | 'critical' | 'pending'
+    enrichment_status?: 'pending' | 'ready'
     total_outstanding: number
     avg_delay: number
     on_time_ratio: number
@@ -50,11 +51,12 @@ export type CustomerProfile = {
   on_time_ratio: number
   overdue_count: number
   last_payment_date: string
-  financial_risk: number
-  litigation_risk: number
-  combined_risk: number
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  confidence: number
+  financial_risk: number | null
+  litigation_risk: number | null
+  combined_risk: number | null
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'pending'
+  enrichment_status?: 'pending' | 'ready'
+  confidence: number | null
   updated_at: string
 }
 

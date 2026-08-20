@@ -283,20 +283,36 @@ class BaseAgent(ABC):
                     if not self._running:
                         break
 
-                    self._handle_message(message)
+                    is_tx = bool(
+                        getattr(self.kafka_client, "config", None)
+                        and getattr(self.kafka_client.config, "enable_transactions", False)
+                    )
 
-                    # ISSUE 3 FIX: Manual commit after successful processing
-                    # Ensures message is not reprocessed if agent crashes
-                    try:
-                        self.kafka_client.commit(message)
-                        logger.debug(f"Committed offset {message.offset} for {message.topic}")
-                    except Exception as e:
-                        err_str = str(e)
-                        if "UNKNOWN_MEMBER_ID" in err_str or "Unknown member" in err_str:
-                            logger.debug(f"Offset commit deferred during consumer rebalance: {e}")
-                        else:
-                            logger.warning(f"Failed to commit offset: {e}")
-                        # Don't break on commit failure - continue processing
+                    if is_tx:
+                        try:
+                            self.kafka_client.begin_transaction()
+                            self._handle_message(message)
+                            self.kafka_client.send_offsets_to_transaction([message], self.group_id)
+                            self.kafka_client.commit_transaction()
+                        except Exception as e:
+                            logger.error(f"Transaction failed for {getattr(message, 'topic', 'unknown')}: {e}")
+                            try:
+                                self.kafka_client.abort_transaction()
+                            except Exception:
+                                pass
+                            with self._metrics_lock:
+                                self._error_count += 1
+                    else:
+                        self._handle_message(message)
+                        try:
+                            self.kafka_client.commit(message)
+                            logger.debug(f"Committed offset {getattr(message, 'offset', '?')} for {getattr(message, 'topic', '?')}")
+                        except Exception as e:
+                            err_str = str(e)
+                            if "UNKNOWN_MEMBER_ID" in err_str or "Unknown member" in err_str:
+                                logger.debug(f"Offset commit deferred during consumer rebalance: {e}")
+                            else:
+                                logger.warning(f"Failed to commit offset: {e}")
 
             except Exception as e:
                 logger.error(f"Fatal error in consumer loop: {e}")

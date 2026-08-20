@@ -55,18 +55,22 @@ class KafkaConfig:
     sasl_username: Optional[str] = None
     sasl_password: Optional[str] = None
 
-    # Producer settings
+    # Producer settings (Exactly-Once Semantics)
     producer_acks: str = "all"  # all, 1, 0
-    producer_retries: int = 3
-    producer_max_in_flight: int = 5
+    producer_enable_idempotence: bool = True  # Native Kafka EOS transport-layer idempotence
+    producer_retries: int = 5
+    producer_max_in_flight: int = 5  # Required <= 5 for idempotent producer
     producer_compression: str = "gzip"  # none, gzip, snappy, lz4, zstd
     producer_batch_size: int = 16384
     producer_linger_ms: int = 10
+    producer_transactional_id: Optional[str] = None
+    enable_transactions: bool = False
 
     # Consumer settings
     # FIX 3: Reduce rebalance chaos with stable session settings
     consumer_auto_offset_reset: str = field(default_factory=lambda: __import__('os').environ.get('ACIS_OFFSET_RESET', 'latest'))  # earliest, latest, none
     consumer_enable_auto_commit: bool = False  # Offsets are committed explicitly after successful handling
+    consumer_isolation_level: str = "read_committed"  # Read only committed transactional messages (EOS)
     consumer_max_poll_records: int = 500
     consumer_max_poll_interval_ms: int = 300000  # 5 minutes - generous interval
     consumer_session_timeout_ms: int = 10000  # 10 seconds - reduced from 30s for faster detection
@@ -213,6 +217,15 @@ class KafkaClient:
                 "linger.ms": self.config.producer_linger_ms,
             }
 
+            if self.config.producer_enable_idempotence:
+                producer_config["enable.idempotence"] = True
+                producer_config["acks"] = "all"
+                producer_config["max.in.flight.requests.per.connection"] = min(self.config.producer_max_in_flight, 5)
+
+            if self.config.producer_transactional_id or self.config.enable_transactions:
+                producer_config["transactional.id"] = self.config.producer_transactional_id or f"tx_{self.config.client_id}"
+                producer_config["enable.idempotence"] = True
+
             # Add security settings if configured
             if self.config.security_protocol != "PLAINTEXT":
                 producer_config["security.protocol"] = self.config.security_protocol
@@ -222,7 +235,7 @@ class KafkaClient:
                     producer_config["sasl.password"] = self.config.sasl_password
 
             self._producer = Producer(producer_config)
-            logger.info("Confluent Kafka producer initialized")
+            logger.info("Confluent Kafka producer initialized (idempotence enabled: %s)", self.config.producer_enable_idempotence)
 
         except ImportError:
             logger.error("confluent-kafka-python not installed")
@@ -280,6 +293,7 @@ class KafkaClient:
                 "group.id": group_id,
                 "auto.offset.reset": self.config.consumer_auto_offset_reset,
                 "enable.auto.commit": self.config.consumer_enable_auto_commit,
+                "isolation.level": self.config.consumer_isolation_level,
                 "max.poll.interval.ms": self.config.consumer_max_poll_interval_ms,
                 "session.timeout.ms": self.config.consumer_session_timeout_ms,
                 "heartbeat.interval.ms": self.config.consumer_heartbeat_interval_ms,
@@ -296,7 +310,7 @@ class KafkaClient:
 
             self._consumer = Consumer(consumer_config)
             self._group_id = group_id
-            logger.info(f"Confluent Kafka consumer initialized (group: {group_id})")
+            logger.info(f"Confluent Kafka consumer initialized (group: {group_id}, isolation: {self.config.consumer_isolation_level})")
 
         except ImportError:
             logger.error("confluent-kafka-python not installed")
@@ -337,6 +351,44 @@ class KafkaClient:
         except ImportError:
             logger.error("kafka-python not installed")
             raise
+
+    # -------------------------------------------------------------------------
+    # Transaction methods (Exactly-Once Semantics)
+    # -------------------------------------------------------------------------
+
+    def init_transactions(self, timeout: float = 30.0) -> None:
+        """Initialize transactions on the producer."""
+        if self._producer is None:
+            self._init_producer()
+        if self.backend == "confluent" and hasattr(self._producer, "init_transactions"):
+            self._producer.init_transactions(timeout=timeout)
+            logger.info("Kafka producer transactions initialized")
+
+    def begin_transaction(self) -> None:
+        """Begin a new transactional read-process-write block."""
+        if self._producer is None:
+            self._init_producer()
+        if self.backend == "confluent" and hasattr(self._producer, "begin_transaction"):
+            self._producer.begin_transaction()
+            logger.debug("Kafka transaction began")
+
+    def commit_transaction(self, timeout: float = 30.0) -> None:
+        """Commit the current transaction."""
+        if self._producer and self.backend == "confluent" and hasattr(self._producer, "commit_transaction"):
+            self._producer.commit_transaction(timeout=timeout)
+            logger.debug("Kafka transaction committed")
+
+    def abort_transaction(self, timeout: float = 30.0) -> None:
+        """Abort the current transaction on error."""
+        if self._producer and self.backend == "confluent" and hasattr(self._producer, "abort_transaction"):
+            self._producer.abort_transaction(timeout=timeout)
+            logger.warning("Kafka transaction aborted")
+
+    def send_offsets_to_transaction(self, offsets: List[Any], group_id: str, timeout: float = 30.0) -> None:
+        """Atomic offset commit as part of the current transaction."""
+        if self._producer and self.backend == "confluent" and hasattr(self._producer, "send_offsets_to_transaction"):
+            if self._consumer and hasattr(self._consumer, "consumer_group_metadata"):
+                self._producer.send_offsets_to_transaction(offsets, self._consumer.consumer_group_metadata(), timeout=timeout)
 
     # -------------------------------------------------------------------------
     # Producer methods

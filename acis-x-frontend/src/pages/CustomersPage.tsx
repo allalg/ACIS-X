@@ -3,7 +3,7 @@ import { CustomerSearch } from '../components/customers/CustomerSearch'
 import { CustomerTable } from '../components/customers/CustomerTable'
 import { useCustomers } from '../hooks/useCustomers'
 
-const tabs = ['all', 'low', 'medium', 'high', 'critical'] as const
+const tabs = ['all', 'pending', 'low', 'medium', 'high', 'critical'] as const
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('')

@@ -4,13 +4,6 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Environment mode
-# ---------------------------------------------------------------------------
-# ACIS_ENV controls security strictness:
-#   - "development" (default): allows weak keys with a warning
-#   - "production": rejects startup if API key is missing or weak (< 32 chars)
-
 ACIS_ENV = os.getenv('ACIS_ENV', 'development').lower()
 
 
@@ -18,13 +11,18 @@ ACIS_ENV = os.getenv('ACIS_ENV', 'development').lower()
 class Settings:
     api_key: str
     db_path: str
+    database_url: str | None
+    log_path: str
     allowed_origins: list[str]
     kafka_bootstrap_servers: str
+    kafka_security_protocol: str
+    kafka_sasl_mechanism: str | None
+    kafka_sasl_username: str | None
+    kafka_sasl_password: str | None
     env: str
 
 
 def _validate_api_key(key: str | None) -> str:
-    """Validate the API key based on the current environment mode."""
     if not key:
         if ACIS_ENV == 'production':
             raise ValueError(
@@ -58,13 +56,31 @@ def _validate_api_key(key: str | None) -> str:
 
 
 def load_settings() -> Settings:
+    from pathlib import Path
+    from dotenv import load_dotenv
+    _root = Path(__file__).resolve().parents[2]
+    if (_root / ".env").exists():
+        load_dotenv(_root / ".env")
+
     api_key = _validate_api_key(os.getenv('ACIS_API_KEY'))
-    db_path = os.getenv('ACIS_DB_PATH', '../acis.db')
+    db_path = os.getenv('ACIS_DB_PATH')
+    if not db_path:
+        if (_root / "acis.db").exists():
+            db_path = str(_root / "acis.db")
+        else:
+            db_path = '../acis.db'
+    elif not os.path.isabs(db_path) and not db_path.startswith("file:"):
+        if (_root / db_path).exists():
+            db_path = str(_root / db_path)
+        elif (Path.cwd() / db_path).exists():
+            db_path = str(Path.cwd() / db_path)
+    database_url = os.getenv('ACIS_DATABASE_URL') or os.getenv('DATABASE_URL')
+    log_path = os.getenv('ACIS_LOG_PATH', '../acis.log')
     allowed_origins = [
         origin.strip()
         for origin in os.getenv(
             'ACIS_ALLOWED_ORIGINS',
-            'http://localhost:5173',
+            'http://localhost:5173,http://localhost:3001',
         ).split(',')
         if origin.strip()
     ]
@@ -72,7 +88,25 @@ def load_settings() -> Settings:
     return Settings(
         api_key=api_key,
         db_path=db_path,
+        database_url=database_url,
+        log_path=log_path,
         allowed_origins=allowed_origins,
         kafka_bootstrap_servers=kafka_bootstrap_servers,
+        kafka_security_protocol=os.getenv('ACIS_KAFKA_SECURITY_PROTOCOL', 'PLAINTEXT'),
+        kafka_sasl_mechanism=os.getenv('ACIS_KAFKA_SASL_MECHANISM'),
+        kafka_sasl_username=os.getenv('ACIS_KAFKA_SASL_USERNAME'),
+        kafka_sasl_password=os.getenv('ACIS_KAFKA_SASL_PASSWORD'),
         env=ACIS_ENV,
     )
+
+
+def kafka_security_kwargs(settings: Settings) -> dict:
+    """aiokafka security kwargs for Confluent Cloud."""
+    if not settings.kafka_security_protocol or settings.kafka_security_protocol == 'PLAINTEXT':
+        return {}
+    return {
+        'security_protocol': settings.kafka_security_protocol,
+        'sasl_mechanism': settings.kafka_sasl_mechanism or 'PLAIN',
+        'sasl_plain_username': settings.kafka_sasl_username,
+        'sasl_plain_password': settings.kafka_sasl_password,
+    }
