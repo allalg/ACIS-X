@@ -47,13 +47,20 @@
 \contentsline {subsection}{\numberline {5.5.3}External Enrichment and Risk Aggregation Algorithm}{40}{subsection.5.5.3}%
 \contentsline {subsection}{\numberline {5.5.4}Payment Prediction and Final Risk Scoring Algorithm}{40}{subsection.5.5.4}%
 \contentsline {subsection}{\numberline {5.5.5}Collections Action and Self-Healing Algorithm}{41}{subsection.5.5.5}%
-\contentsline {chapter}{ANNEXURE}{42}{appendix*.13}%
-\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{42}{section.Alph0.1}%
-\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{42}{subsection.Alph0.1.1}%
-\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{45}{section.Alph0.2}%
-\contentsline {section}{\numberline {A.3}SWOT Analysis}{45}{section.Alph0.3}%
-\contentsline {subsection}{\numberline {A.3.1}Strengths}{45}{subsection.Alph0.3.1}%
-\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{46}{subsection.Alph0.3.2}%
-\contentsline {subsection}{\numberline {A.3.3}Opportunities}{46}{subsection.Alph0.3.3}%
-\contentsline {subsection}{\numberline {A.3.4}Threats}{46}{subsection.Alph0.3.4}%
-\contentsline {chapter}{REFERENCES}{47}{subsection.Alph0.3.4}%
+\contentsline {chapter}{\numberline {6}IMPLEMENTATION}{42}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Implementation Approaches}{42}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Code Snippets}{45}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Event Ingestion and State Management Module}{45}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Machine Learning Model Training and Inference Module}{46}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}Macroeconomic Stress Testing and Scenario Simulation Module}{47}{subsection.6.2.3}%
+\contentsline {subsection}{\numberline {6.2.4}Autonomous Self-Healing and Model Governance Module}{47}{subsection.6.2.4}%
+\contentsline {chapter}{ANNEXURE}{49}{appendix*.18}%
+\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{49}{section.Alph0.1}%
+\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{49}{subsection.Alph0.1.1}%
+\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{52}{section.Alph0.2}%
+\contentsline {section}{\numberline {A.3}SWOT Analysis}{52}{section.Alph0.3}%
+\contentsline {subsection}{\numberline {A.3.1}Strengths}{52}{subsection.Alph0.3.1}%
+\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{53}{subsection.Alph0.3.2}%
+\contentsline {subsection}{\numberline {A.3.3}Opportunities}{53}{subsection.Alph0.3.3}%
+\contentsline {subsection}{\numberline {A.3.4}Threats}{53}{subsection.Alph0.3.4}%
+\contentsline {chapter}{REFERENCES}{54}{subsection.Alph0.3.4}%

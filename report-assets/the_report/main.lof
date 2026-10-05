@@ -13,3 +13,9 @@
 \contentsline {figure}{\numberline {5.1}{\ignorespaces System architecture of ACIS-X}}{32}{figure.caption.10}%
 \contentsline {figure}{\numberline {5.2}{\ignorespaces Component design of ACIS-X}}{33}{figure.caption.11}%
 \contentsline {figure}{\numberline {5.3}{\ignorespaces Interface design of ACIS-X}}{36}{figure.caption.12}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {6.1}{\ignorespaces CustomerStateAgent Kafka Consumer Group Initialization}}{45}{figure.caption.13}%
+\contentsline {figure}{\numberline {6.2}{\ignorespaces Per-Customer Lock and Bulk Invoice Query}}{46}{figure.caption.14}%
+\contentsline {figure}{\numberline {6.3}{\ignorespaces 2-Stage Policy Guardrail Composition in PaymentPredictionAgent}}{46}{figure.caption.15}%
+\contentsline {figure}{\numberline {6.4}{\ignorespaces Latent Stress SDE Step Function}}{47}{figure.caption.16}%
+\contentsline {figure}{\numberline {6.5}{\ignorespaces Population Stability Index (PSI) Core Computation}}{47}{figure.caption.17}%

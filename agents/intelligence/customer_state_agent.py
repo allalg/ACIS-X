@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class CustomerStateAgent(BaseAgent):
-    """
+    '''
     Customer State Agent for ACIS-X.
 
     Computes customer behavior metrics (avg_delay, on_time_ratio, total_outstanding)
@@ -30,7 +30,7 @@ class CustomerStateAgent(BaseAgent):
     Persists metrics to customer_metrics table.
 
     Optimization: Uses incremental cache updates instead of full recompute on each event.
-    """
+    '''
 
     TOPIC_INVOICES = "acis.invoices"
     TOPIC_PAYMENTS = "acis.payments"
@@ -100,16 +100,12 @@ class CustomerStateAgent(BaseAgent):
         self._rebuild_customer_metrics(customer_id, event.correlation_id)
 
     def _rebuild_customer_metrics(self, customer_id: str, correlation_id: Optional[str] = None) -> None:
-        """
-        Rebuild customer metrics locally in one pass using a bulk invoice query (FIX B).
-        """
         lock = self._rebuild_locks.setdefault(customer_id, threading.Lock())
         if not lock.acquire(blocking=False):
             logger.debug(f"Skipping concurrent rebuild for {customer_id} — already in progress")
             return
             
         try:
-            # FIX B: Bulk query — single call to QueryAgent
             result = QueryClient.query(
                 "get_invoices_by_customer",
                 {"customer_id": customer_id},
