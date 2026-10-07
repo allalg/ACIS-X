@@ -16,6 +16,10 @@
 \setlength{\abovecaptionskip}{2pt}
 \setlength{\belowcaptionskip}{1pt}
 \setlength{\tabcolsep}{2.5pt}
+\setlength{\abovedisplayskip}{3.5pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{3.5pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{2pt plus 1pt minus 1pt}
+\setlength{\belowdisplayshortskip}{2pt plus 1pt minus 1pt}
 \raggedbottom
 
 \begin{document}
@@ -25,11 +29,11 @@
 \titlerunning{ACIS-X: Multi-Agent Credit Intelligence Framework}
 
 \author{Nikhil Nagendra\inst{1} \and
-Pallavi K V\inst{1} \and
+Pallavi K V\inst{2} \and
+Bhoomi Joshi\inst{1} \and
 Johan K George\inst{1} \and
 Nitin Bharadwaj MVS\inst{1} \and
-Prasanna B Acharya\inst{1} \and
-Bhoomi Joshi\inst{1}}
+Prasanna B Acharya\inst{1} }
 
 \authorrunning{N.~Nagendra et al.}
 
@@ -38,6 +42,10 @@ Department of Computer Science and Engineering,\\
 AMC Engineering College, 18th K.M. Bannerghatta Main Road,\\
 Bengaluru 560083, Karnataka, India\\
 \email{nikhilnag98@gmail.com}
+\and
+Assistant Professor, Department of Information Science and Engineering,\\
+Dayanand Sagar Academy of Technology and Management,\\
+Bengaluru 560082, Karnataka, India
 }
 
 \maketitle
@@ -53,10 +61,10 @@ Intraday B2B credit monitoring requires continuous synthesis of payment behaviou
 Enterprise credit risk monitoring demands continuous evaluation of payment dynamics, financial health, and litigation. While event streaming platforms like Apache Kafka~\cite{kreps2011kafka} enable real-time risk updates, recent LLM-based multi-agent systems~\cite{jajoo2025masca} introduce multi-second latencies ($>2$\,s) and non-deterministic outputs unsuitable for sub-50\,ms financial streaming subject to deterministic compliance controls. Conversely, conventional Kafka pipelines perform static transaction scoring without agentic autonomy or continuous drift governance.
 A fundamental challenge in academic credit research is that real B2B invoice ledgers, trade terms, and defaults are confidential commercial secrets protected by strict enterprise NDAs. We therefore emphasize a clear separation between \textit{architectural validation} (the core contribution of this work) and \textit{empirical default forecasting}. We introduce ACIS-X (Autonomous Credit Intelligence System, Extended), an event-driven multi-agent framework grounded in the Actor model. The contributions are: (1) an event-driven multi-agent architecture on Kafka with autonomous self-healing and model governance; (2) Kafka stream-level Exactly-Once Semantics (EOS) combined with idempotent persistence and action deduplication for external sinks; (3) three-tier signal fusion integrating behavioural metrics, financial ratios, and litigation with deterministic risk policy guardrails; (4) streaming model governance inspired by SR~11-7 principles via PSI drift tracking and online challenger benchmarking; and (5) comprehensive systems benchmarks measuring throughput, partition scaling, consumer lag, P95/P99 latency, and fault recovery under a jump-diffusion stress harness. 
 
-\section{Related Work}
+\section{Related Work and Research Gap}
 \label{sec:related}
 Corporate credit scoring, from classic Z-scores~\cite{altman1968financial} to explainable ML~\cite{chang2025explainable,nwafor2024hybrid}, relies primarily on offline batch feature stores incapable of capturing intraday delinquency transitions. While Kafka event sourcing is widely adopted for sub-second fraud scoring~\cite{kesarpu2025kafka,parnerkar2025eda}, existing streaming architectures evaluate isolated transactions rather than stateful, multi-source enterprise credit profiles combining balance-sheet ratios and court litigation. 
-Recently, cognitive multi-agent frameworks like MASCA~\cite{jajoo2025masca} and Kubam's credit agent~\cite{kubam2026agentic} applied LLMs to qualitative risk assessment. However, their multi-second execution times and prompt non-determinism make them incompatible with high-throughput, low-latency ($<$50\,ms) streaming pipelines. In addition, existing microservice resilience mechanisms~\cite{beereddy2025selfhealing} recover at coarse container boundaries rather than providing granular per-agent heartbeat recovery with deterministic offset replay. As summarized in Table~\ref{tab:comparison}, ACIS-X bridges these paradigms: unlike cognitive MAS, it executes deterministically at sub-50\,ms latency; unlike standard streaming engines, it provides autonomous agent drift governance and offset-driven self-healing without requiring external compute clusters (e.g., Flink).
+Recently, cognitive and reinforcement-learning multi-agent frameworks like MASCA~\cite{jajoo2025masca}, Kubam's credit agent~\cite{kubam2026agentic}, and Kou et al.~\cite{kou2025learning} applied LLMs and MARL to credit assessment. However, their multi-second execution times and prompt non-determinism make them incompatible with high-throughput, low-latency ($<$50\,ms) streaming pipelines. In addition, existing autonomic microservice resilience mechanisms~\cite{beereddy2025selfhealing,kephart2003autonomic} recover at coarse container boundaries rather than providing granular per-agent heartbeat recovery with deterministic offset replay. As summarized in Table~\ref{tab:comparison}, ACIS-X bridges these paradigms: unlike cognitive MAS, it executes deterministically at sub-50\,ms latency; unlike standard streaming engines, it provides autonomous agent drift governance and offset-driven self-healing without requiring external compute clusters (e.g., Flink).
 
 Table~\ref{tab:comparison} contrasts the operational and architectural characteristics of prior paradigms against ACIS-X. 
 
@@ -231,7 +239,7 @@ The payment prediction agent scores each open invoice. The feature vector $X\in\
 r_{final}=\max\bigl(0,\min(1,r_{ml}+r_{policy})\bigr).
 \label{eq:prediction}
 \end{equation}
-Deterministic guardrail $r_{policy}$ enforces compliance bounds: rating penalties ($+0.10$ for B, $+0.20$ for C) plus litigation caps ($+0.15$ if $\mathcal{L}>0.1$, $+0.25$ if $\mathcal{L}>0.5$). Decoupling statistical $r_{ml}$ from explicit policy rules ensures regulatory transparency. Exact local attributions are logged via SHAP TreeExplainer ($f(X)=E[f(X)]+\sum_{j=1}^{d}\phi_j$), with policy offsets logged alongside for mathematical auditability.
+Deterministic guardrail $r_{policy}$ enforces compliance bounds: rating penalties ($+0.10$ for B, $+0.20$ for C) plus litigation caps ($+0.15$ if $\mathcal{L}>0.1$, $+0.25$ if $\mathcal{L}>0.5$). Decoupling statistical $r_{ml}$ from explicit policy rules ensures regulatory transparency. Exact local attributions are logged via SHAP TreeExplainer~\cite{lundberg2020local} ($f(X)=E[f(X)]+\sum_{j=1}^{d}\phi_j$), with policy offsets logged alongside for mathematical auditability.
 
 
 \subsection{Risk Refinement and Self-Healing Protocol}
@@ -281,7 +289,7 @@ systems. Layer~5 (DBAgent) therefore uses composite keys
 Layer~4 (Collections) uses an in-memory LRU cache to prevent duplicate
 actions during failover or offset replay.
 
-\section{Experimental Evaluation}
+\section{Experimental Design and Evaluation}
 \label{sec:eval}
 
 \subsection{Test Infrastructure and Systems Metrics}
@@ -387,19 +395,20 @@ The evaluation validates ACIS-X as a low-latency, resilient multi-agent architec
   \setlength{\itemsep}{1pt}
   \setlength{\parskip}{0pt}
   \setlength{\parsep}{0pt}
-  \item \textbf{Real-World Data Barriers and Stress Coverage:} While empirical B2B ledgers provide historical grounding, real enterprise trade credit and delinquency records are proprietary commercial assets strictly guarded by non-disclosure agreements and financial regulations. To evaluate how ACIS-X handles real-world contingencies without private ledgers, our jump-diffusion harness intentionally models extreme operational dynamics—including Poisson liquidity shocks and fat-tailed Pareto delay mixtures. This provides an exhaustive architectural validation against tail-risk contingencies that static historical datasets rarely capture.
+  \item \textbf{Domain Data Barriers and Situational Reasoning:} While public retail credit benchmarks (e.g., German Credit, LendingClub~\cite{jajoo2025masca,kubam2026agentic}) record static consumer loans, they lack the invoice payment terms and multi-tier dynamics of enterprise B2B trade credit, whose ledgers remain proprietary under strict NDAs. Crucially, ACIS-X does not hinge on any single historical dataset; its core contribution lies in the \textit{situational inference pipeline}---the invariant mechanism extracting, reconciling, and policy-bounding asynchronous streams, filings, and velocity shifts. Our jump-diffusion harness (Poisson shocks, Pareto delay mixtures) stress-tests this reasoning substrate against tail-risk contingencies that static ledgers cannot capture.
   \item \textbf{Lab Benchmark vs. Distributed Recovery:} The 0.26\,ms self-healing metric reflects internal supervisor dispatch latency on a single node. In distributed multi-node production, total recovery is governed by the 60\,s heartbeat timeout and Kafka consumer group rebalance (3--5\,s), an intentional interval tailored for 30--60 day trade credit to suppress flapping from transient GC pauses.
   \item \textbf{Model Governance Boundary:} Layer~6 provides automated PSI drift alerts and challenger benchmarking inspired by supervisory principles (such as SR~11-7). Production deployment requires coupling these automated streaming signals with formal human-in-the-loop credit committee review workflows.
 \end{enumerate}
 
-\section{Conclusion}
+\section{Conclusion and Future Work}
 \label{sec:conclusion}
-ACIS-X presents an event-driven multi-agent credit architecture on Apache Kafka featuring three-tier signal fusion, stream-level EOS with idempotent sinks, autonomous model governance, SHAP audit persistence, and heartbeat-driven recovery from committed offsets. Across 42 independent seed evaluations, the pipeline achieved peak throughput of 6,420 events/s, sub-50\,ms latency (P95 16.2\,ms), and $4.93\times$ scaling across partitioned consumers. Architectural ablation confirmed that behavioural refinement provides the primary intraday ranking lift ($\Delta\rho=+0.065$, $p<0.0001$) with $<$\,1\,ms SHAP overhead, while fault injection demonstrated sub-millisecond self-healing decision latency under single-node testbed conditions. Future work will focus on field validation via anonymized enterprise ERP partnerships and distributed multi-cluster disaster recovery drills.
+ACIS-X presents an event-driven multi-agent credit architecture on Apache Kafka featuring three-tier signal fusion, stream-level EOS with idempotent sinks, autonomous model governance, SHAP audit persistence, and heartbeat-driven recovery from committed offsets. Across 42 independent seed evaluations, the pipeline achieved peak throughput of 6,420 events/s, sub-50\,ms latency (P95 16.2\,ms), and $4.93\times$ scaling across partitioned consumers. Architectural ablation confirmed that behavioural refinement provides the primary intraday ranking lift ($\Delta\rho=+0.065$, $p<0.0001$) with $<$\,1\,ms SHAP overhead, while fault injection demonstrated sub-millisecond self-healing decision latency under single-node conditions. Future work will focus on field validation via anonymized enterprise ERP partnerships and distributed multi-cluster disaster recovery drills.
 
-\section*{Acknowledgement}
+\subsubsection*{Acknowledgement}
 The authors thank the faculty and laboratory infrastructure of the Department of Computer Science and Engineering, AMC Engineering College, Bengaluru, for supporting this research.
 
-\begin{thebibliography}{10}\footnotesize
+\enlargethispage{2\baselineskip}
+\begin{thebibliography}{12}\footnotesize
 \setlength{\itemsep}{0pt plus 0.1pt}
 \setlength{\parskip}{0pt}
 
@@ -413,25 +422,25 @@ Jajoo, G., Pandey, A., Chitale, P., Agarwal, S.: MASCA: LLM-based multi-agent sy
 Altman, E.I.: Financial ratios, discriminant analysis and the prediction of corporate bankruptcy. J.~Finance \textbf{23}(4), 589--609 (1968)
 
 \bibitem{chang2025explainable}
-Chang, V., Xu, Q.A., Akinloye, S.H., Benson, V., Hall, K.: Prediction of bank credit worthiness through credit risk analysis: an explainable machine learning study. Ann.~Oper.~Res. \textbf{354}, 247--271 (2025). https://doi.org/10.1007/s10479-024-06134-x
+Chang, V., Xu, Q.A., Akinloye, S.H., Benson, V., Hall, K.: Prediction of bank credit worthiness through credit risk analysis: an explainable machine learning study. Ann.~Oper.~Res. \textbf{354}, 247--271 (2025)
 
 \bibitem{nwafor2024hybrid}
-Nwafor, C.N., Nwafor, O., Brahma, S.: Enhancing transparency and fairness in automated credit decisions: an explainable novel hybrid machine learning approach. Sci.~Rep. \textbf{14}, 25174 (2024). https://doi.org/10.1038/s41598-024-75026-8
+Nwafor, C.N., Nwafor, O., Brahma, S.: Enhancing transparency and fairness in automated credit decisions: an explainable novel hybrid machine learning approach. Sci.~Rep. \textbf{14}, 25174 (2024)
 
 \bibitem{lundberg2020local}
-Lundberg, S.M., Erion, G., Chen, H., et al.: From local explanations to global understanding with explainable AI for trees. Nat.~Mach.~Intell. \textbf{2}(1), 56--67 (2020). https://doi.org/10.1038/s42256-019-0138-9
+Lundberg, S.M., Erion, G., Chen, H., et al.: From local explanations to global understanding with explainable AI for trees. Nat.~Mach.~Intell. \textbf{2}(1), 56--67 (2020)
 
 \bibitem{kesarpu2025kafka}
-Kesarpu, S., Dasari, H.P.: Kafka event sourcing for real-time risk analysis. Int.~J.~Comput.~Exp.~Sci.~Eng. \textbf{11}(3) (2025). https://doi.org/10.22399/ijcesen.3715
+Kesarpu, S., Dasari, H.P.: Kafka event sourcing for real-time risk analysis. Int.~J.~Comput.~Exp.~Sci.~Eng. \textbf{11}(3) (2025)
 
 \bibitem{parnerkar2025eda}
-Parnerkar, H.: Comparative study of event-driven architectures in financial systems for real-time risk analysis and mitigation. Eur.~J.~Electr.~Eng.~Comput.~Sci. \textbf{9}(6), 46--54 (2025). https://doi.org/10.24018/ejece.2025.9.6.761
+Parnerkar, H.: Comparative study of event-driven architectures in financial systems for real-time risk analysis and mitigation. Eur.~J.~Electr.~Eng.~Comput.~Sci. \textbf{9}(6), 46--54 (2025)
 
 \bibitem{kephart2003autonomic}
-Kephart, J.O., Chess, D.M.: The vision of autonomic computing. Computer \textbf{36}(1), 41--50 (2003). https://doi.org/10.1109/MC.2003.1160055
+Kephart, J.O., Chess, D.M.: The vision of autonomic computing. Computer \textbf{36}(1), 41--50 (2003)
 
 \bibitem{beereddy2025selfhealing}
-Beereddy, K.R.: Self-healing streaming architecture: resilience patterns for event-driven microservices. J.~Comput.~Sci.~Technol.~Stud. \textbf{7}(8), 254--268 (2025). https://doi.org/10.32996/jcsts.2025.7.8.30
+Beereddy, K.R.: Self-healing streaming architecture: resilience patterns for event-driven microservices. J.~Comput.~Sci.~Technol.~Stud. \textbf{7}(8), 254--268 (2025)
 
 \bibitem{kubam2026agentic}
 Kubam, A.: Agentic AI for autonomous, explainable, and real-time credit risk decision-making. arXiv preprint arXiv:2601.00818 (2026)

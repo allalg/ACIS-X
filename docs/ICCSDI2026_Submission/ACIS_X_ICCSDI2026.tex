@@ -1,0 +1,350 @@
+% ICCSDI 2026 conference manuscript — ACIS-X
+%
+% International Conference on Computational Science and Data Intelligence
+% (ICCSDI 2026), 11--12 December 2026, NMIMS Mumbai, India (Hybrid Mode)
+
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
+
+%%%% Packages used by the ICCSDI 2026 conference template
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
+\usepackage{mathrsfs}
+\usepackage[title]{appendix}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{manyfoot}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{array}
+
+%%%% Space-efficient float parameters
+\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{2pt}
+\setlength{\abovedisplayskip}{5pt plus 2pt minus 2pt}
+\setlength{\belowdisplayskip}{5pt plus 2pt minus 2pt}
+\setlength{\abovedisplayshortskip}{2pt plus 1pt minus 1pt}
+\setlength{\belowdisplayshortskip}{2pt plus 1pt minus 1pt}
+
+%%%% Optional theorem environments
+\theoremstyle{thmstyleone}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\theoremstyle{thmstyletwo}
+\newtheorem{example}{Example}
+\newtheorem{remark}{Remark}
+
+\theoremstyle{thmstylethree}
+\newtheorem{definition}{Definition}
+
+\raggedbottom
+
+\begin{document}
+
+%%%% Manuscript title
+\title[ACIS-X: Multi-Agent Credit Intelligence]{Autonomous Credit Intelligence: An Event-Driven, Self-Healing Multi-Agent Framework for Real-Time B2B Risk Assessment}
+
+%%%% Authors and affiliations
+\author*[1]{\fnm{Nikhil} \sur{Nagendra}}\email{nikhilnag98@gmail.com}
+
+\author[2]{\fnm{Pallavi} \sur{K V}}\email{pallavi.kv@dsat.edu.in}
+
+\author[1]{\fnm{Bhoomi} \sur{Joshi}}
+
+\author[1]{\fnm{Johan} \sur{K George}}
+
+\author[1]{\fnm{Nitin Bharadwaj} \sur{MVS}}
+
+\author[1]{\fnm{Prasanna B} \sur{Acharya}}
+
+\affil*[1]{\orgdiv{Department of Computer Science and Engineering},
+  \orgname{AMC Engineering College},
+  \orgaddress{\city{Bengaluru}, \postcode{560083}, \country{India}}}
+
+\affil[2]{\orgdiv{Department of Information Science and Engineering},
+  \orgname{Dayanand Sagar Academy of Technology and Management},
+  \orgaddress{\city{Bengaluru}, \postcode{560082}, \country{India}}}
+
+%%%% Abstract
+\abstract{Intraday B2B credit monitoring requires continuous synthesis of payment behaviour, balance-sheet fundamentals, and litigation signals. Given the proprietary confidentiality of commercial enterprise trade ledgers, evaluating streaming credit architectures necessitates reproducible macroeconomic stress simulation. This paper presents ACIS-X, a reactive event-driven multi-agent framework on Apache Kafka that continuously maintains a live per-customer risk score. Specialized agents coordinate over partitioned Kafka topics across five core layers, an autonomous model governance plane, and a self-healing plane. ACIS-X combines Kafka Exactly-Once Semantics (EOS) with idempotent database sinks, three-tier signal fusion, SHAP audit logging, streaming drift tracking via Population Stability Index (PSI), and heartbeat-driven recovery from committed offsets. Evaluated under a jump-diffusion stress harness, ACIS-X demonstrates sub-50\,ms streaming latency (P95 16.2\,ms), near-linear consumer scaling, and autonomous fault recovery with storm prevention.}
+
+%%%% Keywords
+\keywords{Multi-agent systems, Event-driven architecture, Credit risk intelligence, Apache Kafka, Exactly-Once Semantics, Self-healing systems}
+
+\maketitle
+
+\begin{center}
+\small
+\textbf{International Conference on Computational Science and Data Intelligence (ICCSDI 2026)}\\
+11--12 December 2026, NMIMS Mumbai, India $\vert$ Hybrid Mode
+\end{center}
+\vspace{0.2em}
+
+\renewcommand{\theHtable}{\thesection.\arabic{table}}
+
+%%% ====================================================================
+\section{Introduction}\label{sec:introduction}
+%%% ====================================================================
+
+Enterprise credit risk monitoring demands continuous evaluation of payment dynamics, financial health, and litigation. Event streaming platforms like Apache Kafka~\cite{kreps2011kafka} enable real-time risk updates, but recent LLM-based multi-agent systems~\cite{jajoo2025masca} introduce multi-second latencies ($>2$\,s) and non-deterministic outputs unsuitable for sub-50\,ms financial streaming. Conventional Kafka pipelines perform static transaction scoring without agentic autonomy or drift governance.
+
+A fundamental challenge is that real B2B invoice ledgers and defaults are confidential commercial secrets. We therefore separate \textit{architectural validation} (the core contribution) from \textit{empirical default forecasting}. We introduce ACIS-X (Autonomous Credit Intelligence System, Extended), an event-driven multi-agent framework grounded in the Actor model, with the following contributions:
+\begin{itemize}
+\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
+\item An event-driven multi-agent architecture on Kafka with autonomous self-healing and model governance.
+\item Kafka stream-level EOS combined with idempotent persistence and action deduplication for external sinks.
+\item Three-tier signal fusion integrating behavioural metrics, financial ratios, and litigation with deterministic risk policy guardrails.
+\item Streaming model governance via PSI drift tracking and online challenger benchmarking, inspired by SR~11-7.
+\item Systems benchmarks measuring throughput, scaling, P95/P99 latency, and fault recovery under a jump-diffusion stress harness.
+\end{itemize}
+
+%%% ====================================================================
+\section{Related Work and Research Gap}\label{sec:related}
+%%% ====================================================================
+
+Corporate credit scoring---from Z-scores~\cite{altman1968financial} to explainable ML~\cite{chang2025explainable,nwafor2024hybrid}---relies on offline batch feature stores incapable of capturing intraday delinquency transitions. Kafka event sourcing is adopted for sub-second fraud scoring~\cite{kesarpu2025kafka,parnerkar2025eda}, yet existing architectures evaluate isolated transactions rather than stateful, multi-source credit profiles combining balance-sheet ratios and litigation.
+
+Cognitive MAS frameworks---MASCA~\cite{jajoo2025masca}, Kubam's credit agent~\cite{kubam2026agentic}, Kou et al.~\cite{kou2025learning}---applied LLMs and MARL to credit assessment, but their multi-second execution times and prompt non-determinism are incompatible with high-throughput, low-latency streaming. Existing autonomic resilience~\cite{beereddy2025selfhealing,kephart2003autonomic} recovers at coarse container boundaries rather than providing per-agent heartbeat recovery with offset replay. Table~\ref{tab:comparison} positions ACIS-X at the intersection of streaming fusion, deterministic compliance, autonomous governance, and fine-grained agent recovery.
+
+\begin{table}[htbp]
+\caption{Architectural positioning across credit risk paradigms.}\label{tab:comparison}
+\centering\footnotesize
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Dimension} & \textbf{Batch XAI~\cite{chang2025explainable}} & \textbf{Stream~\cite{parnerkar2025eda}} & \textbf{Cog.\ MAS~\cite{jajoo2025masca}} & \textbf{ACIS-X} \\
+\midrule
+Latency       & Hours--Days  & $<$1\,s     & $>$2\,s        & P95 16\,ms \\
+Signal Scope  & Fin.\ ratios & Single txn  & Text/reports   & 3-tier fusion \\
+Exec.\ Model  & Batch        & Stream proc.& LLM/MARL       & Reactive MAS \\
+Atomicity     & DB ACID      & AL-once/EOS & None           & EOS + PK \\
+Fault Recov.  & Cold restart & Node failover& Prompt retry  & HB + offset \\
+Drift Gov.    & Offline      & Ext.\ dash. & Manual         & PSI + Challenger \\
+\botrule
+\end{tabular}
+\end{table}
+
+%%% ====================================================================
+\section{System Architecture}\label{sec:architecture}
+%%% ====================================================================
+
+ACIS-X maintains a live risk score for each customer $c_i$:
+\begin{equation}
+\mathcal{R}(c_i,t) = \mathcal{F}\bigl(\mathcal{B}(c_i,t),\;\mathcal{E}(c_i,t),\;\mathcal{L}(c_i,t)\bigr) \in [0,1],
+\label{eq:risk}
+\end{equation}
+where $\mathcal{B}$ is behavioural history, $\mathcal{E}$ external financial indicators, and $\mathcal{L}$ litigation exposure. Design targets include sub-second processing, usable scores under partial signals, zero silent loss of committed work, and idempotent duplicate handling.
+
+The architecture comprises six layers on a common Kafka event bus: Layer~1 ingests customers, invoices, payments, and behavioural indicators; Layer~2 enriches via financial APIs and litigation scraping; Layer~3 performs payment risk prediction and composite scoring; Layer~4 enforces credit policy and collections; Layer~5 persists state; Layer~6 tracks drift and benchmarks challengers. A system plane manages time ticks, monitoring, self-healing, and dead-letter-queue isolation. All events are keyed by \texttt{customer\_id}, ensuring per-customer partition affinity and temporal ordering without distributed join coordinators.
+
+Table~\ref{tab:agents} catalogues every agent, its layer, and operational role. Each operates as an isolated OS process with a dedicated consumer group.
+
+\begin{table}[htbp]
+\caption{ACIS-X agent inventory: layer and operational role.}\label{tab:agents}
+\centering\footnotesize
+\begin{tabular}{@{}llp{5.2cm}@{}}
+\toprule
+\textbf{Agent} & \textbf{L} & \textbf{Role} \\
+\midrule
+ScenarioGenerator  & 1 & Emits reproducible synthetic/jump-diffusion macro-stress streams. \\
+CustomerState      & 1 & Rebuilds behavioural metrics (OTR, delay, utilisation). \\
+ExternalData       & 2 & Enriches and caches financial ratios (D/E, ROE, PE). \\
+LitigationScraping & 2 & Quantifies legal exposure from court/news feeds. \\
+Aggregator         & 2 & Fuses Tier~2 financial and litigation signals ($0.6/0.4$). \\
+PaymentPrediction  & 3 & RF scoring + guardrails + SHAP attributions. \\
+RiskScoring        & 3 & Refines base score with behavioural \& temporal velocity. \\
+OverdueDetection   & 4 & Time-tick driven delinquency detection. \\
+CreditPolicy       & 4 & Maps risk tiers to operational intents. \\
+Collections        & 4 & Idempotent collection actions; storm prevention. \\
+DBAgent            & 5 & Persists events (SQLite/Postgres) for recovery. \\
+Query / Memory     & 5 & In-memory reads with DB fallback. \\
+ModelGovernance    & 6 & PSI/KS drift tracking; challenger benchmarking. \\
+\botrule
+\end{tabular}
+\end{table}
+
+%%% ====================================================================
+\section{Methodology}\label{sec:methods}
+%%% ====================================================================
+
+\subsection{Three-Tier Signal Fusion}\label{subsec:fusion}
+
+\textbf{Tier~1 -- Behavioural signals.} The customer state agent rebuilds metrics from invoices and payments under a per-customer lock. With payment/due timestamps $\mathrm{paid}_k, \mathrm{due}_k$:
+\begin{equation}
+\begin{split}
+\mathrm{OTR}(c_i) &= \frac{|\{I_k : \mathrm{paid}(I_k)\leq\mathrm{due}(I_k)\}|}{|\mathcal{I}(c_i)|}, \\
+\mathrm{AvgDelay}(c_i) &= \frac{1}{|\mathcal{P}|}\sum_{k}\max\bigl((\mathrm{paid}_k - \mathrm{due}_k),\,0\bigr).
+\end{split}
+\label{eq:behavioural}
+\end{equation}
+
+\textbf{Tier~2 -- External signals.} Financial ratios are cached for 90~days as $\mathcal{E}(c_i)\in[0,1]$; litigation scraping scores court exposure over 365~days as $\mathcal{L}(c_i)\in[0,1]$.
+
+\textbf{Tier~3 -- Fusion.} The aggregator fuses external signals:
+\begin{equation}
+R_{\text{ext}}(c_i) = w_{\text{fin}}\cdot\mathcal{E}(c_i) + w_{\text{lit}}\cdot\mathcal{L}(c_i)\in[0,1],
+\label{eq:aggregation}
+\end{equation}
+with $w_{\text{fin}}{=}0.60$, $w_{\text{lit}}{=}0.40$. Sensitivity is evaluated in Section~\ref{subsec:ablation}.
+
+\subsection{Payment Risk Prediction and Guardrails}\label{subsec:prediction}
+
+The feature vector $X\in\mathbb{R}^{d}$ includes normalised delay, credit utilisation, invoice ratio, late rate, external financial score, litigation index, and rating penalty. A Random Forest ($M{=}50$ trees), pre-calibrated offline, yields $r_{ml}=\frac{1}{M}\sum_{m} h_m(X)$. ACIS-X operates \textbf{label-free at runtime}:
+\begin{equation}
+r_{final}=\max\bigl(0,\min(1,r_{ml}+r_{policy})\bigr),
+\label{eq:prediction}
+\end{equation}
+where deterministic guardrail $r_{policy}$ enforces rating penalties ($+0.10$~B, $+0.20$~C) and litigation caps ($+0.15$ if $\mathcal{L}{>}0.1$, $+0.25$ if $\mathcal{L}{>}0.5$). Attributions are logged via SHAP TreeExplainer~\cite{lundberg2020local} for auditability.
+
+\subsection{Risk Refinement and Self-Healing}\label{subsec:refinement}
+
+The risk scoring agent forms adjusted risk from prediction $r_{\text{pred}}$:
+\begin{equation}
+r_{\text{adj}}=\max\Bigl(0,\min\bigl(1,r_{\text{pred}}+0.85\cdot\Delta_{\text{beh}}+0.30\cdot\Delta_{\text{temp}}\bigr)\Bigr),
+\label{eq:refinement}
+\end{equation}
+where $\Delta_{\text{beh}} = 0.40a_{\text{overdue}}{+}0.20a_{\text{pay}}{+}0.15a_{\text{delay}}{+}0.15a_{\text{out}}{+}0.10a_{\text{exp}}$ ranks urgency across normalised factors, and $\Delta_{\text{temp}}{\in}[-0.2,0.3]$ captures trend direction. Agents emit heartbeats every $T_H{=}10$\,s; monitoring detects a 60\,s timeout (6 missed beats), triggering restart from the last committed offset.
+
+\subsection{Model Governance and Stress Harness}\label{subsec:governance}
+
+Layer~6 tracks predictions across sliding windows ($W{=}200$) and computes PSI:
+\begin{equation}
+\text{PSI} = \sum_{b=1}^{B} (P_b - Q_b) \cdot \ln\!\left(\frac{P_b}{Q_b}\right),
+\label{eq:psi}
+\end{equation}
+where $P_b$, $Q_b$ are baseline/current quantile proportions ($B{=}10$ bins). Values $\text{PSI} \ge 0.10$ trigger drift warnings. A challenger model (linear SGD) is continuously benchmarked against the champion RF.
+
+To evaluate without confidential ledgers, a jump-diffusion stress harness generates scenarios:
+\begin{equation}
+dZ_t = \kappa (\mu - Z_t)\, dt + \sigma_Z\, dW_t + J_t\, dN_t,
+\label{eq:jumpdiff}
+\end{equation}
+where $Z_t {\in} [0,1]$ is a latent stress factor, $\kappa$ the mean-reversion rate, $\sigma_Z$ volatility, and $J_t\,dN_t$ a Poisson jump (liquidity shocks). Customer delinquency is conditioned on $Z_t$ via Pareto delay mixtures across Calm, Stressed, and Crisis regimes.
+
+%%% ====================================================================
+\section{Implementation}\label{sec:implementation}
+%%% ====================================================================
+
+ACIS-X is implemented in Python~3.11 (${\sim}55$ files, seven packages). Agents launch as separate OS processes managed by supervisor (max 5 attempts / 2~min). Messages use Pydantic-validated schemas (v1.1) with correlation IDs; validation failures route to a dead-letter queue. Kafka Stream EOS (transactional producers, \texttt{read\_committed} consumers) provides exactly-once for consume-transform-produce loops. External sinks use composite-key upserts (\texttt{ON CONFLICT DO NOTHING}) and LRU deduplication caches.
+
+%%% ====================================================================
+\section{Experimental Design and Evaluation}\label{sec:experiments}
+%%% ====================================================================
+
+\subsection{Systems Metrics}\label{subsec:sysmetrics}
+
+Tests executed on Windows~11 (i7-12700H, 32\,GB RAM, Docker Kafka~3.6): \textbf{180/180 tests passed} (100\%). Table~\ref{tab:perf} reports system metrics under streaming load across 6 partitions.
+
+\begin{table}[htbp]
+\caption{System performance, latency, and scalability.}\label{tab:perf}
+\centering\footnotesize
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Metric} & \textbf{Value} & \textbf{Scope} \\
+\midrule
+Peak Throughput        & 6{,}420 evt/s             & 6 partitions, batched \\
+Latency (P95/P99)      & 16.2\,ms / 28.4\,ms      & Full 5-layer pipeline \\
+Consumer Lag           & 0 (steady); $<$15\,ms post-burst & Recovery \\
+Dedup (10k repeats)    & 1 action dispatched       & Idempotency \\
+Scaling ($N{=}4/6$)    & $3.49{\times}/4.93{\times}$ & Partition-bounded \\
+Governance PSI         & 4.1\,ms ($<$0.10 stable)  & Sliding-window \\
+Suite Pass Rate        & 180/180 (100\%)           & Full verification \\
+\botrule
+\end{tabular}
+\end{table}
+
+\subsection{Ablation and Sensitivity}\label{subsec:ablation}
+
+Ablation across $n{=}200$ customers over 42 seeds (Table~\ref{tab:ablation}): behavioural refinement provides the dominant lift ($\Delta\rho{=}+0.065$, paired $t{=}37.29$, $p{<}0.0001$, $df{=}41$), while external enrichment contributes marginally ($\Delta\rho{=}+0.005$). In real B2B credit, external financials update quarterly and serve as low-frequency policy guardrails. SHAP adds ${\sim}0.9$\,ms/event.
+
+\begin{table}[htbp]
+\caption{Architectural ablation ($n{=}200$, 42 seeds): Spearman $\rho$ with ground truth.}\label{tab:ablation}
+\centering\footnotesize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Configuration} & \textbf{$\rho$} & \textbf{$\Delta\rho$} & \textbf{Note} \\
+\midrule
+Full ACIS-X            & $0.734 \pm 0.035$ & ---      & All layers \\
+$-$External enrich.    & $0.728 \pm 0.035$ & $-$0.005 & $p{<}0.0001$ \\
+$-$Behav.\ refine.     & $0.669 \pm 0.042$ & $-$0.065 & $p{<}0.0001$ \\
+$-$SHAP audit          & (latency)         & $+$0.9\,ms & Overhead \\
+\botrule
+\end{tabular}
+\end{table}
+
+Varying fusion weights ($w_{\text{fin}}/w_{\text{lit}}$: 50/50, 60/40, 70/30) yielded $\rho{=}0.760$, $0.872$, $0.941$ respectively, confirming the pipeline responds predictably to policy weight shifts without online RL.
+
+\subsection{Fault Injection}\label{subsec:fault}
+
+Table~\ref{tab:fault} reports self-healing evaluation. Internal decision latency is sub-millisecond; cooldown prevents restart storms (exactly 1 restart/agent in 5-agent cascades). In distributed deployment, total recovery is governed by the 60\,s heartbeat timeout and Kafka rebalance (3--5\,s), after which consumers resume from committed offsets.
+
+\begin{table}[htbp]
+\caption{Fault injection results (single-node decision latency).}\label{tab:fault}
+\centering\footnotesize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Scenario} & \textbf{Metric} & \textbf{Value} & \textbf{Assert.} \\
+\midrule
+Agent crash            & decision lat.  & 0.26\,ms & $<$100\,ms \\
+Latency spike (5\,s)   & decision lat.  & 0.10\,ms & $<$100\,ms \\
+5-agent cascade        & restarts/agent & 1        & exactly~1 \\
+100-cycle endurance    & success rate   & 100\%    & 100/100 \\
+100-cycle endurance    & P95 lat.       & 0.23\,ms & $<$50\,ms \\
+\botrule
+\end{tabular}
+\end{table}
+
+\subsection{Predictive Comparison}\label{subsec:predictive}
+
+Table~\ref{tab:ml} benchmarks ACIS-X against supervised learners ($n{=}500$, 42 seeds). Supervised models reach high AUC ($>$0.96) by training on synthetic generator labels unavailable in production. ACIS-X operates label-free, improving upon heuristic rules ($F_1{=}0.757$ vs.\ $0.738$, winning 32/42 seeds) while providing continuous ranking (AUC~$=0.861$) at sub-50\,ms latency.
+
+\begin{table}[htbp]
+\caption{Predictive benchmark ($n{=}500$, 42 seeds). Supervised models use ground-truth labels; ACIS-X is label-free.}\label{tab:ml}
+\centering\footnotesize
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Method} & \textbf{F1} & \textbf{AUC} \\
+\midrule
+Naive utilisation             & $0.738 \pm 0.038$ & --- \\
+ACIS-X streaming (label-free) & $0.757 \pm 0.035$ & $0.861 \pm 0.032$ \\
+Log.\ Reg.\ (basic/enriched, sup.) & $0.927/0.965$  & $0.988/0.998$ \\
+Random Forest (basic/enriched)      & $0.886/0.895$  & $0.967/0.972$ \\
+Gradient Boosting (basic/enriched)  & $0.879/0.888$  & $0.967/0.970$ \\
+\botrule
+\end{tabular}
+\end{table}
+
+%%% ====================================================================
+\section{Discussion}\label{sec:discussion}
+
+The evaluation validates ACIS-X as a low-latency, resilient multi-agent architecture for real-time credit intelligence. Behavioural transaction dynamics drive intraday differentiation ($\Delta\rho{=}+0.065$, $p{<}0.0001$), while external ratios act as low-frequency guardrails. PSI and SHAP ($<$1\,ms) run inline without bottlenecking throughput.
+
+\subsection{Limitations}\label{subsec:limitations}
+
+\textbf{Domain Data:} Public retail credit benchmarks lack B2B invoice dynamics; ACIS-X's primary contribution is the situational streaming pipeline evaluated under jump-diffusion tail-risk scenarios. \textbf{Distributed Recovery:} The 0.26\,ms metric reflects single-node decision latency; multi-node recovery is governed by 60\,s heartbeat timeout and Kafka rebalances (3--5\,s). \textbf{Governance:} Automated PSI/challenger signals require coupling with human-in-the-loop credit committee review.
+
+%%% ====================================================================
+\section{Conclusion and Future Work}\label{sec:conclusion}
+%%% ====================================================================
+
+ACIS-X presents an event-driven multi-agent credit architecture on Kafka featuring three-tier signal fusion, stream-level EOS with idempotent sinks, autonomous model governance, SHAP audit persistence, and heartbeat-driven recovery. Across 42 seeds, the pipeline achieved 6{,}420 events/s peak throughput, P95 16.2\,ms latency, and $4.93{\times}$ partition scaling. Behavioural refinement provides the primary ranking lift ($\Delta\rho{=}+0.065$) with $<$1\,ms SHAP overhead, and fault injection confirms sub-millisecond self-healing decisions. Future work targets field validation via anonymized ERP partnerships and distributed disaster recovery drills.
+
+\backmatter
+
+\bmhead{Acknowledgements}
+Faculty and laboratory infrastructure of the Department of CSE, AMC Engineering College, Bengaluru are gratefully acknowledged.
+
+\section*{Declarations}
+\small
+\noindent\textbf{Funding:} None. \textbf{Competing interests:} The authors declare no competing interests. \textbf{Ethics approval:} Not applicable. \textbf{Data availability:} Synthetic data generated via Section~\ref{subsec:governance}. \textbf{Code availability:} \texttt{https://github.com/nikhilnagendra/ACIS-X}. \textbf{Author contributions:} N.~Nagendra: conceptualization, architecture, implementation, experimentation, manuscript. P.~K~V: supervision. B.~Joshi, J.~K~George, N.~B.~MVS, P.~B.~Acharya: implementation support and review.
+
+\bibliography{references}
+
+\end{document}

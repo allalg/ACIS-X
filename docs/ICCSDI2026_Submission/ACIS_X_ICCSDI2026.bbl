@@ -1,0 +1,196 @@
+%% BioMed_Central_Bib_Style_v1.01
+
+\begin{thebibliography}{12}
+% BibTex style file: bmc-mathphys.bst (version 2.1), 2014-07-24
+\ifx \bisbn   \undefined \def \bisbn  #1{ISBN #1}\fi
+\ifx \binits  \undefined \def \binits#1{#1}\fi
+\ifx \bauthor  \undefined \def \bauthor#1{#1}\fi
+\ifx \batitle  \undefined \def \batitle#1{#1}\fi
+\ifx \bjtitle  \undefined \def \bjtitle#1{#1}\fi
+\ifx \bvolume  \undefined \def \bvolume#1{\textbf{#1}}\fi
+\ifx \byear  \undefined \def \byear#1{#1}\fi
+\ifx \bissue  \undefined \def \bissue#1{#1}\fi
+\ifx \bfpage  \undefined \def \bfpage#1{#1}\fi
+\ifx \blpage  \undefined \def \blpage #1{#1}\fi
+\ifx \burl  \undefined \def \burl#1{\textsf{#1}}\fi
+\ifx \doiurl  \undefined \def \doiurl#1{\url{https://doi.org/#1}}\fi
+\ifx \betal  \undefined \def \betal{\textit{et al.}}\fi
+\ifx \binstitute  \undefined \def \binstitute#1{#1}\fi
+\ifx \binstitutionaled  \undefined \def \binstitutionaled#1{#1}\fi
+\ifx \bctitle  \undefined \def \bctitle#1{#1}\fi
+\ifx \beditor  \undefined \def \beditor#1{#1}\fi
+\ifx \bpublisher  \undefined \def \bpublisher#1{#1}\fi
+\ifx \bbtitle  \undefined \def \bbtitle#1{#1}\fi
+\ifx \bedition  \undefined \def \bedition#1{#1}\fi
+\ifx \bseriesno  \undefined \def \bseriesno#1{#1}\fi
+\ifx \blocation  \undefined \def \blocation#1{#1}\fi
+\ifx \bsertitle  \undefined \def \bsertitle#1{#1}\fi
+\ifx \bsnm \undefined \def \bsnm#1{#1}\fi
+\ifx \bsuffix \undefined \def \bsuffix#1{#1}\fi
+\ifx \bparticle \undefined \def \bparticle#1{#1}\fi
+\ifx \barticle \undefined \def \barticle#1{#1}\fi
+\bibcommenthead
+\ifx \bconfdate \undefined \def \bconfdate #1{#1}\fi
+\ifx \botherref \undefined \def \botherref #1{#1}\fi
+\ifx \url \undefined \def \url#1{\textsf{#1}}\fi
+\ifx \bchapter \undefined \def \bchapter#1{#1}\fi
+\ifx \bbook \undefined \def \bbook#1{#1}\fi
+\ifx \bcomment \undefined \def \bcomment#1{#1}\fi
+\ifx \oauthor \undefined \def \oauthor#1{#1}\fi
+\ifx \citeauthoryear \undefined \def \citeauthoryear#1{#1}\fi
+\ifx \endbibitem  \undefined \def \endbibitem {}\fi
+\ifx \bconflocation  \undefined \def \bconflocation#1{#1}\fi
+\ifx \arxivurl  \undefined \def \arxivurl#1{\textsf{#1}}\fi
+\csname PreBibitemsHook\endcsname
+
+%%% 1
+\bibitem[\protect\citeauthoryear{Kreps et~al.}{2011}]{kreps2011kafka}
+\begin{bchapter}
+\bauthor{\bsnm{Kreps}, \binits{J.}},
+\bauthor{\bsnm{Narkhede}, \binits{N.}},
+\bauthor{\bsnm{Rao}, \binits{J.}}:
+\bctitle{Kafka: A distributed messaging system for log processing}.
+In: \bbtitle{Proceedings of the NetDB Workshop}
+(\byear{2011})
+\end{bchapter}
+\endbibitem
+
+%%% 2
+\bibitem[\protect\citeauthoryear{Jajoo et~al.}{2025}]{jajoo2025masca}
+\begin{botherref}
+\oauthor{\bsnm{Jajoo}, \binits{G.}},
+\oauthor{\bsnm{Pandey}, \binits{A.}},
+\oauthor{\bsnm{Chitale}, \binits{P.}},
+\oauthor{\bsnm{Agarwal}, \binits{S.}}:
+{MASCA}: {LLM}-based multi-agent system for credit assessment.
+arXiv preprint arXiv:2507.22758
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 3
+\bibitem[\protect\citeauthoryear{Altman}{1968}]{altman1968financial}
+\begin{barticle}
+\bauthor{\bsnm{Altman}, \binits{E.I.}}:
+\batitle{Financial ratios, discriminant analysis and the prediction of corporate bankruptcy}.
+\bjtitle{The Journal of Finance}
+\bvolume{23}(\bissue{4}),
+\bfpage{589}--\blpage{609}
+(\byear{1968})
+\end{barticle}
+\endbibitem
+
+%%% 4
+\bibitem[\protect\citeauthoryear{Chang et~al.}{2025}]{chang2025explainable}
+\begin{barticle}
+\bauthor{\bsnm{Chang}, \binits{V.}},
+\bauthor{\bsnm{Xu}, \binits{Q.A.}},
+\bauthor{\bsnm{Akinloye}, \binits{S.H.}},
+\bauthor{\bsnm{Benson}, \binits{V.}},
+\bauthor{\bsnm{Hall}, \binits{K.}}:
+\batitle{Prediction of bank credit worthiness through credit risk analysis: An explainable machine learning study}.
+\bjtitle{Annals of Operations Research}
+\bvolume{354},
+\bfpage{247}--\blpage{271}
+(\byear{2025})
+\end{barticle}
+\endbibitem
+
+%%% 5
+\bibitem[\protect\citeauthoryear{Nwafor et~al.}{2024}]{nwafor2024hybrid}
+\begin{barticle}
+\bauthor{\bsnm{Nwafor}, \binits{C.N.}},
+\bauthor{\bsnm{Nwafor}, \binits{O.}},
+\bauthor{\bsnm{Brahma}, \binits{S.}}:
+\batitle{Enhancing transparency and fairness in automated credit decisions: An explainable novel hybrid machine learning approach}.
+\bjtitle{Scientific Reports}
+\bvolume{14},
+\bfpage{25174}
+(\byear{2024})
+\end{barticle}
+\endbibitem
+
+%%% 6
+\bibitem[\protect\citeauthoryear{Kesarpu and Dasari}{2025}]{kesarpu2025kafka}
+\begin{botherref}
+\oauthor{\bsnm{Kesarpu}, \binits{S.}},
+\oauthor{\bsnm{Dasari}, \binits{H.P.}}:
+Kafka event sourcing for real-time risk analysis.
+International Journal of Computational and Experimental Science and Engineering
+\textbf{11}(3)
+(2025)
+\end{botherref}
+\endbibitem
+
+%%% 7
+\bibitem[\protect\citeauthoryear{Parnerkar}{2025}]{parnerkar2025eda}
+\begin{barticle}
+\bauthor{\bsnm{Parnerkar}, \binits{H.}}:
+\batitle{Comparative study of event-driven architectures in financial systems for real-time risk analysis and mitigation}.
+\bjtitle{European Journal of Electrical Engineering and Computer Science}
+\bvolume{9}(\bissue{6}),
+\bfpage{46}--\blpage{54}
+(\byear{2025})
+\end{barticle}
+\endbibitem
+
+%%% 8
+\bibitem[\protect\citeauthoryear{Kubam}{2026}]{kubam2026agentic}
+\begin{botherref}
+\oauthor{\bsnm{Kubam}, \binits{A.}}:
+Agentic {AI} for autonomous, explainable, and real-time credit risk decision-making.
+arXiv preprint arXiv:2601.00818
+(2026)
+\end{botherref}
+\endbibitem
+
+%%% 9
+\bibitem[\protect\citeauthoryear{Kou et~al.}{2025}]{kou2025learning}
+\begin{bchapter}
+\bauthor{\bsnm{Kou}, \binits{G.}}, \betal:
+\bctitle{Learning to fuse: Cost-sensitive credit assessment via hierarchical multi-agent reinforcement learning}.
+In: \bbtitle{Proceedings of the NeurIPS GenAI in Finance Workshop}
+(\byear{2025})
+\end{bchapter}
+\endbibitem
+
+%%% 10
+\bibitem[\protect\citeauthoryear{Beereddy}{2025}]{beereddy2025selfhealing}
+\begin{barticle}
+\bauthor{\bsnm{Beereddy}, \binits{K.R.}}:
+\batitle{Self-healing streaming architecture: Resilience patterns for event-driven microservices}.
+\bjtitle{Journal of Computer Science and Technology Studies}
+\bvolume{7}(\bissue{8}),
+\bfpage{254}--\blpage{268}
+(\byear{2025})
+\end{barticle}
+\endbibitem
+
+%%% 11
+\bibitem[\protect\citeauthoryear{Kephart and Chess}{2003}]{kephart2003autonomic}
+\begin{barticle}
+\bauthor{\bsnm{Kephart}, \binits{J.O.}},
+\bauthor{\bsnm{Chess}, \binits{D.M.}}:
+\batitle{The vision of autonomic computing}.
+\bjtitle{Computer}
+\bvolume{36}(\bissue{1}),
+\bfpage{41}--\blpage{50}
+(\byear{2003})
+\end{barticle}
+\endbibitem
+
+%%% 12
+\bibitem[\protect\citeauthoryear{Lundberg et~al.}{2020}]{lundberg2020local}
+\begin{barticle}
+\bauthor{\bsnm{Lundberg}, \binits{S.M.}},
+\bauthor{\bsnm{Erion}, \binits{G.}},
+\bauthor{\bsnm{Chen}, \binits{H.}}, \betal:
+\batitle{From local explanations to global understanding with explainable {AI} for trees}.
+\bjtitle{Nature Machine Intelligence}
+\bvolume{2}(\bissue{1}),
+\bfpage{56}--\blpage{67}
+(\byear{2020})
+\end{barticle}
+\endbibitem
+
+\end{thebibliography}
