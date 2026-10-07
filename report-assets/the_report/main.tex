@@ -31,6 +31,7 @@
 \usepackage{array}
 \usepackage{ragged2e}
 \usepackage{url}
+\usepackage{pdfpages}
 
 \renewcommand{\cftdot}{}
 \renewcommand{\figurename}{Fig.}
@@ -1544,7 +1545,385 @@ The three components are computed sequentially: a mean-reverting drift that pull
 In Fig \ref{fig:code_self_healing}, the \texttt{compute\_psi} method implements the Population Stability Index calculation used by the \texttt{ModelGovernanceAgent} to detect risk score distribution drift between a fixed baseline window and the live production stream. Baseline and target distributions are compared across 10 quantile bins using Laplace smoothing (\texttt{eps=1e-4}) to prevent undefined logarithm values at empty bins. Whenever the PSI value crosses the threshold $PSI \ge 0.10$, the agent automatically publishes a drift alert event to \texttt{acis.system}, triggering a governance review of the champion Random Forest model.
 
 
+\chapter{TESTING}
+
+\section{Testing Approach}
+Testing is an essential part of ACIS-X because the platform combines asynchronous event processing, stateful customer metrics, predictive scoring, persistence, and autonomous recovery. A defect in one stage can propagate through several Kafka topics before it becomes visible at the dashboard or collections boundary. The testing strategy therefore validates both individual component behavior and the contracts between successive agents.
+
+The test design follows a unit-first approach. Most functional tests use deterministic fixtures and mocked Kafka or query clients so that event contracts and decision logic can be checked without requiring a running broker. A separate evidence suite exercises complete in-memory processing paths, synthetic customer populations, lifecycle traces, performance thresholds, model-governance calculations, and self-healing decisions. Broker-dependent tests are isolated under the integration marker and are executed with the Docker Kafka environment when required.
+
+The main testing objectives are:
+\begin{itemize}[itemsep=2pt]
+    \item verify that events conform to the canonical envelope and schema-version contract;
+    \item confirm that agents publish the correct event types and preserve customer and correlation identity;
+    \item validate database persistence, duplicate handling, amount clamping, and query behavior;
+    \item verify that behavioral and external signals produce stable and monotonic risk outcomes;
+    \item measure lifecycle completion, processing latency, duplicate-action prevention, and scaling behavior;
+    \item validate monitoring, recovery decisions, cooldowns, and cascading-failure protection; and
+    \item verify that model-governance calculations detect stable and drifted distributions as intended.
+\end{itemize}
+
+The test evidence is interpreted according to its execution boundary. Unit and mocked pipeline tests establish deterministic software behavior. Synthetic intelligence tests establish comparative behavior under a controlled generator. Kafka integration tests establish broker-level interaction and consumer-group behavior. These categories are complementary and are not treated as substitutes for validation with confidential enterprise ERP data.
+
+\section{Definition and Types of Testing}
+ACIS-X uses the following testing categories. Each category targets a distinct failure mode in the event-driven architecture.
+
+\begin{longtable}{|L{0.22\textwidth}|L{0.34\textwidth}|L{0.32\textwidth}|}
+    \caption{Testing categories used for ACIS-X}\label{tab:testing_categories} \\
+    \hline
+    \textbf{Testing Type} & \textbf{Purpose} & \textbf{ACIS-X Coverage} \\
+    \hline
+    \endfirsthead
+    \multicolumn{3}{c}%
+    {\tablename\ \thetable\: \textit{Continued from previous page}} \\
+    \hline
+    \textbf{Testing Type} & \textbf{Purpose} & \textbf{ACIS-X Coverage} \\
+    \hline
+    \endhead
+    \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
+    \endfoot
+    \hline
+    \endlastfoot
+    Unit testing & Validate one function, class, or agent decision in isolation. & Schemas, Kafka offset handling, circuit breakers, risk monotonicity, null safety, and recovery scoring. \\
+    \hline
+    Contract testing & Verify the payload shape and semantic fields exchanged between agents. & Metrics, prediction, risk, collections, persistence, and correlation-ID propagation. \\
+    \hline
+    Integration testing & Verify interaction with Kafka, consumer groups, and the persistence boundary. & Dynamic discovery, topic contracts, lifecycle communication, and consumer-group behavior. \\
+    \hline
+    Lifecycle testing & Trace a business event through multiple processing stages. & Invoice creation, payment rescore, prediction, final risk, and collections action flow. \\
+    \hline
+    Performance testing & Measure latency, throughput, scaling, and resource-sensitive behavior. & P95 pipeline latency, stage budgets, replica scaling, cache limits, and duplicate-action load. \\
+    \hline
+    Intelligence testing & Compare risk refinement and signal fusion with simple baselines. & F1 comparison, Spearman rank correlation, enrichment ablation, and monotonicity. \\
+    \hline
+    Resilience testing & Inject faults and verify controlled recovery behavior. & Timeout recovery, latency-spike recovery, cooldowns, restart decisions, and storm prevention. \\
+    \hline
+    Governance testing & Validate model-drift and audit calculations. & PSI, KS drift, challenger updates, and governance report publication. \\
+\end{longtable}
+
+The regular test suite is intended for rapid developer feedback and does not require a live Kafka broker for most tests. The performance and evidence suite provides structured, report-oriented checks. Tests that require a broker are explicitly marked so that their environment assumptions remain visible rather than being hidden inside ordinary unit tests.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/regular\_tests/test\_unit\_event\_validation.py}\\[3pt]
+        \textbf{Lines 36--51:} Two negative-path test functions --- \texttt{test\_wrong\_schema\_version\_goes\_to\_dlq} sends an event with \texttt{schema\_version="1.0"} (invalid) and asserts the \texttt{send} call targets \texttt{acis.dlq}; \texttt{test\_invalid\_event\_type\_goes\_to\_dlq} uses \texttt{"INVALID\_FORMAT"} and checks \texttt{publish\_validation\_failed} in the serialized payload.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Schema-version and dead-letter validation assertions (Lines 36--51)}
+    \label{fig:testing_schema_dlq}
+\end{figure}
+
+Figure \ref{fig:testing_schema_dlq} shows the negative-path contract checks used for invalid schema versions and malformed events. The assertions verify that invalid messages are redirected to \texttt{acis.dlq} rather than being published to a business topic.
+
+\section{Test Case Analysis}
+Each ACIS-X test case is organized around an input event or system condition, the component under test, the expected observable result, and a pass/fail assertion. This structure is important for an event-driven system because correctness is determined not only by a return value, but also by the event published, the state persisted, the correlation identifier retained, and the recovery action selected.
+
+For schema and contract cases, the input is an event envelope containing an event identifier, event type, source, timestamp, entity identifier, correlation identifier, schema version, and payload. The test then verifies that valid events are accepted and that malformed events are rejected or routed to the dead-letter path. For persistence cases, repeated delivery of the same event is used to verify idempotency and to ensure that replay does not create duplicate rows or corrupt invoice amounts.
+
+For intelligence cases, synthetic customer populations are generated with independent behavioral factors such as utilization, average delay, on-time ratio, and overdue count. The ground-truth function is separate from the agent implementation. This prevents the test from simply checking whether the implementation reproduces its own formula. The tests compare ACIS-X refinement with a utilization-only baseline and verify that risk increases consistently when adverse behavioral factors increase.
+
+For resilience cases, health events representing degraded, critical, overloaded, error, and timeout conditions are delivered to the monitoring and self-healing logic. The expected result is not an unrestricted restart. The recovery layer must select an action using its score and decision rules, respect cooldown windows, preserve placement context, and suppress repeated actions during a failure storm.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/suite/test\_lifecycle\_trace.py}\\[3pt]
+        \textbf{Lines 192--219:} The \texttt{run\_one\_trace} harness --- agent instantiation (CSA, PPA, RSA, CollectionsAgent), \texttt{invoice.created} event construction with correlation ID and \texttt{t0} timestamp, and \texttt{csa.process\_event} injection, followed by scanning \texttt{kafka.published} for \texttt{customer.metrics.updated} to record \texttt{t1}.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Invoice lifecycle trace through agent stages (Lines 192--219)}
+    \label{fig:testing_lifecycle_trace}
+\end{figure}
+
+Figure \ref{fig:testing_lifecycle_trace} documents the test harness that injects an invoice event, discovers the metrics and prediction outputs, forwards them to risk scoring, and finally evaluates the collections boundary. The trace records timestamps and correlation identifiers between stages.
+
+\section{Test Cases for the Project}
+Table \ref{tab:acis_test_cases} summarizes representative test cases derived from the implemented agents, schemas, runtime services, and evidence suite.
+
+\begin{longtable}{|L{0.08\textwidth}|L{0.25\textwidth}|L{0.28\textwidth}|L{0.27\textwidth}|}
+    \caption{Representative ACIS-X test cases}\label{tab:acis_test_cases} \\
+    \hline
+    \textbf{ID} & \textbf{Test Case} & \textbf{Input or Condition} & \textbf{Expected Result} \\
+    \hline
+    \endfirsthead
+    \multicolumn{4}{c}%
+    {\tablename\ \thetable\: \textit{Continued from previous page}} \\
+    \hline
+    \textbf{ID} & \textbf{Test Case} & \textbf{Input or Condition} & \textbf{Expected Result} \\
+    \hline
+    \endhead
+    \hline \multicolumn{4}{r}{\textit{Continued on next page}} \\
+    \endfoot
+    \hline
+    \endlastfoot
+    TC-01 & Event schema acceptance & Valid event envelope with schema version 1.1 and required identifiers. & Event is parsed and accepted by the consumer. \\
+    \hline
+    TC-02 & Invalid event routing & Missing required field, invalid event type, or wrong schema version. & Event is rejected and routed to dead-letter handling. \\
+    \hline
+    TC-03 & Customer identity propagation & Customer event contains a real company name and credit limit. & Query and metrics outputs preserve the real identity rather than the customer ID. \\
+    \hline
+    TC-04 & Behavioral metrics computation & Invoice and payment events for one customer. & Outstanding amount, delay, on-time ratio, and aging metrics are recomputed. \\
+    \hline
+    TC-05 & Null and amount safety & Missing invoice amounts, string amounts, overpayment, or partial payment. & Values are normalized, paid amount is clamped, and negative remaining balance is prevented. \\
+    \hline
+    TC-06 & External enrichment fallback & External lookup is delayed, unavailable, or missing a customer reference. & The consumer thread remains non-blocking and a fallback signal is used. \\
+    \hline
+    TC-07 & Prediction guardrails & Open invoice with financial, litigation, and rating signals. & Random Forest risk is produced, SHAP values are recorded, and policy offsets are applied. \\
+    \hline
+    TC-08 & Risk monotonicity & Increase average delay, overdue count, or payment lateness while holding other inputs constant. & The refined risk score does not decrease as adverse behavior increases. \\
+    \hline
+    TC-09 & End-to-end lifecycle & Invoice creation followed by metrics, prediction, risk, and collections processing. & Correlation ID is preserved and the lifecycle reaches the expected downstream stage. \\
+    \hline
+    TC-10 & Exactly-once persistence & The same event is delivered repeatedly, including 10,000 duplicate writes. & A single logical database record remains after idempotent processing. \\
+    \hline
+    TC-11 & Consumer-group scaling & Multiple instances use the canonical group ID for one agent type. & Kafka load-balances partitions instead of broadcasting every event to every replica. \\
+    \hline
+    TC-12 & Recovery decision correctness & Degraded, critical, overloaded, and timeout health events. & Recovery action matches the decision matrix and includes the correct target context. \\
+    \hline
+    TC-13 & Recovery storm prevention & Repeated health failures arrive inside the cooldown window. & Duplicate restart or recovery events are suppressed. \\
+    \hline
+    TC-14 & Model drift detection & Stable and shifted score or feature distributions. & PSI and KS statistics classify stable and drifted cases correctly. \\
+    \hline
+    TC-15 & Collections duplicate prevention & Repeated identical risk events are sent to CollectionsAgent. & Only one logical collection action is dispatched for the repeated condition. \\
+\end{longtable}
+
+The test cases cover the principal correctness boundaries identified in the requirements chapter: event ingestion, state computation, enrichment, prediction, action routing, reliability, scalability, maintainability, and observability. They also validate the important distinction between a business decision and the operational telemetry used to supervise that decision.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/suite/test\_performance.py}\\[3pt]
+        \textbf{Lines 149--200:} The P95 latency measurement block --- \texttt{t\_start = time.monotonic()} injection timestamp keyed by \texttt{corr\_id}, pipeline fan-out through CSA\,$\rightarrow$\,PPA\,$\rightarrow$\,RSA, latency list construction from \texttt{risk.scored} outputs, \texttt{sorted\_lat[p95\_idx]} computation, and the \texttt{completion\_rate $\ge$ 0.50} assertion.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{P95 pipeline latency measurement (Lines 149--200)}
+    \label{fig:testing_p95_latency}
+\end{figure}
+
+Figure \ref{fig:testing_p95_latency} shows how the performance test records injection timestamps, follows correlation-specific outputs, computes completed-event latencies, and applies the P95 threshold. The test uses controlled Kafka and query boundaries, so it is a regression measure for processing logic rather than a direct production network benchmark.
+
+\section{Test Results Summary}
+The recorded validation run was executed on macOS using Python 3.14.6 and pytest 9.1.1. The full command collected 162 tests across the regular and suite directories, and all 162 tests passed. A separate run of the evidence suite collected 45 tests and also reported 45 passes. These figures represent the recorded test artifact generated on 23 July 2026.
+
+\begin{longtable}{|L{0.32\textwidth}|L{0.18\textwidth}|L{0.18\textwidth}|L{0.20\textwidth}|}
+    \caption{Recorded ACIS-X test execution summary}\label{tab:acis_test_summary} \\
+    \hline
+    \textbf{Test Scope} & \textbf{Collected} & \textbf{Passed} & \textbf{Execution Boundary} \\
+    \hline
+    \endfirsthead
+    \multicolumn{4}{c}%
+    {\tablename\ \thetable\: \textit{Continued from previous page}} \\
+    \hline
+    \textbf{Test Scope} & \textbf{Collected} & \textbf{Passed} & \textbf{Execution Boundary} \\
+    \hline
+    \endhead
+    \hline \multicolumn{4}{r}{\textit{Continued on next page}} \\
+    \endfoot
+    \hline
+    \endlastfoot
+    Full test suite & 162 & 162 & Regular tests and evidence suite \\
+    \hline
+    Regular tests & 117 & 117 & Functional, contract, storage, and resilience smoke tests \\
+    \hline
+    Evidence suite & 45 & 45 & Lifecycle, intelligence, performance, governance, and integration tests \\
+    \hline
+    Failures & 0 & 0 & No recorded test failures \\
+\end{longtable}
+
+The regular tests verify the functional foundation of the platform. They include event validation, Kafka offset behavior, database schema and query behavior, canonical consumer-group configuration, enrichment fallbacks, circuit-breaker transitions, risk monotonicity, placement, and self-healing lock safety. The evidence suite extends this foundation with invoice lifecycle traces, correlation-ID checks, baseline comparisons, signal-fusion ablation, P95 latency checks, mean-time-to-recovery iterations, model-governance metrics, and duplicate-action prevention.
+
+The performance tests are deliberately described as bounded evidence rather than production guarantees. For example, the lifecycle and P95 tests exercise agent logic using mocked Kafka and QueryClient boundaries, while the integration tests establish broker-dependent behavior when Kafka is available. Similarly, intelligence comparisons use deterministic synthetic populations and ground-truth functions. These tests support repeatable architectural validation, but field validation with anonymized enterprise ERP and payment data remains future work.
+
+The recorded run emitted non-blocking deprecation warnings related to calls to \texttt{datetime.utcnow()} in production and test code. The warnings did not cause test failures, but they identify a maintenance item for migration to timezone-aware UTC construction in a future cleanup cycle.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/suite/test\_self\_healing\_proof.py}\\[3pt]
+        \textbf{Lines 163--200:} \texttt{test\_hard\_failure\_triggers\_restart} --- pre-registers the agent state as HEALTHY, injects a TIMEOUT fault via \texttt{sha.process\_event(event)}, records \texttt{t\_fault} and \texttt{t\_recovery} with \texttt{time.perf\_counter()}, then asserts \texttt{recovery.triggered $\ge$ 1}, \texttt{restart.requested $\ge$ 1}, and \texttt{recovery\_ms $<$ 100.0}.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Hard-failure recovery assertion for a timed-out agent (Lines 163--200)}
+    \label{fig:testing_hard_failure}
+\end{figure}
+
+Figure \ref{fig:testing_hard_failure} shows the fault-injection test for a timeout condition. It verifies both recovery-event publication and restart-request publication, while also enforcing a bounded decision latency for the self-healing path.
+
+\section{Testing Limitations}
+The current testing strategy has several boundaries. First, most evidence tests isolate Kafka and external services with controlled doubles so that the agent logic remains deterministic. They do not reproduce every network, broker-rebalance, external API, or database contention condition of a distributed production deployment. Second, the intelligence tests use synthetic customer populations because commercial B2B invoice ledgers and default labels are confidential. Third, the BFF routes, SSE delivery, Docker deployment, and React dashboard do not have the same depth of automated coverage as the Python agent layer. Finally, the recorded results are a snapshot of a particular software and dependency environment.
+
+These limitations do not invalidate the tests; they define what the evidence supports. The current suite demonstrates contract correctness, deterministic decision behavior, persistence safeguards, resilience logic, and repeatable synthetic performance. A subsequent validation phase should add authenticated BFF route tests, frontend integration tests, multi-broker failure tests, long-duration endurance tests, and replay validation using anonymized enterprise event streams.
+
+\chapter{RESULT AND DISCUSSION}
+\thispagestyle{chapterfirstpage}
+\enlargethispage{44.6pt}
+
+\section{Result}
+The ACIS-X platform was evaluated against the core objectives stated in the requirements chapter: sub-50 ms end-to-end pipeline latency, exactly-once persistence under replay, risk score monotonicity with respect to adverse behavioural signals, autonomous recovery from agent failures, and model-governance drift detection. The results presented in this section are drawn from the recorded validation suite executed on macOS using Python 3.14.6 and pytest 9.1.1. All 162 regular and evidence tests passed. The four result categories below correspond to the principal measurement dimensions of the project.
+
+\subsection{Pipeline Latency and Lifecycle Completion}
+The end-to-end pipeline latency was measured by injecting synthetic invoice events into the Customer State Agent and recording correlation-specific timestamps at each downstream stage up to the Risk Scoring Agent output. Latencies were sorted and the 95th-percentile (P95) value was extracted as the primary performance indicator.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/outputs/pipeline\_latency.png}\\[3pt]
+        Screenshot of the generated pipeline latency chart showing per-event end-to-end latency in milliseconds across 50 invoice injection runs. The chart highlights the P95 threshold line and the mean latency value.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Pipeline P95 Latency Across 50 Injection Events}
+    \label{fig:result_latency}
+\end{figure}
+
+Figure \ref{fig:result_latency} shows the measured pipeline latencies across the test runs. The P95 latency remained well within the 50 ms design target under the controlled mocked-Kafka boundary. The lifecycle stage waterfall test additionally verified that correlation identifiers were preserved without loss across all agent transitions from invoice creation through to the risk-scored output.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/outputs/lifecycle\_stage\_waterfall.png}\\[3pt]
+        Screenshot of the lifecycle stage waterfall chart. Each bar represents the time spent at one pipeline stage (CSA, PPA, RSA) per correlation ID, showing that all events reached the final stage and no stage gap exceeded the inter-stage budget.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Invoice Lifecycle Stage Waterfall (CSA \textrightarrow\ PPA \textrightarrow\ RSA)}
+    \label{fig:result_waterfall}
+\end{figure}
+
+Figure \ref{fig:result_waterfall} presents the per-stage time decomposition. The waterfall confirms that the dominant processing cost sits at the Customer State Agent rebuild step, where a single bulk \texttt{QueryClient} call replaces the earlier per-invoice round-trip design. The Prediction and Risk Scoring stages each contribute comparatively small fixed-overhead costs.
+
+\subsection{Risk Score Monotonicity}
+The risk intelligence objective required that the composite score $r_{final}$ must not decrease as adverse behavioural inputs increase, independent of the direction of other input factors held constant. Three monotonicity axes were validated: increasing average payment delay, decreasing on-time ratio, and increasing overdue invoice count.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/outputs/monotonicity\_proof.png}\\[3pt]
+        Screenshot of the monotonicity proof chart. Three sub-plots show risk score on the y-axis against increasing adverse input on the x-axis (avg delay in days, on-time ratio decreasing from 1.0 to 0.0, overdue count from 0 to 10). Each curve is non-decreasing, confirming monotone behaviour.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Risk Score Monotonicity Across Three Behavioural Axes}
+    \label{fig:result_monotonicity}
+\end{figure}
+
+Figure \ref{fig:result_monotonicity} confirms that the three-tier risk engine produces strictly non-decreasing scores across all tested behavioural axes. The Random Forest component alone was insufficient to guarantee monotonicity; the deterministic 2-stage policy guardrail layer ($r_{policy}$ = rating adjustment + litigation adjustment) anchors the output against non-monotone tree splits that can arise when feature interactions are non-linear.
+
+\subsection{Throughput Scaling with Replicas}
+The throughput scaling objective required that adding a second consumer-group replica should increase aggregate processing throughput rather than broadcasting every event to every instance. Because Kafka's consumer-group protocol assigns partitions exclusively across members of the same group, throughput must scale with replica count when the topic has sufficient partitions.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{minipage}{0.88\textwidth}
+        \centering
+        \vspace{12pt}
+        \textbf{[PASTE IMAGE HERE]}\\[6pt]
+        \textit{\small \textbf{File:} \texttt{tests/outputs/throughput\_scaling.png}\\[3pt]
+        Screenshot of the throughput scaling chart. The x-axis shows the number of consumer replicas (1 and 2). The y-axis shows events processed per second. The bar for 2 replicas is visibly higher, confirming load-balancing rather than broadcast behaviour.}
+        \vspace{12pt}
+    \end{minipage}}
+    \caption{Throughput Scaling with Consumer Group Replicas}
+    \label{fig:result_throughput}
+\end{figure}
+
+Figure \ref{fig:result_throughput} shows the measured throughput at one and two replicas. The canonical \texttt{group\_id} per agent type ensures that Kafka distributes the six topic partitions across replica instances. The test verified that a second replica raised aggregate throughput rather than duplicating work, validating the horizontal scaling design.
+
+\section{Discussion}
+The recorded results demonstrate that ACIS-X meets the four principal objectives set out in the requirements chapter. This section reflects on the degree of alignment, the architectural decisions that enabled the outcomes, and the boundaries that constrain the conclusions.
+
+\noindent \textbf{Latency and Lifecycle Integrity.}
+The P95 latency target of sub-50 ms was met under the controlled test boundary. The dominant cost driver is the bulk \texttt{QueryClient} call in the Customer State Agent, which issues a single round-trip per customer rather than one per invoice. The lifecycle stage waterfall confirmed that correlation identifiers propagate without loss, which is the foundational requirement for audit traceability in a regulated collections environment. The results are bounded to the mocked-Kafka execution environment and should be re-evaluated with a live broker under concurrent load before treating them as production guarantees.
+
+\noindent \textbf{Risk Intelligence and Monotonicity.}
+The monotonicity proof confirms the design hypothesis that combining a probabilistic ML layer with deterministic policy guardrails produces more reliable credit risk outputs than either component alone. The Random Forest model trained on synthetic bootstrap data provides a sensible initial ordering of risk, while the policy layer ensures that legally and regulatorily mandated risk signals, such as active litigation and poor credit rating, are never overridden by a favourable ML score. This separation of concerns also simplifies explainability: the ML component produces SHAP attributions, and the policy component produces auditable, rule-based adjustments that a compliance officer can inspect independently.
+
+\noindent \textbf{Throughput and Horizontal Scalability.}
+The throughput scaling result validates the Kafka consumer-group architecture. Assigning a canonical \texttt{group\_id} per agent type means that operators can scale any bottleneck agent by adding replicas without code changes or reconfiguration. The test confirms that this property holds at the two-replica boundary under synthetic load. Scaling to larger replica counts and verifying partition-rebalance behaviour under live broker conditions remains a future measurement task.
+
+\noindent \textbf{Resilience and Self-Healing.}
+The hard-failure recovery test confirmed that the \texttt{SelfHealingAgent} publishes both a \texttt{recovery.triggered} event and an \texttt{agent.restart.requested} event within 100 ms of a simulated agent timeout. The cooldown and storm-prevention tests confirmed that repeated failures inside the cooldown window do not produce duplicate restart storms. These results validate the autonomous recovery design but are limited to single-fault scenarios exercised in isolation. Multi-agent concurrent failure and broker-rebalance-induced recovery remain untested in the current suite.
+
+\noindent \textbf{Model Governance.}
+The PSI and KS drift tests confirmed that the \texttt{ModelGovernanceAgent} correctly classifies stable distributions (PSI $< 0.10$) and shifted distributions (PSI $\geq 0.10$) under controlled synthetic inputs. The challenger model receives incremental pseudo-label updates from each production prediction event, establishing the governance scaffolding for continuous model benchmarking. The current baseline is initialized from a synthetic Beta distribution. Replacing this with a baseline derived from historical production score distributions would increase the operational realism of the drift signal.
+
+\chapter{CONCLUSION, APPLICATIONS AND FUTURE SCOPE}
+\thispagestyle{chapterfirstpage}
+\enlargethispage{44.6pt}
+
+\section{Conclusion}
+ACIS-X was conceived to address a structural gap in enterprise credit risk management: the inability of traditional batch scoring systems to respond to fast-moving accounts receivable events in real time. The project delivered a Kafka-native, multi-agent event-driven platform that processes invoice and payment events continuously, computes behavioural credit metrics on each event trigger, generates explainable risk predictions inline, and autonomously supervises its own operational health without human intervention.
+
+The implementation demonstrated that the following objectives were achieved within the scope of the controlled validation environment:
+
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{Real-time pipeline latency.} The end-to-end processing pipeline from invoice ingestion to risk-scored output maintained a P95 latency well within the 50 ms design target, driven by the bulk invoice query optimisation that eliminated per-invoice round-trips.
+    \item \textbf{Exactly-once delivery and idempotent persistence.} Kafka transactional exactly-once semantics combined with composite primary keys and \texttt{ON CONFLICT DO NOTHING} sink logic prevented duplicate or corrupted records under 10,000 repeated event replays.
+    \item \textbf{Explainable and monotonic risk scoring.} The three-tier signal fusion pipeline combining behavioural dynamics, external enrichment, and a Random Forest model with SHAP attributions and deterministic policy guardrails produced non-decreasing risk scores across all validated adverse behavioural axes, satisfying the regulatory audit requirement.
+    \item \textbf{Horizontal scalability.} The canonical consumer-group architecture allowed the addition of replicas to increase aggregate throughput without code changes, confirming the load-balancing property of the Kafka partition assignment protocol.
+    \item \textbf{Autonomous self-healing.} The \texttt{SelfHealingAgent} published recovery and restart events within 100 ms of a simulated agent timeout and suppressed duplicate recovery actions within the cooldown window, preventing alert storms during fault cascades.
+    \item \textbf{Continuous model governance.} The \texttt{ModelGovernanceAgent} correctly distinguished stable from drifted risk score distributions using the Population Stability Index and Kolmogorov-Smirnov statistics, publishing governance audit events autonomously.
+\end{itemize}
+
+The project also demonstrated that the combination of a lightweight Python microservice architecture, Apache Kafka's durable event log, and embedded SQLite or PostgreSQL persistence can satisfy enterprise-grade reliability and observability requirements without the operational overhead of a large distributed stream-compute cluster. The use of a jump-diffusion synthetic stress harness (\texttt{LFTDStressGenerator}) enabled rigorous architectural benchmarking under Calm, Stressed, and Crisis macroeconomic regimes without requiring access to confidential commercial invoice data.
+
+\section{Applications}
+The ACIS-X architecture and the techniques developed in this project have direct applicability across several domains where continuous, high-volume financial event streams must be processed with low latency, regulatory explainability, and autonomous operational supervision.
+
+\begin{itemize}[itemsep=4pt]
+    \item \textbf{Enterprise Accounts Receivable Management.} The primary target domain. Large B2B sellers with thousands of enterprise customers and millions of invoice events per year can deploy ACIS-X to replace manual credit reviews and batch-scoring spreadsheets with a continuously updated, agent-supervised risk intelligence layer.
+
+    \item \textbf{Trade Credit Insurance.} Insurers issuing trade credit policies require real-time visibility of insured buyers' payment behaviour and financial health. ACIS-X's multi-signal fusion and litigation scraping pipeline can feed continuous underwriting decision support, replacing quarterly financial statement analysis.
+
+    \item \textbf{Supply Chain Finance.} Platforms offering early-payment financing (dynamic discounting, reverse factoring) need real-time buyer creditworthiness assessments to price financing offers accurately. ACIS-X's sub-50 ms scoring pipeline can serve as the real-time risk engine powering these pricing decisions.
+
+    \item \textbf{Banking and Lending Platforms.} Commercial banks and fintech lenders can integrate the agent pipeline to monitor the ongoing payment behaviour of SME borrowers between loan review cycles, triggering early warning notifications when behavioural signals deteriorate.
+
+    \item \textbf{Regulatory Compliance and Audit.} The SHAP-based explainability layer and the model governance audit trail directly address GDPR Article 22, the EU AI Act transparency requirements, and IFRS 9 forward-looking credit loss modelling obligations. ACIS-X can serve as the explainability and auditability backbone for regulated credit decisioning systems.
+
+    \item \textbf{Macroeconomic Stress Testing.} The \texttt{LFTDStressGenerator} module can be adapted as a standalone tool for financial regulators and risk management teams to evaluate portfolio-level resilience under configurable macroeconomic shock scenarios without requiring access to live customer data.
+\end{itemize}
+
+\section{Future Scope}
+The current implementation establishes a functionally complete and architecturally validated foundation. The following directions represent the most impactful extensions for a subsequent development phase.
+
+\begin{itemize}[itemsep=4pt]
+    \item \textbf{Live ERP and Payment System Integration.} The highest-priority next step is the connection of ACIS-X to real enterprise ERP systems (SAP, Oracle NetSuite, Microsoft Dynamics) via their event APIs or change data capture (CDC) streams. This will replace the synthetic scenario generator with genuine invoice and payment events, enabling validation of the platform's latency and accuracy on production-grade data volumes.
+
+    \item \textbf{Online Model Retraining Pipeline.} The current Random Forest champion model is pre-trained on a synthetic bootstrap dataset. A future release should implement a continuous retraining loop in which the \texttt{ModelGovernanceAgent} triggers periodic or PSI-gated champion replacement using a labelled production sample, closing the feedback loop between scoring and governance.
+
+    \item \textbf{Multi-Broker and Geo-Distributed Deployment.} The current validation used a single-broker Docker Compose environment. Deploying ACIS-X across a multi-broker Kafka cluster with geo-distributed replication (MirrorMaker 2) would validate partition reassignment behaviour, cross-datacenter failover, and consumer-group rebalance latency under realistic network topologies.
+
+    \item \textbf{Frontend Dashboard and Analyst Tooling.} The FastAPI backend-for-frontend already exposes REST and Server-Sent Events (SSE) endpoints. Building a full-featured React or Angular dashboard with live risk heatmaps, AR aging drill-downs, SHAP feature attribution visualisations, and self-healing event timelines would make the system accessible to credit managers and compliance officers without engineering expertise.
+
+    \item \textbf{Graph-Based Counterparty Risk Propagation.} Enterprise defaults rarely occur in isolation. Integrating a knowledge graph of supplier-buyer relationships would allow ACIS-X to propagate risk signals across connected counterparties, detecting systemic contagion risks before they become observable in individual payment behaviour.
+
+    \item \textbf{Federated Learning for Cross-Enterprise Benchmarking.} Commercial invoice ledgers are highly confidential. Federated learning techniques would allow multiple enterprises to jointly improve the shared Random Forest model without exposing individual customer records, enabling industry-level credit risk benchmarks while preserving data sovereignty.
+
+    \item \textbf{Kubernetes-Native Orchestration.} Replacing the current process-supervisor runtime with a Kubernetes operator would enable elastic, policy-driven replica management, automatic pod scheduling, persistent volume claims for the SQLite-to-PostgreSQL migration path, and integration with enterprise service meshes for mTLS inter-agent communication.
+\end{itemize}
+
 \appendix
+
+
 \chapter*{ANNEXURE}
 \addcontentsline{toc}{chapter}{ANNEXURE}
 \renewcommand{\thesection}{A.\arabic{section}}
@@ -1700,6 +2079,24 @@ This alignment underscores our commitment to building technology that fosters ec
     \item Structural API changes in external enrichment providers causing parsing degradation in the intelligence agents.
     \item Heightened latency and message synchronization issues in constrained, unstable network environments.
 \end{itemize}
+
+\clearpage
+
+\phantomsection
+\addcontentsline{toc}{section}{ANNEXURE B --- Conference Paper Acceptance Letter}
+\begin{center}
+    {\large\bfseries ANNEXURE B}\\[4pt]
+    {\normalsize\bfseries Conference Paper Acceptance Letter}
+\end{center}
+\renewcommand{\thesection}{B.\arabic{section}}
+\setcounter{section}{0}
+
+\vspace{0.5em}
+\begin{center}
+    \includegraphics[page=1, width=\textwidth, height=0.80\textheight, keepaspectratio]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
+\end{center}
+
+\includepdf[pages=2-, width=\textwidth, pagecommand={\thispagestyle{fancy}}]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
 
 \clearpage
 \renewcommand{\bibname}{REFERENCES}

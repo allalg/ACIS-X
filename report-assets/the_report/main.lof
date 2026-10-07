@@ -19,3 +19,14 @@
 \contentsline {figure}{\numberline {6.3}{\ignorespaces 2-Stage Policy Guardrail Composition in PaymentPredictionAgent}}{46}{figure.caption.15}%
 \contentsline {figure}{\numberline {6.4}{\ignorespaces Latent Stress SDE Step Function}}{47}{figure.caption.16}%
 \contentsline {figure}{\numberline {6.5}{\ignorespaces Population Stability Index (PSI) Core Computation}}{47}{figure.caption.17}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {7.1}{\ignorespaces Schema-version and dead-letter validation assertions (Lines 36--51)}}{51}{figure.caption.18}%
+\contentsline {figure}{\numberline {7.2}{\ignorespaces Invoice lifecycle trace through agent stages (Lines 192--219)}}{53}{figure.caption.19}%
+\contentsline {figure}{\numberline {7.3}{\ignorespaces P95 pipeline latency measurement (Lines 149--200)}}{56}{figure.caption.20}%
+\contentsline {figure}{\numberline {7.4}{\ignorespaces Hard-failure recovery assertion for a timed-out agent (Lines 163--200)}}{58}{figure.caption.21}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {8.1}{\ignorespaces Pipeline P95 Latency Across 50 Injection Events}}{59}{figure.caption.22}%
+\contentsline {figure}{\numberline {8.2}{\ignorespaces Invoice Lifecycle Stage Waterfall (CSA \textrightarrow \ PPA \textrightarrow \ RSA)}}{60}{figure.caption.23}%
+\contentsline {figure}{\numberline {8.3}{\ignorespaces Risk Score Monotonicity Across Three Behavioural Axes}}{60}{figure.caption.24}%
+\contentsline {figure}{\numberline {8.4}{\ignorespaces Throughput Scaling with Consumer Group Replicas}}{61}{figure.caption.25}%
+\addvspace {10\p@ }
