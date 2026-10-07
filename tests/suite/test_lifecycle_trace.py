@@ -189,13 +189,10 @@ def _run_invoice_lifecycle(
     # Snapshot offset before this trace
     offset = len(kafka.published)
 
-    # Instantiate agents sharing the same kafka mock
     csa = CustomerStateAgent(kafka_client=kafka)
     ppa = PaymentPredictionAgent(kafka_client=kafka)
     rsa = RiskScoringAgent(kafka_client=kafka)
     col = CollectionsAgent(kafka_client=kafka)
-
-    # -- T0: Inject invoice.created --
     inv_event = Event(
         event_id=f"evt_inv_{seq:06d}",
         event_type="invoice.created",

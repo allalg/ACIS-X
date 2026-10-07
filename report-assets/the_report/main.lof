@@ -4,29 +4,29 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Use case diagram for ACIS-X}}{24}{figure.caption.6}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Sequence diagram illustrating event communication flows}}{25}{figure.caption.7}%
-\contentsline {figure}{\numberline {3.3}{\ignorespaces Activity diagram mapping out the decision pipeline}}{26}{figure.caption.8}%
-\contentsline {figure}{\numberline {3.4}{\ignorespaces State chart diagram specifying account state transitions}}{27}{figure.caption.9}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Use case diagram for ACIS-X}}{25}{figure.caption.6}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Sequence diagram illustrating event communication flows}}{26}{figure.caption.7}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces Activity diagram mapping out the decision pipeline}}{27}{figure.caption.8}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces State chart diagram specifying account state transitions}}{28}{figure.caption.9}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces System architecture of ACIS-X}}{32}{figure.caption.10}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces Component design of ACIS-X}}{33}{figure.caption.11}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Interface design of ACIS-X}}{36}{figure.caption.12}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces System architecture of ACIS-X}}{33}{figure.caption.10}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Component design of ACIS-X}}{34}{figure.caption.11}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Interface design of ACIS-X}}{37}{figure.caption.12}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {6.1}{\ignorespaces CustomerStateAgent Kafka Consumer Group Initialization}}{45}{figure.caption.13}%
-\contentsline {figure}{\numberline {6.2}{\ignorespaces Per-Customer Lock and Bulk Invoice Query}}{46}{figure.caption.14}%
-\contentsline {figure}{\numberline {6.3}{\ignorespaces 2-Stage Policy Guardrail Composition in PaymentPredictionAgent}}{46}{figure.caption.15}%
-\contentsline {figure}{\numberline {6.4}{\ignorespaces Latent Stress SDE Step Function}}{47}{figure.caption.16}%
-\contentsline {figure}{\numberline {6.5}{\ignorespaces Population Stability Index (PSI) Core Computation}}{47}{figure.caption.17}%
+\contentsline {figure}{\numberline {6.1}{\ignorespaces CustomerStateAgent Kafka Consumer Group Initialization}}{46}{figure.caption.13}%
+\contentsline {figure}{\numberline {6.2}{\ignorespaces Per-Customer Lock and Bulk Invoice Query}}{47}{figure.caption.14}%
+\contentsline {figure}{\numberline {6.3}{\ignorespaces 2-Stage Policy Guardrail Composition in PaymentPredictionAgent}}{47}{figure.caption.15}%
+\contentsline {figure}{\numberline {6.4}{\ignorespaces Latent Stress SDE Step Function}}{48}{figure.caption.16}%
+\contentsline {figure}{\numberline {6.5}{\ignorespaces Population Stability Index (PSI) Core Computation}}{48}{figure.caption.17}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {7.1}{\ignorespaces Schema-version and dead-letter validation assertions (Lines 36--51)}}{51}{figure.caption.18}%
-\contentsline {figure}{\numberline {7.2}{\ignorespaces Invoice lifecycle trace through agent stages (Lines 192--219)}}{53}{figure.caption.19}%
-\contentsline {figure}{\numberline {7.3}{\ignorespaces P95 pipeline latency measurement (Lines 149--200)}}{56}{figure.caption.20}%
-\contentsline {figure}{\numberline {7.4}{\ignorespaces Hard-failure recovery assertion for a timed-out agent (Lines 163--200)}}{58}{figure.caption.21}%
+\contentsline {figure}{\numberline {7.1}{\ignorespaces Schema-version and dead-letter validation assertions}}{52}{figure.caption.18}%
+\contentsline {figure}{\numberline {7.2}{\ignorespaces Invoice lifecycle trace through agent stages}}{54}{figure.caption.19}%
+\contentsline {figure}{\numberline {7.3}{\ignorespaces P95 pipeline latency measurement}}{57}{figure.caption.20}%
+\contentsline {figure}{\numberline {7.4}{\ignorespaces Hard-failure recovery assertion for a timed-out agent}}{59}{figure.caption.21}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {8.1}{\ignorespaces Pipeline P95 Latency Across 50 Injection Events}}{59}{figure.caption.22}%
-\contentsline {figure}{\numberline {8.2}{\ignorespaces Invoice Lifecycle Stage Waterfall (CSA \textrightarrow \ PPA \textrightarrow \ RSA)}}{60}{figure.caption.23}%
-\contentsline {figure}{\numberline {8.3}{\ignorespaces Risk Score Monotonicity Across Three Behavioural Axes}}{60}{figure.caption.24}%
-\contentsline {figure}{\numberline {8.4}{\ignorespaces Throughput Scaling with Consumer Group Replicas}}{61}{figure.caption.25}%
+\contentsline {figure}{\numberline {8.1}{\ignorespaces Pipeline P95 Latency Across 50 Injection Events}}{61}{figure.caption.22}%
+\contentsline {figure}{\numberline {8.2}{\ignorespaces Invoice Lifecycle Stage Waterfall (CSA \textrightarrow \ PPA \textrightarrow \ RSA)}}{62}{figure.caption.23}%
+\contentsline {figure}{\numberline {8.3}{\ignorespaces Risk Score Monotonicity Across Three Behavioural Axes}}{62}{figure.caption.24}%
+\contentsline {figure}{\numberline {8.4}{\ignorespaces Throughput Scaling with Consumer Group Replicas}}{63}{figure.caption.25}%
 \addvspace {10\p@ }
