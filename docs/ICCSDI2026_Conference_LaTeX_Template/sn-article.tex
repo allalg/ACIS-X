@@ -1,0 +1,307 @@
+% ICCSDI 2026 conference manuscript template
+%
+% International Conference on Computational Science and Data Intelligence
+% (ICCSDI 2026), 11--12 December 2026, NMIMS Mumbai, India (Hybrid Mode)
+%
+% IMPORTANT
+% 1. This package is intended only for ICCSDI 2026 conference-paper submissions.
+% 2. Do not edit the supplied class or bibliography-style files.
+% 3. Replace all instructional text and placeholders before submission.
+% 4. Follow the current ICCSDI 2026 submission guidelines and page limits.
+
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
+
+%%%% Packages used by the ICCSDI 2026 conference template
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
+\usepackage{mathrsfs}
+\usepackage[title]{appendix}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{manyfoot}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{listings}
+
+%%%% Optional theorem environments
+\theoremstyle{thmstyleone}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\theoremstyle{thmstyletwo}
+\newtheorem{example}{Example}
+\newtheorem{remark}{Remark}
+
+\theoremstyle{thmstylethree}
+\newtheorem{definition}{Definition}
+
+\raggedbottom
+
+\begin{document}
+
+%%%% Manuscript title
+% Provide a concise short title in square brackets.
+\title[Short Manuscript Title]{Full Title of the Manuscript}
+
+%%%% Authors and affiliations
+% Mark the corresponding author with an asterisk.
+% Add or remove author and affiliation blocks as required.
+\author*[1]{\fnm{First} \sur{Author}}\email{corresponding.author@example.edu}
+
+\author[2]{\fnm{Second} \sur{Author}}\email{second.author@example.edu}
+
+\author[1,3]{\fnm{Third} \sur{Author}}\email{third.author@example.edu}
+
+\affil*[1]{\orgdiv{Department/School}, \orgname{Institution Name},
+  \orgaddress{\street{Street Address}, \city{City}, \postcode{Postal Code},
+  \state{State}, \country{Country}}}
+
+\affil[2]{\orgdiv{Department/School}, \orgname{Institution Name},
+  \orgaddress{\street{Street Address}, \city{City}, \postcode{Postal Code},
+  \state{State}, \country{Country}}}
+
+\affil[3]{\orgdiv{Department/School}, \orgname{Institution Name},
+  \orgaddress{\street{Street Address}, \city{City}, \postcode{Postal Code},
+  \state{State}, \country{Country}}}
+
+%%%% Abstract
+% Write a self-contained abstract. State the problem, method, principal results,
+% and implications. Avoid citations, undefined abbreviations, and equations.
+\abstract{Provide a concise and self-contained abstract describing the research
+problem, motivation, proposed approach, experimental or analytical methodology,
+principal findings, and significance of the work. Clearly state the novelty
+and original contribution of the manuscript. Replace this instructional text before submission.}
+
+%%%% Keywords
+% Use specific terms that support indexing and discovery.
+\keywords{computational science, data intelligence, trustworthy artificial intelligence,
+secure computational systems, keyword five}
+
+\maketitle
+
+\begin{center}
+\small
+\textbf{International Conference on Computational Science and Data Intelligence (ICCSDI 2026)}\\
+11--12 December 2026, NMIMS Mumbai, India $\vert$ Hybrid Mode
+\end{center}
+\vspace{0.5em}
+
+% The supplied class uses internal tables in the title block. Giving manuscript
+% tables section-aware PDF anchors prevents duplicate hyperref destinations.
+\renewcommand{\theHtable}{\thesection.\arabic{table}}
+
+\section{Introduction}\label{sec:introduction}
+
+Explain the research context, practical or theoretical motivation, and the
+specific problem addressed. Identify the limitations of existing approaches
+and state the research gap. Conclude the introduction with the objectives,
+main contributions, and organisation of the manuscript.
+
+A concise contribution list may be included when it improves clarity:
+\begin{itemize}
+\item State the first original technical or scientific contribution.
+\item State the second contribution, including the evidence used to validate it.
+\item State the third contribution and its significance or practical implication.
+\end{itemize}
+
+The manuscript should clearly establish its originality through appropriate
+theoretical development, experiments, datasets, analyses, comparisons, or
+applications. Cite related literature using the numbered citation
+style, for example \cite{goodfellow2016deep,vaswani2017attention}.
+
+\section{Related Work and Research Gap}\label{sec:related}
+
+Critically review the most relevant and recent work. Organise the discussion by
+methods, assumptions, application domains, datasets, or evaluation protocols
+rather than listing papers sequentially. Explain how the present study differs
+from and advances the state of the art.
+
+\section{Materials and Methods}\label{sec:methods}
+
+Describe the proposed method with enough detail to support verification and
+reproducibility. Depending on the paper, this section may be renamed
+``Proposed Methodology,'' ``System Model,'' ``Mathematical Framework,'' or
+``Research Method.'' Define every symbol when it first appears.
+
+\subsection{Problem Formulation}\label{subsec:problem}
+
+State the inputs, outputs, assumptions, constraints, and optimisation or decision
+objective. A general supervised learning objective can be written as
+\begin{equation}
+\theta^{\star}=\arg\min_{\theta}\left[
+\frac{1}{n}\sum_{i=1}^{n}\mathcal{L}\bigl(f_{\theta}(\mathbf{x}_i),y_i\bigr)
++\lambda\,\Omega(\theta)\right],
+\label{eq:objective}
+\end{equation}
+where $n$ is the number of observations, $\mathbf{x}_i$ and $y_i$ are the input
+and target for observation $i$, $f_{\theta}$ is the model parameterised by
+$\theta$, $\mathcal{L}$ is the task loss, $\Omega$ is a regularisation term, and
+$\lambda\geq 0$ controls the regularisation strength. Replace this example with
+the formulation used in the manuscript.
+
+\subsection{Proposed Architecture or Workflow}\label{subsec:architecture}
+
+Describe all components, data flows, interfaces, trust boundaries, and design
+choices. Refer to each figure in the text before it appears. Place figure files
+in the same folder as the manuscript and use PDF, PNG, or JPG with PDFLaTeX.
+
+% Example figure block (uncomment and replace the file name):
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width=0.90\textwidth]{architecture.pdf}
+% \caption{Overview of the proposed architecture. Explain all symbols and stages
+% in the caption or the main text.}\label{fig:architecture}
+% \end{figure}
+
+\subsection{Algorithm or Computational Procedure}\label{subsec:algorithm}
+
+Provide pseudocode when it helps readers reproduce the method. Define each
+input and output, and discuss computational complexity where relevant.
+
+\begin{algorithm}[htbp]
+\caption{Generic training or optimisation procedure}\label{alg:procedure}
+\begin{algorithmic}[1]
+\Require Dataset $\mathcal{D}$, initial parameters $\theta_0$, maximum iterations $T$
+\Ensure Trained parameters $\theta^{\star}$
+\State $\theta \gets \theta_0$
+\For{$t=1$ to $T$}
+  \State Compute the objective or loss on the selected data
+  \State Update $\theta$ using the stated optimisation rule
+  \If{the stopping criterion is satisfied}
+    \State \textbf{break}
+  \EndIf
+\EndFor
+\State \Return $\theta^{\star}\gets\theta$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Experimental Design and Evaluation}\label{sec:experiments}
+
+Provide enough information for independent reproduction. Report the dataset or
+data source, inclusion and exclusion rules, preprocessing, train--validation--test
+strategy, baselines, parameter settings, hardware and software environment,
+random seeds, and statistical analysis. For security studies, clearly describe
+the threat model, attacker capabilities, assets, assumptions, and evaluation
+boundaries.
+
+\subsection{Datasets and Preprocessing}\label{subsec:data}
+
+Describe each dataset, its provenance, sample size, variables, licensing or
+access conditions, preprocessing, missing-data treatment, and possible bias.
+Do not disclose sensitive or personally identifiable information.
+
+\subsection{Baselines and Evaluation Metrics}\label{subsec:metrics}
+
+Justify the selected baselines and metrics. Report uncertainty using confidence
+intervals, repeated runs, standard deviation, or suitable statistical tests when
+appropriate. Avoid relying on a single metric when the application involves
+class imbalance, safety, fairness, robustness, privacy, or security.
+
+\subsection{Implementation Details}\label{subsec:implementation}
+
+Report software libraries and versions, hardware, hyperparameters, stopping
+criteria, and resource requirements. State whether code, models, prompts,
+configuration files, and evaluation scripts will be made available.
+
+\section{Results}\label{sec:results}
+
+Present findings objectively and in the same order as the research questions or
+hypotheses. Do not duplicate all table values in the prose. Use consistent
+precision and clearly indicate whether higher or lower values are preferable.
+
+\begin{table}[htbp]
+\caption{Example comparison of the proposed method with representative baselines.}
+\label{tab:results}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & Metric 1 $\uparrow$ & Metric 2 $\uparrow$ & Cost $\downarrow$ \\
+\midrule
+Baseline A       & 0.812 & 0.774 & 1.00 \\
+Baseline B       & 0.836 & 0.791 & 1.18 \\
+Proposed method  & \textbf{0.861} & \textbf{0.824} & 1.12 \\
+\botrule
+\end{tabular}
+\end{table}
+
+Replace Table~\ref{tab:results} with verified results. Define all metrics,
+units, symbols, arrows, boldface conventions, and statistical markers.
+
+\section{Discussion}\label{sec:discussion}
+
+Interpret the results in relation to the research questions and prior work.
+Explain why the method succeeds or fails, identify practical implications, and
+discuss generalisability. Include ablation, sensitivity, error, fairness,
+robustness, privacy, security, or scalability analyses where relevant.
+
+\subsection{Limitations and Threats to Validity}\label{subsec:limitations}
+
+State methodological, data, measurement, implementation, and external-validity
+limitations explicitly. Avoid claims that extend beyond the evidence.
+
+\section{Conclusion and Future Work}\label{sec:conclusion}
+
+Summarise the problem, approach, most important validated findings, and the
+scientific or practical contribution. Do not introduce new results. End with
+specific and realistic directions for future work.
+
+\backmatter
+
+\bmhead{Supplementary Information}
+
+State whether supplementary files accompany the manuscript. Delete this heading
+when it is not applicable or follow the conference submission instructions.
+
+\bmhead{Acknowledgements}
+
+Acknowledge non-author contributions, institutional support, facilities, and
+other assistance. Keep this section brief and obtain permission before naming
+individuals.
+
+\section*{Declarations}
+
+\textbf{Funding}\quad
+State all funding sources and grant numbers, or write ``The authors received no
+specific funding for this work.''
+
+\textbf{Competing interests}\quad
+State any financial or non-financial competing interests, or write ``The authors
+declare no competing interests.''
+
+\textbf{Ethics approval and consent to participate}\quad
+Provide the approving body, approval number, and consent statement when human or
+animal participants, samples, or identifiable data are involved. Otherwise write
+``Not applicable.''
+
+\textbf{Consent for publication}\quad
+Provide the required consent statement, or write ``Not applicable.''
+
+\textbf{Data availability}\quad
+State where the data can be accessed, including a repository and persistent
+identifier where possible. If data cannot be shared, explain the reason and the
+conditions for controlled access.
+
+\textbf{Materials availability}\quad
+State the availability of specialised materials, or write ``Not applicable.''
+
+\textbf{Code availability}\quad
+State where the source code, trained models, prompts, configuration files, and
+analysis scripts can be accessed, including version or release information.
+
+\textbf{Author contributions}\quad
+Describe each author's contribution using clear role-based statements. Ensure
+that all listed authors satisfy recognised authorship criteria and the conference guidelines.
+
+%%%% Optional appendix
+% \begin{appendices}
+% \section{Additional Derivations or Results}\label{app:additional}
+% Place material that supports, but is not essential to, the main argument here.
+% \end{appendices}
+
+\bibliography{ICCSDI2026-references}
+
+\end{document}
