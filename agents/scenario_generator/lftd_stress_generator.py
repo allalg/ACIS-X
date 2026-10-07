@@ -64,10 +64,6 @@ class LFTDStressGenerator:
         self._step_count: int = 0
 
     def step_latent_stress(self, dt: float = 1.0) -> float:
-        """
-        Advance the latent stress process by dt time step.
-        Returns the updated latent stress factor Z_t in [0, 1].
-        """
         # Mean-reverting drift
         drift = self.kappa * (self.mu - self._z_t) * dt
 

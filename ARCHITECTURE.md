@@ -78,15 +78,15 @@
        │                         │                              │
        └─────────────────────────┼──────────────────────────────┘
                                  │
-       ┌─────────────────────────▼──────────────────────────────┐
+       ┌─────────────────────────▼───────────────────────────────┐
        │           ACTIONS & POLICY LAYER                        │
-       ├──────────────────────────────────────────────────────────┤
-       │                                                            │
+       ├─────────────────────────────────────────────────────────┤
+       │                                                         │
        │  ┌─────────────────────┐  ┌──────────────────────────┐  │
-       │  │ CreditPolicyAgent   │  │ CollectionsAgent        │  │
-       │  │ (Policy Routing)    │  │ (Actions)               │  │
-       │  │ - Credit limits     │  │ - Collections strategies│  │
-       │  │ - Approval routing  │  │ - Escalation paths      │  │
+       │  │ CreditPolicyAgent   │  │ CollectionsAgent        │   │
+       │  │ (Policy Routing)    │  │ (Actions)               │   │
+       │  │ - Credit limits     │  │ - Collections strategies│   │
+       │  │ - Approval routing  │  │ - Escalation paths      │   │
        │  └────────┬────────────┘  └──────────┬───────────────┘  │
        │           │                          │                  │
        │           └──────────────┬───────────┘                  │
@@ -95,8 +95,8 @@
                                   │
        ┌──────────────────────────▼──────────────────────────────┐
        │            STORAGE & PERSISTENCE LAYER                  │
-       ├──────────────────────────────────────────────────────────┤
-       │                                                            │
+       ├─────────────────────────────────────────────────────────┤
+       │                                                         │
        │  ┌──────────────────┐  ┌──────────────────────────────┐ │
        │  │ DBAgent          │  │ QueryAgent                   │ │
        │  │ (Persistence)    │  │ (Data Retrieval & Company    │ │
@@ -108,12 +108,12 @@
        │           │                          │                  │
        │           └──────────────┬───────────┘                  │
        │                          │                              │
-       │           ┌──────────────▼──────────────┐              │
-       │           │ MemoryAgent                 │              │
-       │           │ (In-Memory Cache)           │              │
-       │           │ - Customer profile cache    │              │
-       │           │ - Risk scores cache         │              │
-       │           └─────────────────────────────┘              │
+       │           ┌──────────────▼──────────────┐               │
+       │           │ MemoryAgent                 │               │
+       │           │ (In-Memory Cache)           │               │
+       │           │ - Customer profile cache    │               │
+       │           │ - Risk scores cache         │               │
+       │           └─────────────────────────────┘               │
        │                          │                              │
        └──────────────────────────┼──────────────────────────────┘
                                   │
@@ -132,12 +132,12 @@
 
 
 ┌──────────────────────── SYSTEM LAYER ────────────────────────────┐
-│                                                                    │
-│  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐            │
-│  │TimeTickAgent │  │MonitoringAgnt│  │SelfHealing  │            │
-│  │(Every 5s)    │  │(Heartbeats)  │  │Agent        │            │
-│  │- Clock ticks │  │- Agent life  │  │(Self-repair)│            │
-│  └──────┬───────┘  └──────┬───────┘  └─────┬───────┘            │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐             │
+│  │TimeTickAgent │  │MonitoringAgnt│  │SelfHealing  │             │
+│  │(Every 5s)    │  │(Heartbeats)  │  │Agent        │             │
+│  │- Clock ticks │  │- Agent life  │  │(Self-repair)│             │
+│  └──────┬───────┘  └──────┬───────┘  └─────┬───────┘             │
 │         │                 │                 │                    │
 │         └─────────────────┼─────────────────┘                    │
 │                           │                                      │
@@ -162,7 +162,7 @@
 │              │ - Partition mapping     │                         │
 │              └────────────┬────────────┘                         │
 │                           │                                      │
-│                    ┌──────▼────────┐                            │
+│                    ┌──────▼────────┐                             │
 │                    │ TopicAdmin     │                            │
 │                    │ (Topic mgmt)   │                            │
 │                    └────────┬───────┘                            │
@@ -184,7 +184,7 @@
                     │ ├─ system_events   │
                     │ └─ responses       │
                     │                    │
-                    │ Consumer Groups:  │
+                    │ Consumer Groups:   │
                     │ ├─ acis_metrics    │
                     │ ├─ acis_risks      │
                     │ ├─ acis_external   │
