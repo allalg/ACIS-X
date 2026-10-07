@@ -1,0 +1,55 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper,margin=0.55in]{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\definecolor{codebg}{HTML}{1E1E1E}
+\definecolor{codefg}{HTML}{E6E6E6}
+\definecolor{codecomment}{HTML}{7FC97F}
+\definecolor{codekeyword}{HTML}{8AB4F8}
+\definecolor{codestring}{HTML}{F6C177}
+\pagestyle{empty}
+\lstset{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\scriptsize\color{codefg},
+  keywordstyle=\color{codekeyword},
+  commentstyle=\color{codecomment},
+  stringstyle=\color{codestring},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  frame=single,
+  rulecolor=\color{codebg},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=18pt,
+  framexleftmargin=18pt,
+  aboveskip=8pt,
+  belowskip=8pt
+}
+\newcommand{\snippettitle}[1]{\noindent\textbf{\large #1}\par\vspace{6pt}}
+\begin{document}
+
+\snippettitle{Schema validation and dead-letter assertions}
+\lstinputlisting[firstline=37,lastline=51]{../../../tests/regular_tests/test_unit_event_validation.py}
+
+\clearpage
+\snippettitle{Invoice lifecycle trace and stage hand-off}
+\lstinputlisting[firstline=192,lastline=219]{../../../tests/suite/test_lifecycle_trace.py}
+\lstinputlisting[firstline=234,lastline=270]{../../../tests/suite/test_lifecycle_trace.py}
+
+\clearpage
+\snippettitle{P95 pipeline latency measurement}
+\lstinputlisting[firstline=149,lastline=188]{../../../tests/suite/test_performance.py}
+\lstinputlisting[firstline=190,lastline=192]{../../../tests/suite/test_performance.py}
+
+\clearpage
+\snippettitle{Hard-failure recovery assertion}
+\lstinputlisting[firstline=163,lastline=193]{../../../tests/suite/test_self_healing_proof.py}
+
+\end{document}

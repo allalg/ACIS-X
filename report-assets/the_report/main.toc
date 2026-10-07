@@ -54,13 +54,31 @@
 \contentsline {subsection}{\numberline {6.2.2}Machine Learning Model Training and Inference Module}{46}{subsection.6.2.2}%
 \contentsline {subsection}{\numberline {6.2.3}Macroeconomic Stress Testing and Scenario Simulation Module}{47}{subsection.6.2.3}%
 \contentsline {subsection}{\numberline {6.2.4}Autonomous Self-Healing and Model Governance Module}{47}{subsection.6.2.4}%
-\contentsline {chapter}{ANNEXURE}{49}{appendix*.18}%
-\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{49}{section.Alph0.1}%
-\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{49}{subsection.Alph0.1.1}%
-\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{52}{section.Alph0.2}%
-\contentsline {section}{\numberline {A.3}SWOT Analysis}{52}{section.Alph0.3}%
-\contentsline {subsection}{\numberline {A.3.1}Strengths}{52}{subsection.Alph0.3.1}%
-\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{53}{subsection.Alph0.3.2}%
-\contentsline {subsection}{\numberline {A.3.3}Opportunities}{53}{subsection.Alph0.3.3}%
-\contentsline {subsection}{\numberline {A.3.4}Threats}{53}{subsection.Alph0.3.4}%
-\contentsline {chapter}{REFERENCES}{54}{subsection.Alph0.3.4}%
+\contentsline {chapter}{\numberline {7}TESTING}{49}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Testing Approach}{49}{section.7.1}%
+\contentsline {section}{\numberline {7.2}Definition and Types of Testing}{50}{section.7.2}%
+\contentsline {section}{\numberline {7.3}Test Case Analysis}{52}{section.7.3}%
+\contentsline {section}{\numberline {7.4}Test Cases for the Project}{53}{section.7.4}%
+\contentsline {section}{\numberline {7.5}Test Results Summary}{56}{section.7.5}%
+\contentsline {section}{\numberline {7.6}Testing Limitations}{58}{section.7.6}%
+\contentsline {chapter}{\numberline {8}RESULT AND DISCUSSION}{59}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Result}{59}{section.8.1}%
+\contentsline {subsection}{\numberline {8.1.1}Pipeline Latency and Lifecycle Completion}{59}{subsection.8.1.1}%
+\contentsline {subsection}{\numberline {8.1.2}Risk Score Monotonicity}{60}{subsection.8.1.2}%
+\contentsline {subsection}{\numberline {8.1.3}Throughput Scaling with Replicas}{61}{subsection.8.1.3}%
+\contentsline {section}{\numberline {8.2}Discussion}{61}{section.8.2}%
+\contentsline {chapter}{\numberline {9}CONCLUSION, APPLICATIONS AND FUTURE SCOPE}{63}{chapter.9}%
+\contentsline {section}{\numberline {9.1}Conclusion}{63}{section.9.1}%
+\contentsline {section}{\numberline {9.2}Applications}{64}{section.9.2}%
+\contentsline {section}{\numberline {9.3}Future Scope}{65}{section.9.3}%
+\contentsline {chapter}{ANNEXURE}{67}{appendix*.26}%
+\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{67}{section.Alph0.1}%
+\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{67}{subsection.Alph0.1.1}%
+\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{70}{section.Alph0.2}%
+\contentsline {section}{\numberline {A.3}SWOT Analysis}{70}{section.Alph0.3}%
+\contentsline {subsection}{\numberline {A.3.1}Strengths}{70}{subsection.Alph0.3.1}%
+\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{71}{subsection.Alph0.3.2}%
+\contentsline {subsection}{\numberline {A.3.3}Opportunities}{71}{subsection.Alph0.3.3}%
+\contentsline {subsection}{\numberline {A.3.4}Threats}{71}{subsection.Alph0.3.4}%
+\contentsline {section}{ANNEXURE B --- Conference Paper Acceptance Letter}{72}{section*.31}%
+\contentsline {chapter}{REFERENCES}{74}{section*.31}%
