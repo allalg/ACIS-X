@@ -249,7 +249,7 @@
     \vspace{1.0cm}
 
     Under the Guidance of:\\[0.1cm]
-    \textbf{Prof. Pallavi K V}\\[0.1cm]
+    \textbf{Prof. Bhoomi Joshi}\\[0.1cm]
     Asst Professor, Dept. of CSE
     
     \vspace{0.6cm}
@@ -296,7 +296,7 @@ Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``AC
     \singlespacing
     \centering
     \rule{0.8\linewidth}{0.4pt}\\
-    \textbf{Project Guide\\Prof. Pallavi K V,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}
+    \textbf{Project Guide\\Prof. Bhoomi Joshi,\\Assistant Professor,\\Dept. of CSE,\\AMCEC}
 \end{minipage}
 \hfill
 \begin{minipage}[t]{0.32\textwidth}
@@ -379,7 +379,7 @@ We would like to extend our special thanks to \textbf{Dr. V. Mareeswari} Profess
 
 We would like to extend our special thanks to Project coordinators \textbf{Prof. Velvizhi Ramya R} and \textbf{Prof Snigdha Kesh}, Department of CSE, for their support and encouragement and suggestions given to us in the course of our project work.
 
-We are grateful to our guide \textbf{Prof. Pallavi K V} Asst. Prof., Department of CSE, AMC Engineering College, Bengaluru for her constant motivation \& timely help, encouragement and suggestion.
+We are grateful to our guide \textbf{Prof. Bhoomi Joshi} Asst. Prof., Department of CSE, AMC Engineering College, Bengaluru for her constant motivation \& timely help, encouragement and suggestion.
 
 Last but not the least, we wish to thank all the teaching \& non-teaching staffs of department of Computer Science and Engineering, for their support, patience and endurance shown during the preparation of this project report.\\
 
@@ -551,32 +551,41 @@ ACIS-X is applicable to organizations and environments where receivables risk mu
 Therefore, ACIS-X is best viewed as a practical intelligent-collections foundation that can support both operational usage and iterative evolution into broader financial risk automation platforms.
 
 \section{Organization of the Report}
-This report follows the same major structural pattern used in the reference project while tailoring all technical content to ACIS-X. The chapter organization is as follows:
+This report follows the standardized project documentation structure while detailing all technical aspects and contributions of ACIS-X. The chapter organization is as follows:
 
 \begin{enumerate}[label=\textbf{\roman*.}, itemsep=2pt]
-    \item \textbf{Chapter 1: Introduction}  
-    Presents project context, motivation, objectives, scope boundaries, and report structure for ACIS-X.
+    \item \textbf{Chapter 1: Introduction} \\
+    Presents the project background, motivation, primary objectives, scope boundaries, and the organizational structure of the report for ACIS-X.
     
-    \item \textbf{Chapter 2: Literature Survey}  
-    Reviews relevant research and industrial approaches in event-driven systems, risk-aware receivables management, streaming analytics, and intelligent collections automation.
+    \item \textbf{Chapter 2: Literature Survey} \\
+    Reviews relevant research and industrial approaches in credit scoring, streaming analytics, and multi-agent systems, highlights limitations of traditional systems, and establishes the formal problem statement and proposed solution.
     
-    \item \textbf{Chapter 3: Requirement Engineering}  
-    Defines functional and non-functional requirements, platform dependencies, architecture constraints, and operational requirements inferred from implementation and deployment needs.
+    \item \textbf{Chapter 3: Requirement Engineering} \\
+    Outlines software and hardware requirements, conceptual and analysis modeling diagrams (Use Case, Sequence, Activity, and State Chart diagrams), and comprehensive Software Requirement Specifications covering functional and non-functional requirements.
     
-    \item \textbf{Chapter 4: Project Planning}  
-    Describes planning assumptions, execution phases, validation milestones, and development scheduling model used for ACIS-X progression.
+    \item \textbf{Chapter 4: Project Planning} \\
+    Describes the planning and scheduling framework, sprint breakdowns, execution phases, milestone deliverables, and risk mitigation strategies used across the project lifecycle.
     
-    \item \textbf{Chapter 5: System Design}  
-    Outlines the architectural patterns, component interactions, and data flow mechanisms that form the foundation of the event-driven collections platform.
+    \item \textbf{Chapter 5: System Design} \\
+    Details the end-to-end system architecture, component decomposition across Kafka topics and agents, interface designs (BFF API and SSE streams), relational and streaming data structures, and core algorithm designs (signal fusion, Random Forest classification, self-healing circuit breakers, and drift monitoring).
     
-    \item \textbf{Chapter 6: Implementation}  
-    Details the implementation of runtime orchestration, agent responsibilities, topic-level data flow, persistence design, and policy/action logic.
+    \item \textbf{Chapter 6: Implementation} \\
+    Details the practical implementation methodologies, asynchronous event runtime, database access optimizations, synthetic macroeconomic stress generator, and core system modules alongside illustrative code snippets and efficiency analysis.
     
-    \item \textbf{Chapter 7: Results and Discussion}  
-    Discusses observed system behavior, architectural outcomes, testing posture, operational strengths, limitations, and practical implications.
+    \item \textbf{Chapter 7: Testing} \\
+    Presents the testing strategy and definitions of testing types (unit, contract, integration, lifecycle, performance, intelligence, and resilience), comprehensive test case specifications evaluating PASS and FAIL conditions, and explicit realism boundaries.
     
-    \item \textbf{Bibliography}  
-    Compiles all referenced technical resources, documentation sources, and external materials used for evidence-backed analysis.
+    \item \textbf{Chapter 8: Result and Discussion} \\
+    Presents empirical evaluation results including pipeline latency, invoice lifecycle stage waterfalls, risk score monotonicity verification, and consumer-group throughput scaling, followed by an in-depth discussion of operational findings.
+    
+    \item \textbf{Chapter 9: Conclusion, Applications and Future Scope} \\
+    Summarizes the key achievements and architectural validation of ACIS-X, surveys industrial applications across financial and regulatory domains, and outlines future enhancements such as live ERP integration and distributed deployments.
+    
+    \item \textbf{References} \\
+    Compiles all cited academic publications, books, technical standards, and documentation resources in standard IEEE citation format.
+    
+    \item \textbf{Annexures} \\
+    Provides supplementary project documentation, including Annexure A (SWOT Analysis and Project Mapping with Course Outcomes and Program Outcomes) and Annexure B (Conference Paper Acceptance Letter).
 \end{enumerate}
 
 
@@ -1605,15 +1614,8 @@ The regular test suite is intended for rapid developer feedback and does not req
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/regular\_tests/test\_unit\_event\_validation.py}\\[3pt]
-        \textbf{Lines 36--51:} Two negative-path test functions --- \texttt{test\_wrong\_schema\_version\_goes\_to\_dlq} sends an event with \texttt{schema\_version="1.0"} (invalid) and asserts the \texttt{send} call targets \texttt{acis.dlq}; \texttt{test\_invalid\_event\_type\_goes\_to\_dlq} uses \texttt{"INVALID\_FORMAT"} and checks \texttt{publish\_validation\_failed} in the serialized payload.}
-        \vspace{12pt}
-    \end{minipage}}
-    \caption{Schema-version and dead-letter validation assertions (Lines 36--51)}
+    \includegraphics[width=0.9\textwidth]{images/chap7_img1.png}
+    \caption{Schema-version and dead-letter validation assertions}
     \label{fig:testing_schema_dlq}
 \end{figure}
 
@@ -1630,15 +1632,8 @@ For resilience cases, health events representing degraded, critical, overloaded,
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/suite/test\_lifecycle\_trace.py}\\[3pt]
-        \textbf{Lines 192--219:} The \texttt{run\_one\_trace} harness --- agent instantiation (CSA, PPA, RSA, CollectionsAgent), \texttt{invoice.created} event construction with correlation ID and \texttt{t0} timestamp, and \texttt{csa.process\_event} injection, followed by scanning \texttt{kafka.published} for \texttt{customer.metrics.updated} to record \texttt{t1}.}
-        \vspace{12pt}
-    \end{minipage}}
-    \caption{Invoice lifecycle trace through agent stages (Lines 192--219)}
+    \includegraphics[width=0.9\textwidth]{images/chap7_img2.png}
+    \caption{Invoice lifecycle trace through agent stages}
     \label{fig:testing_lifecycle_trace}
 \end{figure}
 
@@ -1698,15 +1693,8 @@ The test cases cover the principal correctness boundaries identified in the requ
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/suite/test\_performance.py}\\[3pt]
-        \textbf{Lines 149--200:} The P95 latency measurement block --- \texttt{t\_start = time.monotonic()} injection timestamp keyed by \texttt{corr\_id}, pipeline fan-out through CSA\,$\rightarrow$\,PPA\,$\rightarrow$\,RSA, latency list construction from \texttt{risk.scored} outputs, \texttt{sorted\_lat[p95\_idx]} computation, and the \texttt{completion\_rate $\ge$ 0.50} assertion.}
-        \vspace{12pt}
-    \end{minipage}}
-    \caption{P95 pipeline latency measurement (Lines 149--200)}
+    \includegraphics[width=0.9\textwidth]{images/chap7_img3.png}
+    \caption{P95 pipeline latency measurement}
     \label{fig:testing_p95_latency}
 \end{figure}
 
@@ -1748,15 +1736,8 @@ The recorded run emitted non-blocking deprecation warnings related to calls to \
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/suite/test\_self\_healing\_proof.py}\\[3pt]
-        \textbf{Lines 163--200:} \texttt{test\_hard\_failure\_triggers\_restart} --- pre-registers the agent state as HEALTHY, injects a TIMEOUT fault via \texttt{sha.process\_event(event)}, records \texttt{t\_fault} and \texttt{t\_recovery} with \texttt{time.perf\_counter()}, then asserts \texttt{recovery.triggered $\ge$ 1}, \texttt{restart.requested $\ge$ 1}, and \texttt{recovery\_ms $<$ 100.0}.}
-        \vspace{12pt}
-    \end{minipage}}
-    \caption{Hard-failure recovery assertion for a timed-out agent (Lines 163--200)}
+    \includegraphics[width=0.9\textwidth]{images/chap7_img4.png}
+    \caption{Hard-failure recovery assertion for a timed-out agent}
     \label{fig:testing_hard_failure}
 \end{figure}
 
@@ -1779,14 +1760,7 @@ The end-to-end pipeline latency was measured by injecting synthetic invoice even
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/outputs/pipeline\_latency.png}\\[3pt]
-        Screenshot of the generated pipeline latency chart showing per-event end-to-end latency in milliseconds across 50 invoice injection runs. The chart highlights the P95 threshold line and the mean latency value.}
-        \vspace{12pt}
-    \end{minipage}}
+    \includegraphics[width=0.9\textwidth]{images/chap8_img1.png}
     \caption{Pipeline P95 Latency Across 50 Injection Events}
     \label{fig:result_latency}
 \end{figure}
@@ -1795,14 +1769,7 @@ Figure \ref{fig:result_latency} shows the measured pipeline latencies across the
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/outputs/lifecycle\_stage\_waterfall.png}\\[3pt]
-        Screenshot of the lifecycle stage waterfall chart. Each bar represents the time spent at one pipeline stage (CSA, PPA, RSA) per correlation ID, showing that all events reached the final stage and no stage gap exceeded the inter-stage budget.}
-        \vspace{12pt}
-    \end{minipage}}
+    \includegraphics[width=0.9\textwidth]{images/chap8_img2.png}
     \caption{Invoice Lifecycle Stage Waterfall (CSA \textrightarrow\ PPA \textrightarrow\ RSA)}
     \label{fig:result_waterfall}
 \end{figure}
@@ -1814,14 +1781,7 @@ The risk intelligence objective required that the composite score $r_{final}$ mu
 
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/outputs/monotonicity\_proof.png}\\[3pt]
-        Screenshot of the monotonicity proof chart. Three sub-plots show risk score on the y-axis against increasing adverse input on the x-axis (avg delay in days, on-time ratio decreasing from 1.0 to 0.0, overdue count from 0 to 10). Each curve is non-decreasing, confirming monotone behaviour.}
-        \vspace{12pt}
-    \end{minipage}}
+    \includegraphics[width=0.9\textwidth]{images/chap8_img3.png}
     \caption{Risk Score Monotonicity Across Three Behavioural Axes}
     \label{fig:result_monotonicity}
 \end{figure}
@@ -1831,16 +1791,10 @@ Figure \ref{fig:result_monotonicity} confirms that the three-tier risk engine pr
 \subsection{Throughput Scaling with Replicas}
 The throughput scaling objective required that adding a second consumer-group replica should increase aggregate processing throughput rather than broadcasting every event to every instance. Because Kafka's consumer-group protocol assigns partitions exclusively across members of the same group, throughput must scale with replica count when the topic has sufficient partitions.
 
+
 \begin{figure}[H]
     \centering
-    \fbox{\begin{minipage}{0.88\textwidth}
-        \centering
-        \vspace{12pt}
-        \textbf{[PASTE IMAGE HERE]}\\[6pt]
-        \textit{\small \textbf{File:} \texttt{tests/outputs/throughput\_scaling.png}\\[3pt]
-        Screenshot of the throughput scaling chart. The x-axis shows the number of consumer replicas (1 and 2). The y-axis shows events processed per second. The bar for 2 replicas is visibly higher, confirming load-balancing rather than broadcast behaviour.}
-        \vspace{12pt}
-    \end{minipage}}
+    \includegraphics[width=0.9\textwidth]{images/chap8_img4.png}
     \caption{Throughput Scaling with Consumer Group Replicas}
     \label{fig:result_throughput}
 \end{figure}
