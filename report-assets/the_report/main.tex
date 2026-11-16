@@ -120,17 +120,15 @@
   \global\borderpagefalse  % Set flag to false for no border on plain pages
 }
 
-% Chapter opening pages inherit a taller frontmatter footer area; lower the
-% footer rule and footer text to align with the regular content pages.
+% Chapter opening pages use the same footer area as regular content pages.
 \fancypagestyle{chapterfirstpage}{
   \fancyhf{}
   \fancyhead[R]{{ACIS-X: Autonomous Credit Intelligence System}}
-  \fancyfoot[L]{\raisebox{-44.6pt}{Dept. of CSE, AMCEC}}
-  \fancyfoot[C]{\raisebox{-44.6pt}{2026-27}}
-  \fancyfoot[R]{\raisebox{-44.6pt}{\thepage}}
+  \fancyfoot[L]{Dept. of CSE, AMCEC}
+  \fancyfoot[C]{2026-27}
+  \fancyfoot[R]{\thepage}
   \renewcommand{\headrulewidth}{2pt}
-  \renewcommand{\footrulewidth}{0pt}
-  \renewcommand{\footrule}{\vskip 42.8pt\hrule width\headwidth height 2pt\vskip -44.8pt}
+  \renewcommand{\footrulewidth}{2pt}
   \global\borderpagefalse  % Set flag to false for no border on chapter first pages
 }
 
@@ -447,7 +445,6 @@ The Intelligent Collections System (ACIS-X) represents a modern, data-driven app
 % Chapter 1
 \chapter{INTRODUCTION}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 
 \section{Overview}
@@ -1218,7 +1215,6 @@ Translates risk states into operational actions while supervising system resilie
 \end{itemize}
 \chapter{IMPLEMENTATION}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 \section{Implementation Approaches}
 To build ACIS-X into an autonomous, resilient, and enterprise-grade credit intelligence system, a comprehensive study of streaming platforms, distributed microservices, machine learning libraries, and embedded storage solutions was conducted. The platform architecture requires sub-50 ms pipeline processing, strict partition ordering by account, explainable risk outputs, and autonomous self-healing without the high operational footprint of complex distributed stream compute engines like Apache Flink. 
@@ -1491,7 +1487,6 @@ The current testing strategy has several boundaries. Most evidence tests isolate
 These limitations define what the evidence supports rather than invalidating it. The current suite demonstrates contract correctness, deterministic decision behavior, persistence safeguards, resilience logic, and repeatable synthetic performance. A subsequent validation phase should add authenticated BFF route tests, frontend integration tests, multi-broker failure tests, long-duration endurance tests, and replay validation using anonymized enterprise event streams.
 \chapter{RESULT AND DISCUSSION}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 \section{Result}
 The ACIS-X platform was evaluated against the core objectives stated in the requirements chapter: sub-50 ms end-to-end pipeline latency, exactly-once persistence under replay, risk score monotonicity with respect to adverse behavioural signals, autonomous recovery from agent failures, and model-governance drift detection. The results presented in this section are drawn from the recorded validation suite executed on macOS using Python 3.14.6 and pytest 9.1.1. All 162 regular and evidence tests passed. The four result categories below correspond to the principal measurement dimensions of the project.
@@ -1562,7 +1557,6 @@ The PSI and KS drift tests confirmed that the \texttt{ModelGovernanceAgent} corr
 
 \chapter{CONCLUSION, APPLICATIONS AND FUTURE SCOPE}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 \section{Conclusion}
 ACIS-X was conceived to address a structural gap in enterprise credit risk management: the inability of traditional batch scoring systems to respond to fast-moving accounts receivable events in real time. The project delivered a Kafka-native, multi-agent event-driven platform that processes invoice and payment events continuously, computes behavioural credit metrics on each event trigger, generates explainable risk predictions inline, and autonomously supervises its own operational health without human intervention.
@@ -1953,7 +1947,7 @@ if __name__ == "__main__":
     \includegraphics[page=1, width=\textwidth, height=0.80\textheight, keepaspectratio]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
 \end{center}
 
-\includepdf[pages=2-, width=\textwidth, pagecommand={\thispagestyle{fancy}}]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
+\includepdf[pages=1, width=\textwidth, pagecommand={\thispagestyle{fancy}}]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
 
 
 \clearpage

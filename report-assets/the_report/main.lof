@@ -16,12 +16,12 @@
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {6.1}{\ignorespaces CustomerStateAgent Kafka Consumer Group Initialization}}{34}{figure.caption.13}%
 \contentsline {figure}{\numberline {6.2}{\ignorespaces 2-Stage Policy Guardrail Composition in PaymentPredictionAgent}}{35}{figure.caption.14}%
-\contentsline {figure}{\numberline {6.3}{\ignorespaces Latent Stress SDE Step Function}}{35}{figure.caption.15}%
+\contentsline {figure}{\numberline {6.3}{\ignorespaces Latent Stress SDE Step Function}}{36}{figure.caption.15}%
 \contentsline {figure}{\numberline {6.4}{\ignorespaces Population Stability Index (PSI) Core Computation}}{36}{figure.caption.16}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {8.1}{\ignorespaces Pipeline P95 Latency Across 50 Injection Events}}{44}{figure.caption.17}%
-\contentsline {figure}{\numberline {8.2}{\ignorespaces Invoice Lifecycle Stage Waterfall (CSA \textrightarrow \ PPA \textrightarrow \ RSA)}}{45}{figure.caption.18}%
-\contentsline {figure}{\numberline {8.3}{\ignorespaces Risk Score Monotonicity Across Three Behavioural Axes}}{45}{figure.caption.19}%
-\contentsline {figure}{\numberline {8.4}{\ignorespaces Throughput Scaling with Consumer Group Replicas}}{46}{figure.caption.20}%
+\contentsline {figure}{\numberline {8.1}{\ignorespaces Pipeline P95 Latency Across 50 Injection Events}}{45}{figure.caption.17}%
+\contentsline {figure}{\numberline {8.2}{\ignorespaces Invoice Lifecycle Stage Waterfall (CSA \textrightarrow \ PPA \textrightarrow \ RSA)}}{46}{figure.caption.18}%
+\contentsline {figure}{\numberline {8.3}{\ignorespaces Risk Score Monotonicity Across Three Behavioural Axes}}{46}{figure.caption.19}%
+\contentsline {figure}{\numberline {8.4}{\ignorespaces Throughput Scaling with Consumer Group Replicas}}{47}{figure.caption.20}%
 \addvspace {10\p@ }
