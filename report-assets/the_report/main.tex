@@ -113,24 +113,22 @@
   \fancyhf{}  % Clear existing header/footer
   \fancyhead[R]{{ACIS-X: Autonomous Credit Intelligence System}}  % Custom header
   \fancyfoot[L]{Dept. of CSE, AMCEC}  % Footer on the left
-  \fancyfoot[C]{2025-26}  % Footer in the center
+  \fancyfoot[C]{2026-27}  % Footer in the center
   \fancyfoot[R]{\thepage}  % Footer on the right with page number
   \renewcommand{\headrulewidth}{2pt}  % Header line width
   \renewcommand{\footrulewidth}{2pt}  % Footer line width
   \global\borderpagefalse  % Set flag to false for no border on plain pages
 }
 
-% Chapter opening pages inherit a taller frontmatter footer area; lower the
-% footer rule and footer text to align with the regular content pages.
+% Chapter opening pages use the same footer area as regular content pages.
 \fancypagestyle{chapterfirstpage}{
   \fancyhf{}
   \fancyhead[R]{{ACIS-X: Autonomous Credit Intelligence System}}
-  \fancyfoot[L]{\raisebox{-44.6pt}{Dept. of CSE, AMCEC}}
-  \fancyfoot[C]{\raisebox{-44.6pt}{2025-26}}
-  \fancyfoot[R]{\raisebox{-44.6pt}{\thepage}}
+  \fancyfoot[L]{Dept. of CSE, AMCEC}
+  \fancyfoot[C]{2026-27}
+  \fancyfoot[R]{\thepage}
   \renewcommand{\headrulewidth}{2pt}
-  \renewcommand{\footrulewidth}{0pt}
-  \renewcommand{\footrule}{\vskip 42.8pt\hrule width\headwidth height 2pt\vskip -44.8pt}
+  \renewcommand{\footrulewidth}{2pt}
   \global\borderpagefalse  % Set flag to false for no border on chapter first pages
 }
 
@@ -232,7 +230,7 @@
     \includegraphics[height=0.15\textwidth]{images/vtu-logo-copy.png}
 
     \vspace{0.3cm}
-    \textbf{\textit{Project Phase I - BCS685}}
+    \textbf{\textit{Project Phase II- BCS685}}
     \vspace{0.5cm}
     
     {\LARGE \textbf{\textcolor[HTML]{FF0000}{ACIS-X: Autonomous Credit Intelligence System}}}
@@ -257,7 +255,7 @@
     
     \vspace{1.0cm}
     {\large \textbf{\textcolor[HTML]{6F2C0C}{DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING AMC ENGINEERING COLLEGE\\[0.1cm]
-    18th K.M. Bannerghatta Main Road,\\[0.1cm] Bengaluru – 560083\\[0.1cm] Year 2025-26}}}
+    18th K.M. Bannerghatta Main Road,\\[0.1cm] Bengaluru – 560083\\[0.1cm] Year 2026-27}}}
     
 \end{titlepage}
 
@@ -279,7 +277,7 @@
 \singlespacing
 
 \begin{center}
-    18th K.M, Bannerghatta Main Road, Bengaluru-560083\\2025-26\\
+    18th K.M, Bannerghatta Main Road, Bengaluru-560083\\2026-27\\
     \textbf{Department of Computer Science and Engineering}\\
     \vspace{0.2cm}
     \includegraphics[height=0.1\textwidth]{images/amc-logo.jpeg} \\[0.5cm]
@@ -288,7 +286,7 @@
 
 \doublespacing
 
-Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: Autonomous Credit Intelligence System''}} carried out by \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)},\textbf{ JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA B ACHARYA (1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belagavi during the year 2025-26. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
+Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``ACIS-X: Autonomous Credit Intelligence System''}} carried out by \textbf{NITIN BHARADWAJ M V S (1AM23CS125)}, \textbf{NIKHIL NAGENDRA (1AM23CS120)},\textbf{ JOHAN K GEORGE (1AM23CS075)}, and \textbf{PRASANNA B ACHARYA (1AM23CS149)}, bonafide students of AMC Engineering College in partial fulfillment for the award of Bachelor of Engineering in Computer Science \& Engineering of the Visvesvaraya Technological University, Belagavi during the year 2026-27. It is certified that all corrections/suggestions indicated for Internal Assessment have been incorporated in the Report. The project report has been approved as it satisfies the academic requirements in respect of Project work prescribed for the said degree.\\
 
 \vspace{1.5cm}
 \noindent
@@ -343,7 +341,7 @@ Certified that the project report entitled \textbf{\textcolor[HTML]{6F2C0C}{``AC
 
 \doublespacing
 
-We the undersigned students of 6th semester Department of Computer Science \& Engineering, AMC Engineering College, declare that our project work entitled \textbf{``ACIS-X: Autonomous Credit Intelligence System''} is a bonafide work of ours. Our project is neither a copy nor by means a modification of any other engineering project. We also declare that this project was not entitled for submission to any other university in the past and shall remain the only submission made and will not be submitted by us to any other university in the future.\\
+We the undersigned students of 7th semester Department of Computer Science \& Engineering, AMC Engineering College, declare that our project work entitled \textbf{``ACIS-X: Autonomous Credit Intelligence System''} is a bonafide work of ours. Our project is neither a copy nor by means a modification of any other engineering project. We also declare that this project was not entitled for submission to any other university in the past and shall remain the only submission made and will not be submitted by us to any other university in the future.\\
 
 \vspace{1.5cm}
 \begin{table}[H]
@@ -447,7 +445,6 @@ The Intelligent Collections System (ACIS-X) represents a modern, data-driven app
 % Chapter 1
 \chapter{INTRODUCTION}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 
 \section{Overview}
@@ -585,7 +582,7 @@ This report follows the standardized project documentation structure while detai
     Compiles all cited academic publications, books, technical standards, and documentation resources in standard IEEE citation format.
     
     \item \textbf{Annexures} \\
-    Provides supplementary project documentation, including Annexure A (SWOT Analysis and Project Mapping with Course Outcomes and Program Outcomes) and Annexure B (Conference Paper Acceptance Letter).
+    Provides supplementary project documentation, including Annexure A (SWOT Analysis and Project Mapping with Course Outcomes and Program Outcomes) and Annexure B (Code Snippet and Conference Paper Acceptance Letter).
 \end{enumerate}
 
 
@@ -604,306 +601,149 @@ This report follows the standardized project documentation structure while detai
 \cite{chen2016xgboost}}}
 
 \section{Introduction}
-The design of intelligent collections systems has shifted from periodic scorecard workflows to continuously updated, event-driven decision pipelines. In enterprise receivables environments, late payments are not isolated events; they are outcomes of evolving customer behavior, changing macro conditions, policy execution timing, data quality variation, and process latency. As a result, any practical platform must combine accurate risk estimation with low-latency orchestration and actionable governance.
+The design of intelligent collections systems has transitioned from periodic, batch scorecard workflows to continuous, event-driven decision pipelines. In enterprise accounts receivable environments, late payments arise from shifting customer behavior, macroeconomic fluctuations, policy timing, and data latency. Consequently, practical platforms must combine precise risk estimation with low-latency orchestration and auditable decision governance.
 
-Historically, credit-risk analytics has progressed from classical statistical classification toward data-intensive machine learning and ensemble modeling. This progression has improved predictive discrimination, but it has also introduced new deployment concerns: calibration drift, model opacity, benchmark fragility, and operational disconnect between analytics and actioning. In collections operations, these gaps are particularly costly because decision delays can reduce recoverability, and unexplained interventions can reduce operational trust.
+Historically, credit-risk modeling has progressed from classical statistical scoring toward data-intensive machine learning and ensemble architectures~\cite{hand1997credit,thomas2000survey,baesens2003benchmarking,crook2007recent}. While modern learners improve predictive discrimination, they introduce operational challenges: calibration drift, model opacity, benchmark fragility, and disconnect between prediction and operational intervention. Recent work in profit-aware scoring and scalable gradient boosting has sought to align model evaluation directly with business outcomes~\cite{verbraken2014profit,chen2016xgboost}.
 
-Early research in consumer credit scoring established core classification principles and highlighted domain-specific concerns such as reject inference, class imbalance, and operational validation~\cite{hand1997credit,thomas2000survey}. Subsequent studies benchmarked machine-learning methods and demonstrated that model effectiveness depends strongly on dataset characteristics, evaluation design, and business context~\cite{baesens2003benchmarking,crook2007recent,khandani2010ml,lessmann2015update}. More recent work introduced profit-aware performance measures and scalable learners that better align predictive outputs with financial outcomes~\cite{verbraken2014profit,chen2016xgboost}.
-
-In parallel, large-scale data systems research developed practical stream and dataflow models that support fault-tolerant, low-latency processing over unbounded event streams~\cite{zaharia2013discretized,akidau2015dataflow}. These foundations are directly relevant to ACIS-X because collections intelligence depends on continuous processing of customer, invoice, and payment events where timeliness and correctness must co-exist. In other words, the platform challenge is not only model selection but end-to-end decision semantics under real operational timing constraints.
-
-This chapter therefore treats literature review as an architecture-design activity. Instead of listing papers in isolation, it extracts reusable principles for ACIS-X across five decision dimensions:
+In parallel, large-scale data systems research has established stream-processing and dataflow models that guarantee fault-tolerant, low-latency processing over unbounded event streams~\cite{zaharia2013discretized,akidau2015dataflow}. These foundations are essential for ACIS-X, where receivables intelligence requires continuous processing of transaction streams under strict timing and ordering constraints. This chapter synthesizes relevant literature across five core dimensions:
 \begin{itemize}[itemsep=2pt]
-    \item \textbf{Predictive validity:} whether models separate high-risk and low-risk behaviors reliably.
-    \item \textbf{Economic alignment:} whether evaluation reflects intervention value and treatment cost.
-    \item \textbf{Operational explainability:} whether outputs can be interpreted and actioned by collections teams.
-    \item \textbf{Runtime resilience:} whether decision pipelines remain correct under delay, disorder, and failure.
-    \item \textbf{Lifecycle adaptability:} whether models and policies can be recalibrated under changing data regimes.
+    \item \textbf{Predictive validity:} reliable separation of high-risk and low-risk behaviors.
+    \item \textbf{Economic alignment:} evaluation reflecting intervention yield and operational cost.
+    \item \textbf{Operational explainability:} transparent risk attribution at decision time.
+    \item \textbf{Runtime resilience:} deterministic pipeline recovery under lag, disorder, and node failure.
+    \item \textbf{Lifecycle adaptability:} continuous monitoring and recalibration under distribution drift.
 \end{itemize}
 
-Therefore, this chapter presents a focused literature survey on up to sixteen highly relevant papers and frameworks, then synthesizes their implications for ACIS-X architecture, risk-policy design, and operations. The goal is to identify what has been solved, what remains unresolved, and how a modern event-driven collections platform should be structured to close these gaps.
-
-In addition to reviewing model accuracy, this survey emphasizes production success criteria that are commonly under-specified in standalone research: (i) operational robustness under delayed or incomplete events, (ii) explainability of risk signals at decision time, (iii) measurable linkage between model output and collection outcome, (iv) controllability of policy thresholds, and (v) observability of action quality after deployment. This framing is essential because ACIS-X is intended for continuous decision operations, not only offline experimentation.
-
-The outcome of this section is not merely a literature summary; it is a traceable evidence base for Chapter 3 onward, where requirements, planning, and implementation choices need to be justified by both algorithmic and systems-level findings.
-
 \section{Objective of Literature Survey}
-The objectives of this literature survey are:
-\begin{enumerate}[label=\roman*., itemsep=\parskip, parsep=0pt]
-    \item To study the progression of consumer credit-scoring methods from classical statistical techniques to modern machine-learning approaches and identify their relevance to receivables intelligence.
-    \item To analyze how recent research handles practical challenges such as class imbalance, probability calibration, model interpretability, and business-value alignment.
-    \item To examine benchmark studies and understand why model conclusions vary across datasets, domains, and evaluation criteria.
-    \item To investigate stream-processing and dataflow literature for scalability, fault tolerance, event-time correctness, and low-latency operational decisioning.
-    \item To derive architecture-level insights that can be directly mapped to ACIS-X, including modular agent orchestration, resilient runtime behavior, and auditable action workflows.
-    \item To identify limitations in existing systems and frame a problem statement and solution direction that is realistic for production collections operations.
-    \item To compare how papers evaluate performance (AUC, sensitivity, precision, profitability) and identify which metrics are most meaningful for collections intervention design.
-    \item To extract implementation lessons related to deployment feasibility, model refresh cadence, and integration with monitoring and policy systems.
-    \item To evaluate how each reviewed method supports account-level prioritization and treatment sequencing in practical collections teams.
-    \item To analyze tradeoffs between model complexity and deployment constraints such as inference latency, monitoring overhead, and operational maintainability.
-    \item To identify how literature addresses delayed, out-of-order, or corrected events and determine the implications for event-driven financial workflows.
-    \item To assess whether reported methods provide sufficient explanation artifacts (feature attributions, reason codes, policy context) for audit and compliance usage.
-    \item To investigate the extent to which current research supports closed-loop learning, where action outcomes feed back into periodic model and policy updates.
-    \item To derive measurable criteria for ACIS-X evaluation beyond predictive discrimination, including action timeliness, intervention quality, and governance traceability.
-    \item To establish a structured bridge from literature evidence to system requirements, ensuring that architecture choices in later chapters are defensible and reproducible.
+The primary objectives of this literature survey are:
+\begin{enumerate}[label=\roman*., itemsep=2pt]
+    \item To trace the progression of credit-risk analytics from classical statistical classifiers to modern machine-learning ensembles and evaluate their applicability to accounts receivable.
+    \item To examine operational challenges including class imbalance, probability calibration, feature interpretability, and profit-based utility metrics.
+    \item To investigate benchmark studies to understand model performance variances across differing data regimes and evaluation criteria.
+    \item To study distributed stream-processing and dataflow architectures for fault tolerance, event-time semantics, and low-latency decisioning.
+    \item To identify gaps in existing collections systems regarding schema discipline, runtime resilience, and closed-loop feedback.
+    \item To derive architectural principles that directly inform the design, requirements, and implementation of ACIS-X.
 \end{enumerate}
 
-These objectives are intentionally application-driven: the literature is used as evidence for concrete design choices in ACIS-X rather than as an isolated academic survey.
-
-Collectively, these objectives ensure that the survey informs both \textit{what to build} (modeling and systems capabilities) and \textit{how to operate it} (monitoring, governance, and continuous improvement). This dual focus is necessary for an intelligent collections platform intended for sustained real-world use.
-
 \section{Summary of Literature Survey}
-The literature survey on event-driven collections intelligence reveals three core knowledge pillars: credit-scoring methodology, business-aware model evaluation, and low-latency stream execution. The reviewed papers collectively show that reliable receivables decisioning depends on both predictive performance and operational delivery. The following summaries present the key contributions and their direct relevance to ACIS-X.\\
-To maintain methodological consistency, each paper summary below captures contribution, practical value, and limitations. This allows a clearer mapping from research evidence to architecture decisions.
+The literature on collections intelligence spans three pillars: credit-scoring methodology, business-aware evaluation, and low-latency stream processing. The following summaries examine sixteen core papers and their direct contributions to ACIS-X.
 
 \noindent \textbf{[1] Event-Driven Design for Agents and Multi-Agent Systems}\\
 \textbf{AUTHOR:} Sean Falconer\\
-This Confluent whitepaper presents practical guidance for designing agent-based systems using an event-driven backbone. It explains how asynchronous event streams improve decoupling between agents, support independent scaling, and enable reliable coordination across distributed components. For ACIS-X, this directly supports the use of Kafka topics as the communication and orchestration layer for specialized agents.
-
-A further contribution is the emphasis on production-readiness concerns such as observability, replayability, and fault isolation in multi-agent workflows. These ideas align with ACIS-X design choices around durable event contracts, retry-safe processing, and runtime resilience under variable load.
+Presents architectural guidance for multi-agent systems built upon event streaming backbones. It demonstrates how asynchronous message streams decouple agents, enable independent horizontal scaling, and support coordinated workflows. For ACIS-X, this validates using Apache Kafka as the central event bus for domain agents and establishes requirements for schema contracts, replayability, and runtime fault isolation.
 
 \noindent \textbf{[2] Statistical Classification Methods in Consumer Credit Scoring: A Review}\\
 \textbf{AUTHORS:} D. J. Hand and W. E. Henley\\
-This foundational review explains the statistical basis of consumer credit scoring and highlights practical deployment concerns that are often overlooked in pure algorithmic studies. It discusses model discrimination, calibration context, class imbalance, and the consequences of reject populations. The paper remains highly relevant because it frames scoring as an operational decision process rather than a purely mathematical exercise. For ACIS-X, this supports the need to combine model outputs with policy governance and action traceability.
-
-An additional insight is that statistical validity can degrade when deployment conditions differ from training assumptions. ACIS-X addresses this by treating model output as one stage in a monitored pipeline rather than as a final isolated truth.
+Reviews foundational statistical methods in credit scoring, emphasizing practical concerns such as class imbalance, reject inference, and population drift. It demonstrates that scoring is an operational decision workflow rather than a static optimization problem. ACIS-X incorporates these principles by integrating predictive outputs with policy rules and continuous monitoring rather than treating raw model output as final truth.
 
 \noindent \textbf{[3] A Survey of Credit and Behavioural Scoring}\\
 \textbf{AUTHORS:} Lyn C. Thomas\\
-This survey distinguishes application scoring from behavioral scoring and demonstrates how risk prediction evolves across the customer lifecycle. It emphasizes that dynamic performance monitoring and repeated re-estimation are essential in lending environments. The work is directly aligned with ACIS-X, where risk signals are continuously updated based on new invoices, payments, and account events. It motivates lifecycle-aware state tracking rather than one-time score generation.
-
-The paper also implies that temporal context should be first-class in model design. In ACIS-X, this translates to stateful event aggregation and time-sensitive features, especially for accounts that oscillate between normal and overdue behavior.
+Differentiates application scoring from dynamic behavioral scoring across the borrower lifecycle. The survey demonstrates that continuously updating risk estimates based on recent repayment behavior substantially outperforms static baseline scores. This directly motivates ACIS-X's stateful customer metrics pipeline, which recomputes aging and payment indicators upon every transaction event.
 
 \noindent \textbf{[4] Benchmarking State-of-the-Art Classification Algorithms for Credit Scoring}\\
 \textbf{AUTHORS:} B. Baesens, T. Van Gestel, S. Viaene, M. Stepanova, J. Suykens, and J. Vanthienen\\
-This benchmark paper compares major classification approaches under controlled credit-scoring settings and demonstrates that model superiority depends on data conditions and evaluation design. The central contribution is methodological rigor in comparing algorithms beyond isolated case studies. It provides evidence that model selection should be context-dependent and repeatedly validated. ACIS-X benefits from this insight by supporting modular scoring components that can be replaced or rebenchmarked over time.
-
-Its practical limitation is that benchmark conclusions are still tied to sampled datasets and historical periods. ACIS-X mitigates this risk through periodic re-evaluation loops and model abstraction at the service boundary.
+Provides a rigorous benchmark of classification algorithms across multiple credit datasets. The authors show that no single model universally dominates, and performance depends heavily on data quality and evaluation design. ACIS-X addresses this through modular agent interfaces that permit champion-challenger experimentation and algorithm replacement without re-architecting the pipeline.
 
 \noindent \textbf{[5] Recent Developments in Consumer Credit Risk Assessment}\\
 \textbf{AUTHORS:} Jonathan N. Crook, David B. Edelman, and Lyn C. Thomas\\
-This work synthesizes developments in consumer credit-risk assessment and reviews important operational themes such as validation quality, borrower heterogeneity, and decision strategy adaptation. It highlights that real-world collections outcomes are sensitive to both model quality and treatment policy. This directly informs ACIS-X design where predictive and action stages are separated but tightly linked through structured events.
-
-The key implication for ACIS-X is that policy effectiveness must be measured jointly with model outputs. This motivates event-level traceability between prediction publication and collections action outcomes.
+Synthesizes advances in credit risk modeling and highlights the sensitivity of real-world recovery to intervention policy design. It shows that optimal collections outcomes require coordinating risk estimation with treatment sequencing. This directly informs the ACIS-X boundary separating PaymentPredictionAgent and RiskScoringAgent from CollectionsAgent.
 
 \noindent \textbf{[6] Support Vector Machines for Credit Scoring and Discovery of Significant Features}\\
 \textbf{AUTHORS:} Tony Bellotti and Jonathan Crook\\
-The paper evaluates SVM-based credit scoring and investigates feature significance to improve interpretability alongside discrimination power. It shows how non-linear methods can improve classification in structured financial datasets while still enabling feature-level understanding. For ACIS-X, this supports integrating explainable predictors where risk reasons can be propagated to downstream collection actions.
-
-However, model explainability remains sensitive to feature engineering quality. ACIS-X therefore benefits from standardized feature lineage and reason-code publishing in risk events.
+Investigates non-linear Support Vector Machines for credit scoring alongside feature selection methods to improve interpretability. It demonstrates that advanced classifiers can achieve high discrimination while retaining feature-level transparency. ACIS-X adopts this principle by mandating that prediction events include feature attribution metrics (SHAP values) for explainable downstream actioning.
 
 \noindent \textbf{[7] Consumer Credit-Risk Models via Machine-Learning Algorithms}\\
 \textbf{AUTHORS:} Amir E. Khandani, Adlar J. Kim, and Andrew W. Lo\\
-This study demonstrates practical gains from machine-learning approaches in consumer credit-risk prediction at large scale. The key implication is that rich feature interactions can materially improve predictive discrimination compared to simpler baselines. ACIS-X can leverage this principle through richer event-derived features at invoice and customer levels, provided model governance remains strong.
-
-The paper also reinforces the value of data breadth. For ACIS-X, this suggests sustained enrichment and data quality controls are as important as algorithm choice.
+Demonstrates significant performance gains from machine-learning models applied to massive consumer credit and transaction datasets. The authors show that non-linear feature interactions capture delinquency dynamics that linear models miss. ACIS-X leverages this insight by synthesizing internal transaction metrics with external intelligence (litigation, ratings) to enhance predictive accuracy.
 
 \noindent \textbf{[8] Multiple Classifier Architectures and Their Application to Credit Risk Assessment}\\
 \textbf{AUTHORS:} Steven Finlay\\
-This paper focuses on architecture-level combinations of classifiers and shows that multi-model designs can improve performance stability across scenarios. It argues that how models are composed can matter as much as which single algorithm is chosen. The finding is aligned with ACIS-X, where independent agent stages can support ensemble-style risk workflows and staged decision refinement.
-
-Its relevance increases in volatile environments where single-model brittleness is common. ACIS-X can operationalize this through configurable model orchestration and fallback decision paths.
+Examines multi-classifier architectures and demonstrates that combining diverse model outputs stabilizes predictive performance across varying operational regimes. This provides architectural justification for ACIS-X's tiered inference pipeline, where base predictions are refined through contextual policy overlays and multi-signal aggregation.
 
 \noindent \textbf{[9] A Comparative Assessment of Ensemble Learning for Credit Scoring}\\
 \textbf{AUTHORS:} Gang Wang, Jinxing Hao, Jian Ma, and Hongbing Jiang\\
-This comparative study evaluates ensemble methods in credit-scoring contexts and reports robust improvements under many data settings. The paper highlights variance reduction and better generalization as practical advantages of ensemble learning. For ACIS-X, this supports designing model-serving interfaces that are ensemble-compatible instead of tightly coupled to one learner.
-
-The tradeoff is additional computational and governance complexity. ACIS-X should therefore pair ensemble usage with clear monitoring thresholds and explainability constraints.
+Demonstrates that ensemble learners such as Bagging, Boosting, and Random Forests achieve superior generalization and variance reduction on credit data. The authors note the associated cost of inference latency and complexity. For ACIS-X, this supports deploying tree ensembles with optimized feature footprints to preserve sub-second decision latency.
 
 \noindent \textbf{[10] An Experimental Comparison of Classification Algorithms for Imbalanced Credit Scoring Data Sets}\\
 \textbf{AUTHORS:} Iain Brown and Christophe Mues\\
-The study focuses on the imbalanced nature of credit datasets where adverse outcomes are rare but high-impact. It compares algorithm behavior under skewed classes and demonstrates that imbalance treatment strongly affects operational usefulness. This is directly relevant to ACIS-X, where high-risk delinquency classes are sparse and must still be prioritized correctly for collections action.
-
-This work supports threshold strategies that optimize intervention efficiency rather than overall accuracy alone. ACIS-X can embed this logic in risk-to-action policy mappings. By explicitly tuning these thresholds, the system minimizes false positives and prevents unnecessary outreach to reliable customers.
+Investigates classification algorithms under severe class imbalance where default events are rare but costly. It shows that tuning classification thresholds and cost-sensitive evaluation is essential for practical utility. ACIS-X embeds this by applying decision thresholds aligned with financial exposure rather than naive probability cutoffs.
 
 \noindent \textbf{[11] Consumer Credit Risk: Individual Probability Estimates Using Machine Learning}\\
 \textbf{AUTHORS:} Jochen Kruppa, Alexandra Schwarz, Gerhard Arminger, and Andreas Ziegler\\
-This paper addresses individualized probability estimation and emphasizes the quality of account-level risk outputs. The contribution is important for collections prioritization because interventions are issued per customer or invoice, not only by portfolio segment. ACIS-X adopts the same orientation by emitting structured account-level risk events to downstream agents.
-
-The paper also indicates that calibration quality matters for operational confidence. In ACIS-X, calibrated probabilities can improve prioritization fairness and escalation consistency.
+Focuses on individual, well-calibrated default probabilities using random forests and k-nearest neighbors. It highlights that well-calibrated probabilities are critical when model outputs drive individualized treatments. ACIS-X applies this finding to ensure that account-level risk scores translate directly into proportionate collections treatments.
 
 \noindent \textbf{[12] Development and Application of Consumer Credit Scoring Models Using Profit-Based Classification Measures}\\
 \textbf{AUTHORS:} Thomas Verbraken, Cristian Bravo, Richard Weber, and Bart Baesens\\
-This study introduces profit-aware classification measures and demonstrates why AUC-only evaluation can be misaligned with business decision value. It provides a practical framework for linking predictive decisions to economic outcomes. ACIS-X directly benefits from this perspective by aligning risk thresholds and action priorities with recoverability and intervention value.
-
-Its practical strength is decision realism: interventions incur costs, and delayed action changes expected recovery. ACIS-X can operationalize this through policy objectives tied to outcome economics.
+Introduces the Expected Maximum Profit (EMP) metric to evaluate credit models, proving that statistical measures like AUC can lead to suboptimal business decisions. ACIS-X leverages this perspective by coupling predictive models with expected recovery economics and intervention costs within CollectionsAgent.
 
 \noindent \textbf{[13] Benchmarking State-of-the-Art Classification Algorithms for Credit Scoring: An Update of Research}\\
 \textbf{AUTHORS:} Stefan Lessmann, Bart Baesens, Hsin-Vonn Seow, and Lyn C. Thomas\\
-This update strengthens benchmarking practice by using broader datasets and more rigorous statistical comparisons. It reinforces that performance claims must be interpreted cautiously across changing data regimes. For ACIS-X, the implication is clear: model performance should be continuously monitored and periodically revalidated under production drift.
-
-It also underscores reproducibility discipline, which ACIS-X can support via versioned model metadata and consistent event schema contracts.
+Provides an updated, large-scale benchmark of classification algorithms, confirming the competitive strength of ensemble learners and emphasizing evaluation reproducibility. ACIS-X adopts these recommendations through versioned model artifacts, rigorous validation suites, and continuous performance tracking.
 
 \noindent \textbf{[14] Discretized Streams: Fault-Tolerant Streaming Computation at Scale}\\
 \textbf{AUTHORS:} Matei Zaharia, Tathagata Das, Haoyuan Li, Timothy Hunter, Scott Shenker, and Ion Stoica\\
-This work proposes a practical stream model for deterministic, fault-tolerant low-latency computation. Its main relevance is architectural: scalable stream intelligence must be designed with recovery semantics from the outset. ACIS-X follows this direction by separating event producers and consumers across robust messaging layers and replay-aware processing logic.
-
-The core lesson is that latency without deterministic recovery is insufficient for mission-critical workflows. ACIS-X should preserve this balance through robust retry and replay patterns.
+Presents the discretized stream processing model, showing that fault-tolerant, stateful streaming computation can be achieved with low latency. This work guides ACIS-X's state recovery design, establishing that stateful metrics computation must be backed by deterministic replay and checkpointing across Kafka partitions.
 
 \noindent \textbf{[15] The Dataflow Model: Balancing Correctness, Latency, and Cost}\\
-\textbf{AUTHORS:} Tyler Akidau, Robert Bradshaw, Craig Chambers, Slava Chernyak, Rafael J. Fernandez-Moctezuma, Reuven Lax, Sam McVeety, Daniel Mills, Frances Perry, Eric Schmidt, and Sam Whittle\\
-The Dataflow model formalizes event-time semantics, handling of late data, and tradeoffs among correctness, latency, and cost. It is especially relevant for financial operations where delayed records and revisions are common. ACIS-X depends on these concepts to keep risk and action outputs consistent even when upstream events arrive out of order.
-
-This is particularly important for receivables where settlement events may lag operational windows. ACIS-X can apply event-time aware logic to reduce inconsistent actioning and duplicate interventions.
+\textbf{AUTHORS:} Tyler Akidau et al.\\
+Formalizes event-time semantics, watermarking, and windowing for out-of-order and late-arriving event streams. In ACIS-X, receivables transactions frequently arrive out of chronological order due to batch banking feeds. The Dataflow principles ensure that customer metrics and risk profiles remain deterministic regardless of processing order.
 
 \noindent \textbf{[16] XGBoost: A Scalable Tree Boosting System}\\
 \textbf{AUTHORS:} Tianqi Chen and Carlos Guestrin\\
-XGBoost introduced an efficient and scalable gradient-boosting framework that became a standard baseline for structured-data risk modeling. Its importance in collections intelligence is twofold: high predictive quality and practical train/inference efficiency. ACIS-X can incorporate this family of models in prediction stages while preserving explainability through feature-importance and reason-code interfaces.
-
-Its engineering practicality makes it suitable for frequent retraining cycles. ACIS-X can exploit this for controlled model refresh under monitored drift.
+Introduces XGBoost, a scalable gradient tree boosting library optimized for sparsity and parallel execution. It serves as a benchmark learner for tabular credit prediction. ACIS-X employs scalable tree-based learners within PaymentPredictionAgent to achieve high predictive accuracy alongside millisecond-range inference latency.
 
 \subsection{Scalability and Real-Time Detection Challenges}
-Across the surveyed work, two recurring system-level challenges emerge for ACIS-X-like platforms:
+Operating an intelligent collections engine over live event streams introduces challenges across four architectural planes:
 \begin{itemize}[itemsep=2pt]
-    \item \textbf{Unbounded event handling with correctness guarantees:} Stream systems must process out-of-order and late data without losing decision consistency~\cite{zaharia2013discretized,akidau2015dataflow}.
-    \item \textbf{Model quality under operational constraints:} Credit models must remain robust under class imbalance, drift, and changing business objectives while sustaining low-latency scoring~\cite{brown2012imbalanced,lessmann2015update}.
-\end{itemize}
-In production receivables operations, these challenges are tightly coupled. High latency reduces intervention value, while unstable model behavior reduces policy trust and action consistency. The literature therefore supports architectures that jointly optimize predictive quality, runtime resilience, and decision governance.
-
-Another practical challenge is synchronization between state updates and action triggers. If risk recalculation and collections actioning are not coordinated, operational teams may receive stale or contradictory guidance. ACIS-X should mitigate this through explicit event contracts, idempotent action semantics, and bounded-latency observability signals.
-
-A final concern is scaling governance alongside throughput. As event volume increases, auditability often degrades unless reason codes, model versions, and policy identifiers are embedded directly in events. This requirement is consistent across both credit-risk and stream-processing literature and should be treated as mandatory in ACIS-X.
-
-Beyond these core concerns, scalability must be analyzed across four interacting layers:
-\begin{itemize}[itemsep=2pt]
-    \item \textbf{Data-plane scalability:} the ingestion layer must sustain bursty invoice and payment traffic without message loss, consumer starvation, or queue amplification effects.
-    \item \textbf{State-plane scalability:} customer-level aggregates and risk features must be updated under concurrent event flows while preserving deterministic read-after-write behavior for downstream actions.
-    \item \textbf{Model-plane scalability:} scoring services must handle concurrent inference requests with bounded latency, while supporting safe model rollouts, shadow evaluations, and rollback options.
-    \item \textbf{Operations-plane scalability:} alerting, dashboards, and remediation pipelines must remain actionable for human teams as account volume grows, avoiding alert fatigue and intervention backlog.
+    \item \textbf{Data-Plane Scalability:} Ingesting bursty invoice and payment transactions without message loss, head-of-line blocking, or consumer starvation requires partition-based concurrency.
+    \item \textbf{State-Plane Scalability:} Maintaining stateful customer aggregates across concurrent streams requires deterministic, low-latency state persistence with strict read-after-write guarantees.
+    \item \textbf{Model-Plane Scalability:} Scoring models must sustain high-throughput inference under strict latency budgets while supporting champion-challenger routing and shadow evaluation.
+    \item \textbf{Operations-Plane Scalability:} Runtime supervision must track consumer lag, detect dead-letter buildup, and manage recovery without alert fatigue or intervention storms.
 \end{itemize}
 
-Real-time constraints in collections systems are not only computational; they are economic. A delayed risk signal may still be statistically correct but operationally suboptimal if intervention windows have narrowed. Consequently, response-time objectives should be framed in business terms, such as time-to-action for high-risk accounts and time-to-reconciliation for corrected events.
-
-Another important challenge is temporal inconsistency between event sources. Payment confirmations, settlement corrections, and external enrichment updates may arrive with different clocks and reliability profiles. Without strict event-time and processing-time separation, systems can trigger premature escalations or duplicate actions. Literature on stream correctness~\cite{akidau2015dataflow} indicates that explicit watermarking, late-arrival handling, and replay-safe processing are essential for dependable financial decisioning.
-
-Finally, scaling model quality under drift remains difficult. Portfolio behavior changes with macroeconomic shocks, policy changes, and customer mix shifts. Systems that scale throughput but ignore drift governance often accumulate silent model degradation. This reinforces the need for continuous monitoring of calibration, class-balance shift, and action-outcome alignment at production cadence.
+Furthermore, collections workflows face temporal inconsistency: bank settlement notices and external legal filings arrive on differing schedules. Without strict event-time tracking and idempotency controls, systems risk triggering redundant collections notices or acting on stale payment states.
 
 \section{Drawbacks of Existing Systems}
-Existing literature and industrial practice reveal common limitations:
+A critical review of commercial credit tools and academic prototypes highlights several recurring architectural drawbacks:
 \begin{itemize}[itemsep=2pt]
-    \item \textbf{Metric-business mismatch:} Many implementations prioritize discrimination metrics without explicitly optimizing intervention economics or recoverability value~\cite{verbraken2014profit}.
-    \item \textbf{Benchmark fragility:} Model superiority is often data-specific and may degrade under portfolio shifts, market changes, or different product segments~\cite{baesens2003benchmarking,lessmann2015update}.
-    \item \textbf{Weak lifecycle governance:} Continuous recalibration, drift monitoring, and controlled model updates are not consistently addressed in operational deployments.
-    \item \textbf{Limited orchestration-awareness:} Predictive systems are frequently developed independently of runtime guarantees such as fault recovery and event-time consistency~\cite{akidau2015dataflow}.
-    \item \textbf{Explainability gaps at action level:} High-performing models are not always paired with transparent reason codes suitable for collections teams and compliance review.
-    \item \textbf{Fragmented architecture:} Many systems still separate data ingestion, scoring, and action execution in ways that hinder auditability and closed-loop optimization.
+    \item \textbf{Batch-Centric Architecture:} Traditional receivables systems rely on nightly batch jobs, delaying risk detection and missing optimal early-intervention windows.
+    \item \textbf{Metric-Business Misalignment:} Models are frequently optimized for statistical discrimination (AUC) rather than economic recovery value or treatment cost.
+    \item \textbf{Weak Schema and Contract Discipline:} Loosely structured payloads cause inter-service parsing failures, silent schema drift, and brittle integrations.
+    \item \textbf{Absence of Idempotency Controls:} Replayed or retried events often produce duplicate collections notices, degrading customer experience.
+    \item \textbf{Opacity at Action Boundaries:} High-performing complex models often lack transparent reason codes, preventing operations teams from validating automated actions.
+    \item \textbf{Decoupled Analytics and Execution:} Predictive modeling is isolated from runtime orchestration, preventing closed-loop feedback from action outcomes back into model updates.
 \end{itemize}
-
-Taken together, these drawbacks indicate that many systems optimize isolated components while under-optimizing the full decision lifecycle. ACIS-X must therefore be evaluated end-to-end: from event ingestion fidelity to measurable action outcome quality.
-
-Additional drawbacks observed in real deployments further reinforce these gaps:
-\begin{itemize}[itemsep=2pt]
-    \item \textbf{Weak event contract discipline:} loosely defined payload schemas produce downstream ambiguity, brittle parsing logic, and inconsistent cross-agent interpretation.
-    \item \textbf{Insufficient idempotency controls:} duplicate message handling is often incomplete, causing repeated collection actions and customer-experience degradation.
-    \item \textbf{Limited replay governance:} many systems support replay technically, but not operationally, leading to confusion about which actions should or should not be re-issued.
-    \item \textbf{Sparse post-action analytics:} outcomes of reminders, escalations, and settlement plans are not systematically linked back to the originating risk decisions.
-    \item \textbf{Inconsistent human override integration:} manual interventions are frequently captured outside the decision pipeline, reducing traceability and learning quality.
-    \item \textbf{Underdeveloped policy simulation:} threshold and strategy changes are deployed without robust pre-deployment impact simulation on collections workload and recovery.
-\end{itemize}
-
-In aggregate, these shortcomings create a compounding effect: poor schema discipline undermines explainability, weak explainability undermines policy confidence, and low policy confidence leads to fragmented manual overrides that reduce model-learning signal quality. A modern system must address these dependencies explicitly.
 
 \section{Problem Statement}
-Organizations need a collections intelligence platform that continuously transforms heterogeneous financial events into timely, explainable, and value-aware actions. Existing approaches typically separate model development, event processing, and operational collections execution. This separation causes delayed intervention, inconsistent decision rationale, and weak accountability when outcomes are audited.
+Organizations require an automated receivables intelligence system that transforms continuous transaction streams into timely, explainable, and value-optimizing collections actions. Existing solutions partition event ingestion, predictive scoring, and operational actioning into disconnected systems, causing decision latency, opaque rationales, and untraceable interventions.
 
-The central problem is to design a unified architecture that jointly satisfies:
+The core challenge is to design an integrated, event-driven platform that jointly delivers:
 \begin{itemize}[itemsep=2pt]
-    \item real-time event processing at scale,
-    \item accurate and calibrated account-level risk estimation,
-    \item policy-consistent and economically meaningful action selection,
-    \item operational resilience with auditable decision trails.
+    \item scalable, low-latency ingestion of transactional and external intelligence events;
+    \item accurate, calibrated account-level default and delay prediction;
+    \item policy-aligned collections recommendations with duplicate-action prevention; and
+    \item autonomous runtime resilience, comprehensive observability, and auditable governance trails.
 \end{itemize}
-The literature indicates that solving only one of these dimensions is insufficient. A production-ready solution must integrate prediction, runtime semantics, and action governance into a single controllable pipeline.
-
-In practical terms, the unresolved problem is not only predicting delinquency, but deciding who should be contacted, when, and with what treatment strategy, under bounded latency and strict traceability constraints. This is the operational gap ACIS-X is designed to close.
-
-From a systems perspective, the problem can be decomposed into functional and non-functional gaps:
-\begin{itemize}[itemsep=2pt]
-    \item \textbf{Functional gap:} risk estimation, policy interpretation, and action execution are not consistently chained through auditable events.
-    \item \textbf{Temporal gap:} decision latency and event disorder handling are rarely treated as first-class requirements in collections workflows.
-    \item \textbf{Governance gap:} model versions, decision reasons, and policy parameters are not always persisted in a form suitable for compliance and root-cause analysis.
-    \item \textbf{Learning gap:} intervention outcomes are weakly integrated into periodic recalibration, limiting closed-loop improvement.
-\end{itemize}
-
-Therefore, the central challenge is to engineer a unified platform where analytics, orchestration, and operational actioning are jointly optimized. The system must deliver low-latency decisions, maintain correctness under disorder and failure, support policy-level explainability, and continuously improve using measured outcomes.
 
 \section{Proposed Solution}
-To address the identified limitations and align with the literature-backed requirements, the proposed ACIS-X direction follows a layered and event-driven design. The platform unifies ingestion, state construction, risk estimation, policy interpretation, and action publication under a traceable workflow.
-
-The design intentionally separates responsibilities by agent while preserving strong contracts between stages. This improves maintainability, supports model experimentation, and reduces failure propagation across the pipeline.
-
-The proposed solution is guided by six design principles:
+To overcome the drawbacks of existing systems, ACIS-X proposes a unified, event-driven multi-agent architecture. The solution structures credit intelligence into three coordinated layers, guided by six core architectural principles:
 \begin{itemize}[itemsep=2pt]
-    \item \textbf{Event-first orchestration:} all significant state transitions and decisions are represented as explicit events.
-    \item \textbf{Deterministic state reconstruction:} the platform can reproduce account state and decisions from event history for audit and replay.
-    \item \textbf{Policy-aware modeling:} model outputs are treated as policy inputs, not standalone decisions.
-    \item \textbf{Explainability by construction:} decision payloads include reason context, model identity, and policy versioning.
-    \item \textbf{Operational resilience:} retries, monitoring, and self-healing are integrated in the baseline architecture rather than added later.
-    \item \textbf{Closed-loop improvement:} action outcomes are fed back into periodic model and policy recalibration cycles.
+    \item \textbf{Event-First Orchestration:} All state changes, model predictions, and collections recommendations are published as immutable Kafka events.
+    \item \textbf{Deterministic State Reconstruction:} Historical account state and decisions can be accurately reconstructed via event replay.
+    \item \textbf{Policy-Aware Risk Scoring:} Predictions are refined through business rules, exposure limits, and regulatory guardrails.
+    \item \textbf{Explainability by Construction:} Every risk score and collections recommendation carries explicit reason codes and feature contributions.
+    \item \textbf{Integrated Resilience:} Self-healing, circuit breakers, and dead-letter handling are native architectural components.
+    \item \textbf{Closed-Loop Governance:} Intervention outcomes feed back into continuous drift monitoring and model recalibration.
 \end{itemize}
-
-Under this approach, ACIS-X is not a single model deployment; it is a continuous decision system with explicit lifecycle controls.
 
 \subsection{Event and State Intelligence Layer}
-The first layer continuously consumes customer, invoice, and payment events and converts them into standardized operational state. This includes behavior metrics, exposure aggregation, and enrichment joins from external context signals. The architecture follows stream/dataflow principles for low-latency and correctness-aware processing over unbounded events~\cite{zaharia2013discretized,akidau2015dataflow}.
-
-Implementation priorities in this layer include schema validation, deduplication safeguards, event timestamp normalization, and deterministic aggregation windows. These controls are necessary to ensure downstream models receive coherent and trustworthy features.
-
-To make this layer robust in production, ACIS-X should define explicit data contracts per event topic, including required fields, semantic constraints, and version compatibility rules. Contract checks should run at ingress and before inter-agent publication to prevent silent schema drift.
-
-State construction in this layer should support both real-time access and reproducibility. That means maintaining materialized operational views for fast decisioning while preserving append-only event lineage for audit and replay. Feature derivation logic should be versioned so that historical decisions can be interpreted against the exact transformation rules active at decision time.
-
-This layer should also maintain data quality indicators such as missing-field rates, delayed-event frequency, and source-specific reliability scores. These indicators can be propagated downstream as confidence modifiers for risk and action modules.
-
-Suggested layer outputs include:
-\begin{itemize}[itemsep=2pt]
-    \item normalized account-state events,
-    \item derived behavior metrics with timestamps,
-    \item enrichment-complete feature snapshots,
-    \item data-quality and freshness metadata.
-\end{itemize}
+This layer ingests customer, invoice, and payment transactions alongside external financial and litigation data. Following distributed stream principles~\cite{zaharia2013discretized,akidau2015dataflow}, it validates incoming event schemas, applies deduplication filters, and maintains rolling behavioral metrics (e.g., payment delays, aging distributions). The resulting unified account state is persisted to SQLite via DBAgent and cached in memory for sub-second downstream consumption.
 
 \subsection{Risk and Policy Intelligence Layer}
-The second layer applies benchmarked, imbalance-aware predictive models and produces account-level risk probabilities with structured reasons. Model evaluation is aligned with both classification quality and business impact, including profit-aware decision framing where appropriate~\cite{kruppa2013individual,verbraken2014profit,lessmann2015update}. This ensures outputs are suitable for operational prioritization rather than static reporting.
-
-This layer also supports policy-aware thresholding, calibration checks, and versioned model metadata. Together, these features enable safe model updates and clearer interpretation when outcomes are reviewed by operations or governance teams.
-
-In practice, this layer should combine statistical predictions with configurable policy rules to produce final operational decisions. Rules may encode regulatory boundaries, customer treatment constraints, or business-priority conditions that cannot be left to model inference alone. A hybrid decision strategy improves controllability without discarding predictive signal quality.
-
-Model management in this layer should include champion-challenger evaluation, drift-triggered retraining thresholds, and shadow deployment for safe model validation under live traffic. Calibration monitoring should be performed at segment level to prevent localized degradation that may be hidden by aggregate metrics.
-
-The policy engine should support scenario simulation before threshold updates are promoted. For example, teams should be able to estimate expected increase in high-priority accounts and projected intervention workload under candidate policy changes.
-
-Suggested layer outputs include:
-\begin{itemize}[itemsep=2pt]
-    \item account-level risk probabilities and risk bands,
-    \item reason-coded decision context,
-    \item applied policy identifiers and threshold versions,
-    \item model identity, calibration status, and confidence indicators.
-\end{itemize}
+The risk layer applies trained tree ensembles (Random Forest / XGBoost) to estimate invoice delinquency probabilities~\cite{chen2016xgboost,lessmann2015update}. Predictions are augmented with external risk signals and evaluated against profit-aligned business policies~\cite{verbraken2014profit}. Crucially, every evaluation produces a calibrated risk band alongside SHAP-derived reason codes, ensuring transparency before actions are dispatched.
 
 \subsection{Real-Time Actioning and Monitoring Layer}
-The third layer translates risk outcomes into collections actions with policy constraints, duplicate prevention, and escalation logic. Runtime monitoring, retry controls, and self-healing mechanisms are integrated to preserve service continuity under failures. Standardized event schemas and explainable decision payloads provide the governance trail required for compliance and continuous improvement.
-
-Operationally, this layer should expose measurable service indicators such as action latency, escalation rate, retry frequency, and policy override frequency. These metrics form a feedback loop for both process improvement and model governance.
-
-Action orchestration should implement explicit priority queues and channel strategies (for example, reminder, negotiation, escalation) based on risk band, account context, and policy constraints. Duplicate suppression must operate across both event idempotency keys and business keys to prevent repeated contact attempts from replayed or retried events.
-
-Monitoring should be multi-dimensional: system health (lag, throughput, failure rate), decision health (distribution shifts, reason-code drift), and business health (promise-to-pay conversion, recovery rate, escalation fallout). This allows teams to distinguish infrastructure incidents from policy or model issues.
-
-Self-healing behavior should include bounded retries, dead-letter routing, automated dependency checks, and controlled degradation modes. For example, if enrichment is temporarily unavailable, the system may fall back to conservative policy thresholds while flagging reduced-confidence decisions.
-
-To operationalize continuous improvement, this layer should publish structured outcome events after each intervention stage. These outcomes form the training and policy feedback dataset for periodic optimization.
-
-Under this design, ACIS-X provides four concrete advantages relative to fragmented alternatives:
-\begin{itemize}[itemsep=2pt]
-    \item \textbf{Timeliness:} event-driven processing reduces delay between risk signal emergence and action publication.
-    \item \textbf{Decision quality:} model evaluation is coupled with economic utility and class-imbalance sensitivity.
-    \item \textbf{Operational confidence:} runtime health and failure recovery are explicit architectural concerns.
-    \item \textbf{Governance readiness:} reason-coded outputs and structured event histories support audit and improvement cycles.
-\end{itemize}
-
-Beyond these advantages, the architecture supports continuous learning from outcomes, closing the loop between analytics and operational execution. By establishing this unified, event-driven foundation, the proposed solution directly addresses the operational gaps—such as decision latency and weak lifecycle governance—identified in existing systems. This architectural paradigm essentially restructures how both functional capabilities and non-functional constraints are formulated, ensuring that subsequent design phases are deeply grounded in practical deployment realities.
-
+The operational layer maps risk bands to prioritized collections strategies (e.g., automated reminders, payment plans, legal escalations) while enforcing cooldown windows to prevent over-contacting customers. Simultaneously, dedicated runtime agents monitor consumer lag, validate heartbeats, and trigger automated self-healing upon node failures, ensuring high availability and complete auditability across the decision lifecycle.
 \chapter{REQUIREMENT ENGINEERING}
 
 Requirement engineering for ACIS-X is derived from implementation artifacts, architecture specifications, operational guides, test assets, and available report PDFs in the project workspace. The chapter consolidates requirements from the runtime bootstrap, topic management, schema contracts, deployment constraints, and validation strategy so the platform can be implemented and operated as a consistent decision system.
@@ -1158,9 +998,9 @@ The scheduled progression reflects a deliberate methodology to de-risk the most 
 \chapter{SYSTEM DESIGN}
 
 \section{System Architecture}
-The system architecture of ACIS-X is designed as an event-driven, multi-agent platform for intelligent accounts receivable monitoring and collections decision support. The architecture separates data ingestion, customer-state construction, external enrichment, prediction, risk scoring, collections actioning, persistence, and runtime supervision into independent but coordinated modules.
+The system architecture of ACIS-X is an event-driven, multi-agent platform designed for accounts receivable monitoring and collections decision support. It decouples data ingestion, customer-state construction, external enrichment, prediction, risk scoring, collections actioning, persistence, and runtime supervision into specialized, coordinating modules.
 
-At the center of the architecture is a Kafka-based event backbone. Each major business event, such as customer creation, invoice generation, payment posting, metric computation, risk scoring, and collections action, is published to a dedicated topic. This allows agents to operate independently while still participating in a unified processing workflow. The event-based design also improves traceability because each decision can be connected back to the events and derived signals that produced it.
+At the core is an Apache Kafka event backbone. Every domain event—such as customer creation, invoice generation, payment posting, metric derivation, risk scoring, and collections recommendations—is published to a dedicated topic. This asynchronous pub/sub model ensures loose coupling, supports independent agent scaling, and establishes end-to-end traceability by linking every operational decision back to its originating transaction events.
 
 \begin{figure}[H]
     \centering
@@ -1169,12 +1009,17 @@ At the center of the architecture is a Kafka-based event backbone. Each major bu
     \label{fig:system_architecture}
 \end{figure}
 
-Fig \ref{fig:system_architecture} maps the five major architectural layers of ACIS-X. The input layer provides customer, invoice, payment, and external source information. The event bus layer routes this information through Kafka topics. The agent layer performs state computation, enrichment, aggregation, prediction, risk scoring, and collections actioning. The storage and query layer persists events and derived records using SQLite, while QueryAgent and MemoryAgent provide structured access to state. The user and operations layer exposes the processed outputs through the FastAPI backend-for-frontend, React dashboard, monitoring services, registry services, and self-healing runtime modules.
-
-The architecture is intentionally modular. Business agents focus on receivables intelligence, while runtime agents focus on operational reliability. This separation ensures that failures in monitoring, recovery, or placement logic do not directly alter the business decision rules, and business logic can evolve without rewriting the runtime orchestration layer.
+Fig \ref{fig:system_architecture} illustrates the five primary architectural layers of ACIS-X:
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{Input Layer:} Ingests internal customer, invoice, and payment records alongside external intelligence signals.
+    \item \textbf{Event Bus Layer:} Kafka topics route domain messages across producer and consumer agents.
+    \item \textbf{Agent Layer:} Domain agents execute state computation, enrichment, predictive scoring, and actioning.
+    \item \textbf{Storage and Query Layer:} SQLite provides durable persistence via DBAgent, while MemoryAgent and QueryAgent deliver low-latency state retrieval.
+    \item \textbf{User and Operations Layer:} FastAPI backend-for-frontend, React dashboard, and runtime supervisors manage presentation, monitoring, and self-healing.
+\end{itemize}
 
 \section{Component Design / Module Decomposition}
-The component design of ACIS-X decomposes the platform into specialized agents and services. Each component has a clearly defined responsibility, communicates using event contracts, and produces outputs that can be consumed by downstream modules. This design supports maintainability, testing, and future extension of the platform.
+The component design decomposes the platform into specialized agents and support services, each governed by explicit event contracts and bounded responsibilities.
 
 \begin{figure}[H]
     \centering
@@ -1183,9 +1028,7 @@ The component design of ACIS-X decomposes the platform into specialized agents a
     \label{fig:component_design}
 \end{figure}
 
-Fig \ref{fig:component_design} maps the main functional modules and internal components of the system. ScenarioGeneratorAgent produces simulated operational events. CustomerStateAgent converts invoice and payment behavior into customer metrics. ExternalDataAgent and ExternalScrapingAgent enrich customer context with external signals. AggregatorAgent combines internal and external evidence into a broader customer profile. PaymentPredictionAgent estimates payment risk for open invoices, and RiskScoringAgent converts prediction and context into final risk decisions. CollectionsAgent uses those decisions to recommend appropriate collections actions.
-
-The persistence and query components support the business agents. DBAgent stores events, customer records, invoices, payments, metrics, risk profiles, and collections actions. QueryAgent responds to structured read requests, while MemoryAgent maintains fast runtime context for frequently used customer state. Table \ref{tab:acis_components} maps the responsibilities, inputs, and outputs of these core components. Operational components such as RegistryService, RuntimeManager, MonitoringAgent, PlacementEngine, SelfHealingAgent, and DLQMonitorAgent supervise agent health, recovery, placement, and failed-event handling. 
+Fig \ref{fig:component_design} illustrates the modular decomposition of ACIS-X across business intelligence, persistence, and runtime supervision. Business agents handle data simulation, feature extraction, external enrichment, predictive modeling, and action recommendation. Persistence agents ensure durability and fast state access, while operational services oversee health, placement, and self-healing. Table \ref{tab:acis_components} summarizes the core components, their responsibilities, and primary I/O contracts.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.23\textwidth}|L{0.33\textwidth}|L{0.20\textwidth}|L{0.16\textwidth}|}
@@ -1209,37 +1052,27 @@ The persistence and query components support the business agents. DBAgent stores
     \hline
     \endlastfoot
 
-    ScenarioGeneratorAgent & Generates sample customer, invoice, and payment activity for simulation and validation. & Scenario settings & Customer, invoice, and payment events \\
+    ScenarioGeneratorAgent & Generates simulated customer, invoice, and payment activity for testing. & Scenario settings & Event streams \\
     \hline
-    CustomerStateAgent & Computes customer-level receivables metrics from invoice and payment behavior. & Invoice and payment events & Customer metrics \\
+    CustomerStateAgent & Computes receivables and payment metrics from transaction events. & Invoice/payment events & Customer metrics \\
     \hline
-    ExternalDataAgent & Collects structured external financial or company-level enrichment data. & Customer identity & External financial metrics \\
+    ExternalDataAgent & Gathers external financial ratings and corporate metrics. & Customer identity & Financial metrics \\
     \hline
-    ExternalScrapingAgent & Extracts litigation, news, or web-based risk indicators related to customers. & Customer/company profile & External risk indicators \\
+    ExternalScrapingAgent & Extracts litigation, news, and adverse public-risk indicators. & Customer profile & External risk signals \\
     \hline
-    AggregatorAgent & Combines internal metrics and external indicators into a consolidated risk profile. & Metrics and enrichment data & Aggregated risk profile \\
+    PaymentPredictionAgent & Predicts invoice default and payment delay probabilities. & Invoice and metrics data & Payment prediction \\
     \hline
-    PaymentPredictionAgent & Estimates payment delay or non-payment likelihood for open invoices. & Invoice and customer metrics & Payment prediction \\
+    RiskScoringAgent & Computes final composite risk scores and policy risk bands. & Prediction and profile data & Risk score events \\
     \hline
-    RiskScoringAgent & Produces final risk scores and risk bands using prediction and context. & Prediction and profile data & Risk score event \\
+    DBAgent & Persists raw events and derived domain records into SQLite. & Domain and system events & Database records \\
     \hline
-    CollectionsAgent & Converts risk outcomes into prioritized collections recommendations. & Risk score event & Collections action \\
+    MonitoringAgent & Tracks agent heartbeats, topic lag, and error metrics. & Health and status events & System health status \\
     \hline
-    DBAgent & Persists raw events and derived records into the local database. & Domain and system events & SQLite records \\
-    \hline
-    QueryAgent & Serves structured read requests for agents and the API layer. & Query requests & Query responses \\
-    \hline
-    MemoryAgent & Maintains fast runtime customer and decision context. & Domain events & Cached state \\
-    \hline
-    MonitoringAgent & Tracks runtime health, heartbeats, lag, and error conditions. & Health and system events & Health status \\
-    \hline
-    SelfHealingAgent & Initiates recovery actions when agents become unhealthy or fail. & Health status & Recovery action \\
-    \hline
-    RegistryService & Maintains active agent identity, status, and capability metadata. & Agent registration & Agent registry state \\
+    SelfHealingAgent & Executes autonomous recovery (restart, rebalance) on failures. & Unhealthy node alerts & Recovery actions \\
 \end{longtable}
 
 \section{Interface Design}
-The interface design of ACIS-X defines how agents, storage, external sources, and the user-facing dashboard communicate with each other. Since the system is event-driven, most internal interfaces are asynchronous Kafka topics. Fig \ref{fig:interface_design} maps the external and internal interfaces of the system. Each topic represents a specific type of event and allows producers and consumers to remain loosely coupled. 
+The interface design establishes standard communication boundaries among agents, storage layers, external data providers, and the user-facing dashboard. Fig \ref{fig:interface_design} illustrates the external, internal, and persistence interfaces of the platform.
 
 \begin{figure}[H]
     \centering
@@ -1248,11 +1081,15 @@ The interface design of ACIS-X defines how agents, storage, external sources, an
     \label{fig:interface_design}
 \end{figure}
 
-ACIS-X uses four primary interface categories. Internal interfaces connect agents through Kafka topics. External interfaces allow enrichment agents to access financial, litigation, news, or company-related data. Persistence interfaces connect DBAgent and QueryAgent with the SQLite database. User-facing interfaces expose risk profiles, collections actions, metrics, and runtime status through the FastAPI backend and React dashboard.
+The system defines four principal interface categories:
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{Internal Interfaces:} Asynchronous Kafka topics carrying typed JSON/Avro event envelopes between agents.
+    \item \textbf{External Interfaces:} REST/scraping endpoints for real-time financial, litigation, and news enrichment.
+    \item \textbf{Persistence Interfaces:} Synchronous SQL interfaces managed by DBAgent and QueryAgent against SQLite.
+    \item \textbf{User Interfaces:} REST endpoints and Server-Sent Events (SSE) connecting the FastAPI BFF to the React dashboard.
+\end{itemize}
 
-The topic interface is the most important internal communication mechanism. It allows the system to process events incrementally and supports future scaling by adding more producers or consumers without changing the entire architecture. Table \ref{tab:kafka_topic_interfaces} maps the Kafka topics used for communication between various agents.
-
-By standardizing these asynchronous boundaries, ACIS-X isolates failure domains and ensures that new analytical models, monitoring tools, or external integrations can be introduced seamlessly. This interface-driven decoupling is fundamental to maintaining a resilient and adaptable collections intelligence platform under evolving business requirements.
+Table \ref{tab:kafka_topic_interfaces} summarizes the key Kafka topics governing inter-agent workflows.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.22\textwidth}|L{0.23\textwidth}|L{0.25\textwidth}|L{0.22\textwidth}|}
@@ -1276,33 +1113,33 @@ By standardizing these asynchronous boundaries, ACIS-X isolates failure domains 
     \hline
     \endlastfoot
 
-    acis.customers & ScenarioGeneratorAgent & DBAgent, MemoryAgent, risk/profile agents & Customer master events \\
+    acis.customers & ScenarioGeneratorAgent & DBAgent, MemoryAgent & Customer master records \\
     \hline
-    acis.invoices & ScenarioGeneratorAgent & DBAgent, CustomerStateAgent, PaymentPredictionAgent & Invoice lifecycle data \\
+    acis.invoices & ScenarioGeneratorAgent & DBAgent, CustomerStateAgent, PaymentPredictionAgent & Invoice lifecycle updates \\
     \hline
-    acis.payments & ScenarioGeneratorAgent & DBAgent, CustomerStateAgent & Payment behavior data \\
+    acis.payments & ScenarioGeneratorAgent & DBAgent, CustomerStateAgent & Payment transaction events \\
     \hline
-    acis.metrics & CustomerStateAgent, enrichment agents & AggregatorAgent, PaymentPredictionAgent, DBAgent & Derived customer metrics \\
+    acis.metrics & CustomerStateAgent, enrichment agents & AggregatorAgent, PaymentPredictionAgent, DBAgent & Computed customer metrics \\
     \hline
-    acis.predictions & PaymentPredictionAgent & RiskScoringAgent, DBAgent & Invoice-level prediction output \\
+    acis.predictions & PaymentPredictionAgent & RiskScoringAgent, DBAgent & Predicted payment likelihood \\
     \hline
-    acis.risk & AggregatorAgent, RiskScoringAgent & CollectionsAgent, DBAgent, dashboard layer & Customer and invoice risk state \\
+    acis.risk & AggregatorAgent, RiskScoringAgent & CollectionsAgent, DBAgent, BFF & Consolidated risk score events \\
     \hline
-    acis.collections & CollectionsAgent & DBAgent, dashboard layer & Collections recommendation output \\
+    acis.collections & CollectionsAgent & DBAgent, BFF & Collections action dispatch \\
     \hline
-    acis.query.request & API layer or agents & QueryAgent & Structured read request \\
+    acis.query.request & API layer / agents & QueryAgent & Structured state queries \\
     \hline
-    acis.query.response & QueryAgent & API layer or requesting agent & Structured query result \\
+    acis.query.response & QueryAgent & API layer / requesting agent & Query response payloads \\
     \hline
-    acis.agent.health & Runtime agents & MonitoringAgent, SelfHealingAgent & Agent health and heartbeat tracking \\
+    acis.agent.health & Runtime agents & MonitoringAgent, SelfHealingAgent & Heartbeats and health signals \\
     \hline
-    acis.dlq & Failed processors & DLQMonitorAgent & Failed-event inspection and recovery \\
+    acis.dlq & Failed processors & DLQMonitorAgent & Dead-letter inspection and triage \\
 \end{longtable}
 
 \section{Data Structure Design}
-The data structure design of ACIS-X is centered on structured events and persistent domain records. Events are used for communication between agents, while database records are used for durable storage and later query. This separation allows the system to process live data in real time while still preserving historical evidence for audit, replay, and report generation.
+ACIS-X distinguishes between ephemeral event envelopes used for inter-agent messaging and durable entity records stored for auditing, analytics, and dashboard queries. Every event conforms to a standardized schema containing an event ID, type, source, timestamp, correlation ID, and typed payload.
 
-The event schema is designed to provide traceability. Each event contains an identifier, event type, source, timestamp, entity reference, and payload. Table \ref{tab:acis_data_structures} maps the primary data structures used across the ACIS-X platform. Derived structures such as customer metrics, risk profiles, and collections actions include reason fields so downstream modules can explain how a decision was produced. 
+Table \ref{tab:acis_data_structures} outlines the primary data structures utilized across the platform.
 
 \vspace{-4pt}
 \begin{longtable}{|L{0.28\textwidth}|L{0.62\textwidth}|}
@@ -1326,101 +1163,58 @@ The event schema is designed to provide traceability. Each event contains an ide
     \hline
     \endlastfoot
 
-    Event schema & Common message format containing event id, event type, source, timestamp, entity id, and payload. \\
+    Event envelope & Standard transport envelope carrying event ID, type, source, timestamp, correlation ID, and payload. \\
     \hline
-    Event envelope & Transport wrapper used for metadata, correlation, retry handling, and routing context. \\
+    Customer record & Entity storing customer identity, credit limit, contact attributes, and account status. \\
     \hline
-    Customer record & Stores customer identity, organization information, account status, and related metadata. \\
+    Invoice record & Ledger entry capturing invoice ID, due date, invoice amount, paid balance, and status. \\
     \hline
-    Invoice record & Stores invoice id, customer id, issue date, due date, amount, paid amount, and invoice status. \\
+    Payment record & Transaction entry tracking payment ID, invoice ID, payment timestamp, and cleared amount. \\
     \hline
-    Payment record & Stores payment id, invoice id, customer id, payment date, amount, and settlement reference. \\
+    Customer metrics payload & Behavioral feature set including total outstanding, overdue ratio, payment delay, and aging buckets. \\
     \hline
-    Customer metrics payload & Stores outstanding amount, overdue amount, average delay, payment ratio, and behavioral indicators. \\
+    Enrichment payloads & External financial scores, litigation status, and negative news indicators mapped to entity references. \\
     \hline
-    External financial payload & Stores company-level enrichment values such as financial score, stability signal, and source metadata. \\
+    Risk profile payload & Composite risk assessment containing numerical score, risk band, contributing factors, and explainability codes. \\
     \hline
-    Litigation/news payload & Stores external legal or public-risk indicators collected for customer risk enrichment. \\
+    Collections action payload & Recommended operational strategy, priority level, rationale, cooldown expiry, and delivery status. \\
     \hline
-    Risk profile payload & Stores aggregated score, risk band, contributing factors, reason codes, and computed timestamp. \\
+    Agent registry record & Operational record capturing agent instance ID, role, host, heartbeat timestamp, and health state. \\
     \hline
-    Collections action payload & Stores recommended action, priority, reason, cooldown key, and action status. \\
-    \hline
-    Agent registry record & Stores agent id, role, status, host, heartbeat time, and capability information. \\
-    \hline
-    Query request/response & Represents structured read requests and responses used by QueryAgent for database-backed access. \\
+    Query request/response & Structured query envelope specifying entity filters, limit criteria, and resulting data rows. \\
 \end{longtable}
 
 \section{Algorithm Design}
-Algorithm design in ACIS-X focuses on converting event streams into operational decisions. Each algorithm is implemented through one or more agents, and each stage publishes structured output for the next stage. The overall process begins with ingestion and persistence, continues through customer-state computation and enrichment, and ends with risk scoring, collections actioning, and runtime recovery.
+The algorithmic pipeline converts raw transaction events into explainable risk assessments and automated operational decisions through five sequential stages.
 
 \subsection{Event Ingestion and Persistence Algorithm}
-The event ingestion and persistence algorithm ensures that incoming business events are validated, stored, and made available to downstream agents.
-
+Validates incoming events, maintains database consistency, and routes anomalous records:
 \begin{itemize}[itemsep=2pt]
-    \item Receive customer, invoice, payment, metric, risk, or collections event from the relevant Kafka topic.
-    \item Validate the event structure, mandatory fields, event type, and entity reference.
-    \item Check the event identifier to reduce duplicate processing during retries or replay.
-    \item Transform the event payload into the corresponding database record when persistence is required.
-    \item Store the raw event and derived domain record through DBAgent.
-    \item Publish or expose stored state for later access through QueryAgent and MemoryAgent.
-    \item Route invalid or failed events to dead-letter handling for inspection and recovery.
-\end{itemize}
-
-\subsection{Customer Metrics Computation Algorithm}
-The customer metrics computation algorithm converts invoice and payment history into useful receivables indicators.
-
-\begin{itemize}[itemsep=2pt]
-    \item Consume invoice and payment events for a customer.
-    \item Retrieve related invoice and payment history from local state or QueryAgent.
-    \item Calculate outstanding balance, overdue balance, paid amount, and unpaid amount.
-    \item Calculate behavioral features such as average payment delay, on-time payment ratio, and overdue frequency.
-    \item Generate a customer metrics payload with computed values and timestamp.
-    \item Publish the metrics event for aggregation, prediction, storage, and dashboard use.
-\end{itemize}
-
-\subsection{External Enrichment and Risk Aggregation Algorithm}
-The external enrichment and aggregation algorithm expands customer evaluation beyond internal payment behavior.
-
-\begin{itemize}[itemsep=2pt]
-    \item Identify customers requiring external enrichment using customer profile or metric events.
-    \item Resolve the company or customer reference needed for external lookup.
-    \item Collect financial, litigation, news, or web-based indicators through enrichment agents.
-    \item Normalize external values into comparable risk signals.
-    \item Combine internal receivables metrics and external risk indicators.
-    \item Produce an aggregated customer risk profile with score, reasons, and evidence references.
-    \item Publish the aggregated profile for prediction, risk scoring, persistence, and visualization.
+    \item Ingest event envelopes from incoming Kafka topics and validate schema structure, required fields, and semantic types.
+    \item Check event ID against recent persistence cache to discard duplicates resulting from transport retries.
+    \item Persist validated domain records to SQLite via DBAgent and update MemoryAgent cached state.
+    \item Forward malformed, expired, or unprocessable messages to the dead-letter topic (\texttt{acis.dlq}) for triage.
 \end{itemize}
 
 \subsection{Payment Prediction and Final Risk Scoring Algorithm}
-The prediction and risk scoring algorithm determines the likelihood and severity of payment risk for customers and invoices.
-
+Estimates delinquency likelihood and establishes categorical risk classifications:
 \begin{itemize}[itemsep=2pt]
-    \item Select active or open invoices that require risk evaluation.
-    \item Read current customer metrics, invoice attributes, and aggregated external profile.
-    \item Estimate payment delay or non-payment likelihood using available behavioral and contextual indicators.
-    \item Generate a prediction event containing probability, confidence, and reason context.
-    \item Refine the prediction using business rules, risk thresholds, and customer-level context.
-    \item Assign the final risk band, such as low, medium, high, or critical.
-    \item Publish the final risk score event for collections actioning, storage, and dashboard display.
+    \item Retrieve invoice attributes, current customer metrics, and aggregated external profile features.
+    \item Execute trained Random Forest classifier to estimate default probability and payment delay distribution.
+    \item Apply credit policy thresholds and explainability guardrails (SHAP factor ranking) to refine raw estimates.
+    \item Assign categorical risk band (Low, Medium, High, Critical) and publish to \texttt{acis.risk}.
 \end{itemize}
 
 \subsection{Collections Action and Self-Healing Algorithm}
-The collections action algorithm converts final risk output into an operational recommendation, while the self-healing algorithm maintains runtime reliability.
-
+Translates risk states into operational actions while supervising system resilience:
 \begin{itemize}[itemsep=2pt]
-    \item Consume high-risk or updated risk-score events from the risk topic.
-    \item Determine action severity using risk band, overdue amount, payment behavior, and policy conditions.
-    \item Select the recommended collections action, such as reminder, follow-up, escalation, or manual review.
-    \item Apply duplicate prevention and cooldown rules to avoid repeated action for the same customer or invoice.
-    \item Persist the collections action and publish it for dashboard visibility.
-    \item Monitor agent heartbeats, topic lag, failed events, and runtime errors.
-    \item Trigger recovery actions such as restart, re-registration, rebalancing, or dead-letter inspection when unhealthy behavior is detected.
+    \item Map risk band and overdue exposure to the collections policy matrix (e.g., gentle reminder, stern notice, legal escalation).
+    \item Apply per-customer cooldown windows to prevent duplicate or excessive collections notices.
+    \item Periodically inspect agent heartbeats, consumer lag, and DLQ error rates via MonitoringAgent.
+    \item Trigger automated remediation (process restart, partition rebalance, alerting) upon detecting node failure or anomaly.
 \end{itemize}
-
 \chapter{IMPLEMENTATION}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 \section{Implementation Approaches}
 To build ACIS-X into an autonomous, resilient, and enterprise-grade credit intelligence system, a comprehensive study of streaming platforms, distributed microservices, machine learning libraries, and embedded storage solutions was conducted. The platform architecture requires sub-50 ms pipeline processing, strict partition ordering by account, explainable risk outputs, and autonomous self-healing without the high operational footprint of complex distributed stream compute engines like Apache Flink. 
@@ -1507,15 +1301,6 @@ The ACIS-X codebase is structured into specialized modules across independent pa
 
 In Fig \ref{fig:code_ingestion}, the initialization block of the Customer State Agent shows how the agent registers itself with the Kafka consumer group \texttt{customer-state-group} and declares its subscribed topics. The \texttt{group\_id} ensures that when multiple replicas are deployed, Kafka automatically load-balances partitions across instances without any external coordination overhead.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{images/chap6_img2.png}
-    \caption{Per-Customer Lock and Bulk Invoice Query}
-    \label{fig:terminal_runtime}
-\end{figure}
-
-In Fig \ref{fig:terminal_runtime}, the metrics rebuild logic demonstrates two key architectural choices. First, a non-blocking per-customer lock prevents concurrent rebuild collisions on the same account without a global lock bottleneck. Second, a single bulk \texttt{QueryClient} call fetches all invoice records in one round-trip, replacing the earlier design that issued one query per invoice and caused significant latency under high event load.
-
 \subsection{Machine Learning Model Training and Inference Module}
 
 \begin{figure}[H]
@@ -1557,25 +1342,20 @@ In Fig \ref{fig:code_self_healing}, the \texttt{compute\_psi} method implements 
 \chapter{TESTING}
 
 \section{Testing Approach}
-Testing is an essential part of ACIS-X because the platform combines asynchronous event processing, stateful customer metrics, predictive scoring, persistence, and autonomous recovery. A defect in one stage can propagate through several Kafka topics before it becomes visible at the dashboard or collections boundary. The testing strategy therefore validates both individual component behavior and the contracts between successive agents.
+ACIS-X combines asynchronous event processing, stateful customer metrics, predictive scoring, persistence, and autonomous recovery. A defect in any one stage can propagate through several Kafka topics before it becomes visible at the dashboard or collections boundary. The testing strategy therefore validates both individual component behavior and the contracts between successive agents.
 
-The test design follows a unit-first approach. Most functional tests use deterministic fixtures and mocked Kafka or query clients so that event contracts and decision logic can be checked without requiring a running broker. A separate evidence suite exercises complete in-memory processing paths, synthetic customer populations, lifecycle traces, performance thresholds, model-governance calculations, and self-healing decisions. Broker-dependent tests are isolated under the integration marker and are executed with the Docker Kafka environment when required.
-
-The main testing objectives are:
+Most functional tests use deterministic fixtures and mocked Kafka or query clients so that event contracts and decision logic can be verified without requiring a running broker. A separate evidence suite exercises in-memory processing paths, synthetic customer populations, lifecycle traces, performance thresholds, model-governance calculations, and self-healing decisions. Broker-dependent tests are isolated under the integration marker and executed with the Docker Kafka environment when required. The main testing objectives are:
 \begin{itemize}[itemsep=2pt]
     \item verify that events conform to the canonical envelope and schema-version contract;
     \item confirm that agents publish the correct event types and preserve customer and correlation identity;
     \item validate database persistence, duplicate handling, amount clamping, and query behavior;
     \item verify that behavioral and external signals produce stable and monotonic risk outcomes;
     \item measure lifecycle completion, processing latency, duplicate-action prevention, and scaling behavior;
-    \item validate monitoring, recovery decisions, cooldowns, and cascading-failure protection; and
-    \item verify that model-governance calculations detect stable and drifted distributions as intended.
+    \item validate monitoring, recovery decisions, cooldowns, and cascading-failure protection.
 \end{itemize}
 
-The test evidence is interpreted according to its execution boundary. Unit and mocked pipeline tests establish deterministic software behavior. Synthetic intelligence tests establish comparative behavior under a controlled generator. Kafka integration tests establish broker-level interaction and consumer-group behavior. These categories are complementary and are not treated as substitutes for validation with confidential enterprise ERP data.
-
 \section{Definition and Types of Testing}
-ACIS-X uses the following testing categories. Each category targets a distinct failure mode in the event-driven architecture.
+ACIS-X uses the following testing categories, each targeting a distinct failure mode in the event-driven architecture.
 
 \begin{longtable}{|L{0.22\textwidth}|L{0.34\textwidth}|L{0.32\textwidth}|}
     \caption{Testing categories used for ACIS-X}\label{tab:testing_categories} \\
@@ -1610,34 +1390,14 @@ ACIS-X uses the following testing categories. Each category targets a distinct f
     Governance testing & Validate model-drift and audit calculations. & PSI, KS drift, challenger updates, and governance report publication. \\
 \end{longtable}
 
-The regular test suite is intended for rapid developer feedback and does not require a live Kafka broker for most tests. The performance and evidence suite provides structured, report-oriented checks. Tests that require a broker are explicitly marked so that their environment assumptions remain visible rather than being hidden inside ordinary unit tests.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{images/chap7_img1.png}
-    \caption{Schema-version and dead-letter validation assertions}
-    \label{fig:testing_schema_dlq}
-\end{figure}
-
-Figure \ref{fig:testing_schema_dlq} shows the negative-path contract checks used for invalid schema versions and malformed events. The assertions verify that invalid messages are redirected to \texttt{acis.dlq} rather than being published to a business topic.
+The regular test suite is intended for rapid developer feedback and does not require a live Kafka broker. The evidence suite provides structured, report-oriented checks. Tests that require a broker are explicitly marked so that their environment assumptions remain visible.
 
 \section{Test Case Analysis}
-Each ACIS-X test case is organized around an input event or system condition, the component under test, the expected observable result, and a pass/fail assertion. This structure is important for an event-driven system because correctness is determined not only by a return value, but also by the event published, the state persisted, the correlation identifier retained, and the recovery action selected.
+Each test case is organized around an input event or system condition, the component under test, the expected observable result, and a pass/fail assertion. In an event-driven system, correctness is determined not only by a return value but also by the event published, the state persisted, the correlation identifier retained, and the recovery action selected.
 
-For schema and contract cases, the input is an event envelope containing an event identifier, event type, source, timestamp, entity identifier, correlation identifier, schema version, and payload. The test then verifies that valid events are accepted and that malformed events are rejected or routed to the dead-letter path. For persistence cases, repeated delivery of the same event is used to verify idempotency and to ensure that replay does not create duplicate rows or corrupt invoice amounts.
+For intelligence cases, synthetic customer populations are generated with independent behavioral factors such as utilization, average delay, on-time ratio, and overdue count. The ground-truth function is deliberately kept separate from the agent implementation so that the test does not merely verify that the agent reproduces its own formula. The tests compare ACIS-X refinement with a utilization-only baseline and verify that risk increases consistently when adverse factors increase.
 
-For intelligence cases, synthetic customer populations are generated with independent behavioral factors such as utilization, average delay, on-time ratio, and overdue count. The ground-truth function is separate from the agent implementation. This prevents the test from simply checking whether the implementation reproduces its own formula. The tests compare ACIS-X refinement with a utilization-only baseline and verify that risk increases consistently when adverse behavioral factors increase.
-
-For resilience cases, health events representing degraded, critical, overloaded, error, and timeout conditions are delivered to the monitoring and self-healing logic. The expected result is not an unrestricted restart. The recovery layer must select an action using its score and decision rules, respect cooldown windows, preserve placement context, and suppress repeated actions during a failure storm.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{images/chap7_img2.png}
-    \caption{Invoice lifecycle trace through agent stages}
-    \label{fig:testing_lifecycle_trace}
-\end{figure}
-
-Figure \ref{fig:testing_lifecycle_trace} documents the test harness that injects an invoice event, discovers the metrics and prediction outputs, forwards them to risk scoring, and finally evaluates the collections boundary. The trace records timestamps and correlation identifiers between stages.
+For resilience cases, health events representing degraded, critical, overloaded, error, and timeout conditions are delivered to the monitoring and self-healing logic. The recovery layer must select an action using its score and decision rules, respect cooldown windows, preserve placement context, and suppress repeated actions during a failure storm.
 
 \section{Test Cases for the Project}
 Table \ref{tab:acis_test_cases} summarizes representative test cases derived from the implemented agents, schemas, runtime services, and evidence suite.
@@ -1689,16 +1449,7 @@ Table \ref{tab:acis_test_cases} summarizes representative test cases derived fro
     TC-15 & Collections duplicate prevention & Repeated identical risk events are sent to CollectionsAgent. & Only one logical collection action is dispatched for the repeated condition. \\
 \end{longtable}
 
-The test cases cover the principal correctness boundaries identified in the requirements chapter: event ingestion, state computation, enrichment, prediction, action routing, reliability, scalability, maintainability, and observability. They also validate the important distinction between a business decision and the operational telemetry used to supervise that decision.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{images/chap7_img3.png}
-    \caption{P95 pipeline latency measurement}
-    \label{fig:testing_p95_latency}
-\end{figure}
-
-Figure \ref{fig:testing_p95_latency} shows how the performance test records injection timestamps, follows correlation-specific outputs, computes completed-event latencies, and applies the P95 threshold. The test uses controlled Kafka and query boundaries, so it is a regression measure for processing logic rather than a direct production network benchmark.
+These test cases cover the principal correctness boundaries identified in the requirements chapter: event ingestion, state computation, enrichment, prediction, action routing, reliability, scalability, and observability.
 
 \section{Test Results Summary}
 The recorded validation run was executed on macOS using Python 3.14.6 and pytest 9.1.1. The full command collected 162 tests across the regular and suite directories, and all 162 tests passed. A separate run of the evidence suite collected 45 tests and also reported 45 passes. These figures represent the recorded test artifact generated on 23 July 2026.
@@ -1728,29 +1479,14 @@ The recorded validation run was executed on macOS using Python 3.14.6 and pytest
     Failures & 0 & 0 & No recorded test failures \\
 \end{longtable}
 
-The regular tests verify the functional foundation of the platform. They include event validation, Kafka offset behavior, database schema and query behavior, canonical consumer-group configuration, enrichment fallbacks, circuit-breaker transitions, risk monotonicity, placement, and self-healing lock safety. The evidence suite extends this foundation with invoice lifecycle traces, correlation-ID checks, baseline comparisons, signal-fusion ablation, P95 latency checks, mean-time-to-recovery iterations, model-governance metrics, and duplicate-action prevention.
-
-The performance tests are deliberately described as bounded evidence rather than production guarantees. For example, the lifecycle and P95 tests exercise agent logic using mocked Kafka and QueryClient boundaries, while the integration tests establish broker-dependent behavior when Kafka is available. Similarly, intelligence comparisons use deterministic synthetic populations and ground-truth functions. These tests support repeatable architectural validation, but field validation with anonymized enterprise ERP and payment data remains future work.
-
-The recorded run emitted non-blocking deprecation warnings related to calls to \texttt{datetime.utcnow()} in production and test code. The warnings did not cause test failures, but they identify a maintenance item for migration to timezone-aware UTC construction in a future cleanup cycle.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{images/chap7_img4.png}
-    \caption{Hard-failure recovery assertion for a timed-out agent}
-    \label{fig:testing_hard_failure}
-\end{figure}
-
-Figure \ref{fig:testing_hard_failure} shows the fault-injection test for a timeout condition. It verifies both recovery-event publication and restart-request publication, while also enforcing a bounded decision latency for the self-healing path.
+The regular tests verify the functional foundation: event validation, Kafka offset behavior, database schema and query correctness, consumer-group configuration, enrichment fallbacks, circuit-breaker transitions, risk monotonicity, and self-healing lock safety. The evidence suite extends this foundation with invoice lifecycle traces, baseline comparisons, signal-fusion ablation, P95 latency checks, model-governance metrics, and duplicate-action prevention. Performance tests are deliberately described as bounded evidence rather than production guarantees, since they exercise agent logic using mocked Kafka and QueryClient boundaries. Field validation with anonymized enterprise ERP and payment data remains future work.
 
 \section{Testing Limitations}
-The current testing strategy has several boundaries. First, most evidence tests isolate Kafka and external services with controlled doubles so that the agent logic remains deterministic. They do not reproduce every network, broker-rebalance, external API, or database contention condition of a distributed production deployment. Second, the intelligence tests use synthetic customer populations because commercial B2B invoice ledgers and default labels are confidential. Third, the BFF routes, SSE delivery, Docker deployment, and React dashboard do not have the same depth of automated coverage as the Python agent layer. Finally, the recorded results are a snapshot of a particular software and dependency environment.
+The current testing strategy has several boundaries. Most evidence tests isolate Kafka and external services with controlled doubles so that the agent logic remains deterministic; they do not reproduce every network, broker-rebalance, or database contention condition of a distributed production deployment. The intelligence tests use synthetic customer populations because commercial B2B invoice ledgers and default labels are confidential. The BFF routes, SSE delivery, Docker deployment, and React dashboard do not have the same depth of automated coverage as the Python agent layer. Finally, the recorded results are a snapshot of a particular software and dependency environment.
 
-These limitations do not invalidate the tests; they define what the evidence supports. The current suite demonstrates contract correctness, deterministic decision behavior, persistence safeguards, resilience logic, and repeatable synthetic performance. A subsequent validation phase should add authenticated BFF route tests, frontend integration tests, multi-broker failure tests, long-duration endurance tests, and replay validation using anonymized enterprise event streams.
-
+These limitations define what the evidence supports rather than invalidating it. The current suite demonstrates contract correctness, deterministic decision behavior, persistence safeguards, resilience logic, and repeatable synthetic performance. A subsequent validation phase should add authenticated BFF route tests, frontend integration tests, multi-broker failure tests, long-duration endurance tests, and replay validation using anonymized enterprise event streams.
 \chapter{RESULT AND DISCUSSION}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 \section{Result}
 The ACIS-X platform was evaluated against the core objectives stated in the requirements chapter: sub-50 ms end-to-end pipeline latency, exactly-once persistence under replay, risk score monotonicity with respect to adverse behavioural signals, autonomous recovery from agent failures, and model-governance drift detection. The results presented in this section are drawn from the recorded validation suite executed on macOS using Python 3.14.6 and pytest 9.1.1. All 162 regular and evidence tests passed. The four result categories below correspond to the principal measurement dimensions of the project.
@@ -1821,7 +1557,6 @@ The PSI and KS drift tests confirmed that the \texttt{ModelGovernanceAgent} corr
 
 \chapter{CONCLUSION, APPLICATIONS AND FUTURE SCOPE}
 \thispagestyle{chapterfirstpage}
-\enlargethispage{44.6pt}
 
 \section{Conclusion}
 ACIS-X was conceived to address a structural gap in enterprise credit risk management: the inability of traditional batch scoring systems to respond to fast-moving accounts receivable events in real time. The project delivered a Kafka-native, multi-agent event-driven platform that processes invoice and payment events continuously, computes behavioural credit metrics on each event trigger, generates explainable risk predictions inline, and autonomously supervises its own operational health without human intervention.
@@ -1878,21 +1613,21 @@ The current implementation establishes a functionally complete and architectural
 \appendix
 
 
-\chapter*{ANNEXURE}
-\addcontentsline{toc}{chapter}{ANNEXURE}
+\chapter*{ANNEXURE A}
+\addcontentsline{toc}{chapter}{ANNEXURE A}
 \renewcommand{\thesection}{A.\arabic{section}}
+\renewcommand{\theHsection}{AnnexA.\arabic{section}}
 \renewcommand{\thetable}{A.\arabic{table}}
 \setcounter{table}{0}
 \setcounter{section}{0}
 
 \section{MAJOR PROJECT Mapping with CO and PO}
-
-Table \ref{tab:co_statements} maps the course outcomes required for the major project. These outcomes are carefully structured to build both theoretical knowledge and hands-on engineering capabilities. By actively addressing complex technical challenges, the project fosters a deep understanding of modern distributed software architectures. Furthermore, the outcomes emphasize the critical importance of effective team collaboration and ethical considerations in software product development. Collectively, these objectives ensure that the final technical deliverable strictly adheres to the rigorous standards expected of a capstone engineering endeavor.
+The capstone engineering project provides a comprehensive platform for integrating theoretical computer science principles with practical systems engineering and professional design methodologies. Table \ref{tab:co_statements} presents the Course Outcomes (COs) defined for the major project. These outcomes are formulated to cultivate deep algorithmic problem-solving capabilities, foster proficiency in modern distributed technologies, encourage collaborative team development, and ensure rigorous adherence to ethical standards in software product delivery.
 
 \begin{table}[H]
     \centering
     \caption{Course Outcomes (CO) Statements}\label{tab:co_statements}
-    \renewcommand{\arraystretch}{1.2}
+    \renewcommand{\arraystretch}{1.25}
     \makebox[\textwidth][c]{
     \begin{tabular}{|c|p{12cm}|}
         \hline
@@ -1902,7 +1637,7 @@ Table \ref{tab:co_statements} maps the course outcomes required for the major pr
         \hline
         CO2 & To provide an opportunity to learn about new ideas and concepts \\
         \hline
-        CO3 & To improve written and verbal communication skills. \\
+        CO3 & To improve written and verbal communication skills \\
         \hline
         CO4 & To Analyze, Design and Evaluate Engineering System \\
         \hline
@@ -1914,15 +1649,13 @@ Table \ref{tab:co_statements} maps the course outcomes required for the major pr
     }
 \end{table}
 
-\subsection{Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}
-
-Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcomes and Program Outcomes. This comprehensive mapping highlights how the project's technical execution fulfills the broader educational and professional engineering criteria. The numeric values indicate the degree to which each course outcome contributes to specific program goals, with a higher value representing a stronger correlation. By quantifying these relationships, the matrix provides a structured overview of the project's academic and practical alignment. This analytical approach ensures that the project not only solves complex architectural problems but also adheres strictly to established engineering guidelines.
-
+\subsection{Strength of CO Mapping to PO/PSOs with Justification}
+The correlation between Course Outcomes and Program Outcomes (POs/PSOs) is established using standard engineering accreditation rubrics: Level 3 indicates substantial (high) correlation, Level 2 indicates moderate (medium) correlation, and Level 1 indicates slight (low) correlation, with hyphens representing negligible linkage. Table \ref{tab:co_po_matrix} illustrates the mapping matrix across all project dimensions.
 
 \begin{table}[H]
     \centering
     \caption{CO-PO/PSO Mapping Matrix}\label{tab:co_po_matrix}
-    \renewcommand{\arraystretch}{1.3}
+    \renewcommand{\arraystretch}{1.25}
     \setlength{\tabcolsep}{4pt}
     \makebox[\textwidth][c]{
     \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
@@ -1947,110 +1680,275 @@ Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcom
     }
 \end{table}
 
-Table \ref{tab:co_po_justification} maps the justification for each mapping between Course Outcomes and Program Outcomes.
-This ensures compliance with engineering and professional standards.
-
-The justification matrix below illustrates how the implementation of ACIS-X systematically maps to core engineering competencies. In particular, the design of a decoupled, Kafka-driven architecture directly aligns with the program's requirement to analyze and construct complex, scalable systems. By decomposing the overarching problem into discrete, manageable layers—spanning from raw event ingestion to real-time collections actioning—the project demonstrates a rigorous translation of theoretical computer science principles into practical engineering solutions. This methodical approach not only validates the technical rigor of the system but also provides a clear trace from academic learning to industry-applicable skills in distributed computing and data streaming.
-
-Beyond the strictly technical achievements, the project fundamentally satisfies programmatic goals related to professional ethics, targeted communication, and collaborative teamwork. The implementation of transparent, reason-coded risk models explicitly addresses the ethical mandate for fairness and explainability in automated financial decisions. Furthermore, the meticulous project planning, continuous milestone tracking, and exhaustive documentation required to deliver this multi-agent prototype underscore the team's capacity to communicate complex architectural concepts effectively. 
+The mapping strength is grounded in the concrete architectural, algorithmic, and operational deliverables of the ACIS-X platform. From a systems perspective, implementing an asynchronous, event-driven multi-agent architecture using Apache Kafka, SQLite, and ensemble machine learning directly satisfies PO1 (Engineering Knowledge), PO2 (Problem Analysis), PO3 (Design/Development of Solutions), and PO5 (Modern Tool Usage). Organizationally, establishing milestone schedules, sprint planning, and thorough documentation satisfies PO9 (Individual and Team Work) and PO10 (Communication). Furthermore, incorporating explainable SHAP-based credit risk predictions and policy-governed collections outreach directly addresses PO8 (Ethics) and PO6 (The Engineer and Society). Table \ref{tab:co_po_justification} provides the detailed rationale for each mapping.
 
 \begin{table}[H]
     \centering
     \caption{Justification for CO-PO/PSO Mapping}\label{tab:co_po_justification}
-    \renewcommand{\arraystretch}{1.5}
-    \begin{tabular}{|c|c|p{10cm}|}
+    \renewcommand{\arraystretch}{1.3}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|c|c|p{11.5cm}|}
         \hline
         \textbf{CO} & \textbf{PO/PSO} & \textbf{Justification} \\
         \hline
-        CO1 & PO1, PO5 & Applies engineering knowledge to define event-driven architecture, Kafka-based orchestration, and multi-agent system design as detailed in the Introduction and System Design chapters. \\
+        CO1 & PO1, PO5 & Applies core engineering knowledge to formulate an asynchronous, Kafka-orchestrated multi-agent architecture for intelligent receivables monitoring. \\
         \hline
-        CO2 & PO2, PO4 & Analyzes existing credit-risk models and stream-processing frameworks in the Literature Survey, formulating risk-scoring and behavioral metric logic for the proposed solution. \\
+        CO2 & PO2, PO4 & Analyzes machine-learning credit risk scoring models and stream-processing architectures to design stateful behavioral customer metrics. \\
         \hline
-        CO3 & PO10 & Communicates system objectives, design rationale, and structured requirements through the report chapters, including the Introduction and Requirement Engineering documentation. \\
+        CO3 & PO10 & Communicates architectural trade-offs, interface specifications, and experimental validation results through structured technical documentation. \\
         \hline
-        CO4 & PO3, PO5 & Designs and evaluates system architecture, component decomposition, interface contracts, data structures, and algorithm specifications as covered in the System Design chapter. \\
+        CO4 & PO3, PO5 & Designs and evaluates system architecture, component contracts, streaming topologies, and automated recovery algorithms under operational constraints. \\
         \hline
-        CO5 & PO6, PO8 & Addresses ethical considerations in automated collections and responsible handling of sensitive financial data, reflected in the proposed solution design and requirement constraints. \\
+        CO5 & PO6, PO8 & Embeds ethical safeguards in debt collection through transparent reason codes, auditability, data privacy compliance, and fair escalation limits. \\
         \hline
-        CO6 & PO9, PO10 & Collaborates within the project team through structured Project Planning, milestone scheduling, and coordinated requirement consolidation across all chapters. \\
+        CO6 & PO9, PO10 & Demonstrates effective team collaboration through structured sprint planning, task partitioning, and synchronized system integration. \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
-\section{SDG -- Sustainable Development Goals mapping with project}
-
-Table \ref{tab:sdg_mapping} maps the relevance of the project to the United Nations Sustainable Development Goals.
-This alignment underscores our commitment to building technology that fosters economic growth and sustainable infrastructure.
-
-\vspace{0.5cm}
+\section{SDG -- Sustainable Development Goals Mapping with Project}
+Modern enterprise software must be evaluated not only on computational performance but also on its broader societal, economic, and institutional contributions. Table \ref{tab:sdg_mapping} outlines the alignment of ACIS-X with the United Nations Sustainable Development Goals (SDGs). By stabilizing working capital cash flows for B2B enterprises through predictive receivables intelligence, ACIS-X promotes commercial resilience and infrastructure innovation while actively discouraging predatory debt collection practices through transparent, policy-governed intervention tiers.
 
 \begin{table}[H]
     \centering
     \caption{Sustainable Development Goals (SDG) Mapping}\label{tab:sdg_mapping}
-    \renewcommand{\arraystretch}{1.5}
-    \begin{tabular}{|c|p{4cm}|p{9cm}|}
+    \renewcommand{\arraystretch}{1.3}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|c|p{4.2cm}|p{9.5cm}|}
         \hline
         \textbf{SDG No.} & \textbf{Goal} & \textbf{Relevance to Project} \\
         \hline
-        SDG 8 & Decent Work and Economic Growth & Enhances business productivity and financial stability by optimizing accounts receivable and mitigating credit defaults. \\
+        SDG 8 & Decent Work and Economic Growth & Enhances commercial liquidity and enterprise financial resilience by automating receivables monitoring and reducing bad-debt write-offs. \\
         \hline
-        SDG 9 & Industry, Innovation and Infrastructure & Utilizes distributed streaming, scalable microservices, and AI models to develop an innovative financial tracking infrastructure. \\
+        SDG 9 & Industry, Innovation and Infrastructure & Implements distributed event streaming, microservices orchestration, and applied machine learning to modernize financial IT infrastructure. \\
         \hline
-        SDG 12 & Responsible Consumption and Production & Promotes responsible and transparent collection practices by avoiding blind outreach and utilizing targeted, risk-aware escalation. \\
+        SDG 12 & Responsible Consumption and Production & Fosters ethical and transparent debt recovery practices by replacing blind outreach with explainable, risk-proportionate collections workflows. \\
         \hline
-        SDG 4 & Quality Education & Helps in understanding complex topics such as event-driven architecture, data engineering, and applied AI through practical implementation. \\
+        SDG 4 & Quality Education & Demonstrates practical engineering synthesis of event-driven architectures, predictive modeling, and autonomous self-healing distributed systems. \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
 \section{SWOT Analysis}
+A structured SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis evaluates the internal technical maturity of the ACIS-X platform alongside external environmental and operational opportunities. The system's internal architecture benefits from event-driven decoupling, multi-signal feature fusion, and autonomous runtime recovery. Conversely, operational adoption requires addressing developmental dependencies on synthetic simulation suites and cold-start prediction scenarios. Table \ref{tab:swot_analysis} details the four quadrants of the strategic analysis.
 
-\subsection{Strengths}
-\begin{itemize}[itemsep=2pt]
-    \item Highly scalable and decoupled event-driven architecture using Apache Kafka.
-    \item Real-time computation of customer risk profiles and continuous longitudinal monitoring.
-    \item Seamless integration of internal metrics and external enrichment data (e.g., market/litigation signals).
-    \item Robust fault tolerance with explicit dead-letter queues and self-healing agent pipelines.
-\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{SWOT Analysis Matrix of ACIS-X}\label{tab:swot_analysis}
+    \renewcommand{\arraystretch}{1.2}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|p{7.3cm}|p{7.3cm}|}
+        \hline
+        \textbf{Strengths} & \textbf{Weaknesses} \\
+        \hline
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Highly scalable, decoupled event-driven architecture powered by Apache Kafka message streaming.
+            \item Real-time computation of customer risk profiles with continuous longitudinal behavior tracking.
+            \item Seamless fusion of internal transaction metrics and external intelligence (litigation, market signals).
+            \item Robust fault tolerance with dead-letter queue isolation, circuit breakers, and automated self-healing.
+        \end{itemize}
+        &
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Reliance on simulated transaction data feeds during development rather than direct live ERP streams.
+            \item Cold-start limitations for newly onboarded clients lacking historical transaction depth for risk baselines.
+            \item Operational overhead associated with deploying and monitoring multiple distributed agent microservices.
+        \end{itemize}
+        \\[2pt]
+        \hline
+        \textbf{Opportunities} & \textbf{Threats} \\
+        \hline
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Native API integration connectors for major enterprise ERP platforms (SAP, Oracle NetSuite, Dynamics).
+            \item Incorporation of deep learning architectures (e.g., temporal transformers) for dynamic payment delay prediction.
+            \item Autonomous triggering of multi-channel customer outreach (email, SMS, debtor portal) based on policy rules.
+            \item Federated risk benchmarking across industry verticals while preserving enterprise data confidentiality.
+        \end{itemize}
+        &
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Strict data privacy and financial compliance regulations concerning external litigation and debtor data.
+            \item Upstream schema changes by external data providers impacting intelligence extraction scrapers.
+            \item Network latency and message synchronization delays in resource-constrained deployment environments.
+            \item Unforeseen macroeconomic shocks distorting historical payment behavior assumptions.
+        \end{itemize}
+        \\[2pt]
+        \hline
+    \end{tabular}
+    }
+\end{table}
 
-\subsection{Weaknesses}
-\begin{itemize}[itemsep=2pt]
-    \item High dependency on simulated scenarios during testing phases rather than direct live commercial ERP streams.
-    \item Cold start challenges where newly acquired business clients lack historical invoice depth for confident initial risk baselines.
-    \item Complex deployment architecture requiring careful orchestration across multiple interconnected heuristic nodes.
-\end{itemize}
+\clearpage
+\phantomsection
+\chapter*{ANNEXURE B}
+\addcontentsline{toc}{chapter}{ANNEXURE B}
+\renewcommand{\thesection}{B.\arabic{section}}
+\renewcommand{\theHsection}{AnnexB.\arabic{section}}
+\setcounter{section}{0}
 
-\subsection{Opportunities}
-\begin{itemize}[itemsep=2pt]
-    \item Native API integration into major enterprise ERP systems (SAP, Oracle, NetSuite) for direct data ingestion.
-    \item Expansion of the analytical layer to incorporate more sophisticated deep-learning architectures for dynamic payment prediction.
-    \item Autonomous triggering of external communication gateways (e.g., automated email, SMS reminders) based directly on policy thresholds.
-\end{itemize}
+\section{Code Snippet}
+The following listing demonstrates the core bootstrap and multi-process supervisor pipeline of ACIS-X (\texttt{run\_acis.py}). The script manages Kafka topic initialization, consumer group offset resets, child process spawning with dynamic sentinel injection for \texttt{QueryAgent}, and runtime fault detection with automated self-healing restarts.
 
-\subsection{Threats}
-\begin{itemize}[itemsep=2pt]
-    \item Strict data privacy laws and compliance regulations concerning the handling of external litigation and core financial data.
-    \item Structural API changes in external enrichment providers causing parsing degradation in the intelligence agents.
-    \item Heightened latency and message synchronization issues in constrained, unstable network environments.
-\end{itemize}
+\begin{lstlisting}[language=Python, basicstyle=\fontfamily{qcr}\fontsize{10pt}{8.5pt}\selectfont, basewidth=0.52em, xleftmargin=20pt, xrightmargin=10pt, caption={ACIS-X Multi-Agent Runtime Bootstrap and Supervisor Implementation (run\_acis.py)}]
+class _JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        entry = {"ts": self.formatTime(record), "level": record.levelname, "logger": record.name, "msg": record.getMessage()}
+        if record.exc_info and record.exc_info[0]:
+            entry["exc"] = self.formatException(record.exc_info)
+        for k in ("agent_name", "event_type", "customer_id"):
+            if hasattr(record, k):
+                entry[k] = getattr(record, k)
+        return json.dumps(entry, default=str)
+
+_setup_logging()
+logger = logging.getLogger("run_acis")
+
+def _bootstrap_servers() -> List[str]:
+    return [s.strip() for s in os.getenv("ACIS_KAFKA_BOOTSTRAP_SERVERS", "localhost:9092").split(",") if s.strip()]
+
+def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
+    from config.settings import get_settings
+    s = get_settings()
+    config = KafkaConfig(
+        bootstrap_servers=_bootstrap_servers(),
+        consumer_auto_offset_reset=auto_offset_reset,
+        security_protocol=s.kafka_security_protocol or "PLAINTEXT",
+        sasl_mechanism=s.kafka_sasl_mechanism,
+        sasl_username=s.kafka_sasl_username,
+        sasl_password=s.kafka_sasl_password,
+    )
+    return KafkaClient(config=config, backend=os.getenv("ACIS_KAFKA_BACKEND", "kafka-python"))
+
+def _create_topics() -> Dict[str, bool]:
+    try:
+        from config.settings import get_settings
+        s = get_settings()
+        admin = TopicAdmin(
+            bootstrap_servers=_bootstrap_servers(), backend=os.getenv("ACIS_KAFKA_BACKEND", "kafka-python"),
+            security_protocol=s.kafka_security_protocol or "PLAINTEXT", sasl_mechanism=s.kafka_sasl_mechanism,
+            sasl_username=s.kafka_sasl_username, sasl_password=s.kafka_sasl_password,
+        )
+        try:
+            return admin.create_all_acis_topics()
+        finally:
+            admin.close()
+    except Exception as e:
+        logger.warning("Topic initialization skipped: %s", e)
+        return {}
+
+def launch_agent(agent_class: type, kwargs: Dict[str, Any]) -> None:
+    try:
+        offset_reset = getattr(agent_class, "OFFSET_RESET", "latest")
+        kwargs["kafka_client"] = _build_kafka_client(auto_offset_reset=offset_reset)
+        agent = agent_class(**kwargs)
+        agent_name = getattr(agent, "agent_name", agent_class.__name__)
+
+        if isinstance(agent, QueryAgent) and hasattr(agent, "set_memory_agent"):
+            agent.set_memory_agent(True)  
+
+        def _handle_sigterm(signum: int, frame: Any) -> None:
+            logger.info("[%s] Received SIGTERM, stopping...", agent_name)
+            agent.stop()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, _handle_sigterm)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        agent.start()
+        while getattr(agent, "_running", True):
+            time.sleep(1)
+        agent.stop()
+    except Exception as e:
+        logger.error("Fatal error in agent process %s: %s", agent_class.__name__, e, exc_info=True)
+        sys.exit(1)
+
+def _build_components(supervisor_client: Any = None) -> List[Tuple[type, Dict[str, Any]]]:
+    gen_interval = float(os.getenv("ACIS_GENERATION_INTERVAL", "20.0"))
+    return [
+        (RegistryService, {}),
+        (QueryAgent, {}), (MemoryAgent, {}), (DBAgent, {}),
+        (CustomerStateAgent, {}), (OverdueDetectionAgent, {}), (CollectionsAgent, {}), (AggregatorAgent, {}),
+        (MonitoringAgent, {}), (SelfHealingAgent, {"supervisor": supervisor_client} if supervisor_client else {}),
+        (RuntimeManager, {}), (PlacementEngine, {}), (TimeTickAgent, {}), (DLQMonitorAgent, {}),
+        (ExternalDataAgent, {}), (ExternalScrapingAgent, {}),
+        (PaymentPredictionAgent, {}), (RiskScoringAgent, {}), (CustomerProfileAgent, {}), (ModelGovernanceAgent, {}),
+        (ScenarioGeneratorAgent, {"generation_interval_seconds": gen_interval}),
+    ]
+
+def main() -> None:
+    _create_topics()
+    _reset_consumer_groups(_bootstrap_servers())
+
+    manager = multiprocessing.Manager()
+    shared_dict = manager.dict({"restart_requests": []})
+    supervisor_client = SupervisorClient(shared_dict)
+    supervisor = AgentSupervisor(launch_fn=launch_agent)
+
+    agent_specs = _build_components(supervisor_client)
+    shutdown_requested = False
+
+    def _request_shutdown(signum: int, frame: Any) -> None:
+        nonlocal shutdown_requested
+        logger.info("\n>>> Received shutdown signal (%s), terminating components...", signum)
+        shutdown_requested = True
+
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGTERM, _request_shutdown)
+
+    for agent_class, kwargs in agent_specs:
+        name = agent_class.__name__
+        p = multiprocessing.Process(target=launch_agent, args=(agent_class, kwargs), name=name)
+        p.start()
+        supervisor.register(name, p, agent_class, kwargs)
+        logger.info("Started process for %s (PID: %d)", name, p.pid)
+
+    logger.info("ACIS-X Runtime Bootstrap Complete. System operational.")
+    process_reg = {p.name: p for p in supervisor.all_processes() if p is not None}
+    start_health_server(port=int(os.getenv("ACIS_HEALTH_PORT", "9090")), process_registry=process_reg)
+
+    try:
+        while not shutdown_requested:
+            requests = shared_dict.get("restart_requests", [])
+            if requests:
+                shared_dict["restart_requests"] = []
+                for agent_name in requests:
+                    logger.info("Restart request received for %s from SelfHealingAgent", agent_name)
+                    supervisor.restart_agent(agent_name)
+
+            for p in supervisor.all_processes():
+                if p and not p.is_alive() and p.exitcode not in (0, None):
+                    logger.warning("Process %s died unexpectedly (code %d). Restarting...", p.name, p.exitcode)
+                    supervisor.restart_agent(p.name)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        shutdown_requested = True
+
+    logger.info(">>> Shutting down ACIS-X multi-process agent pipeline...")
+    for p in supervisor.all_processes():
+        if p and p.is_alive(): p.terminate()
+    end_time = time.time() + 10
+    for p in supervisor.all_processes():
+        if p and p.is_alive():
+            p.join(timeout=max(0, end_time - time.time()))
+            if p.is_alive(): p.kill()
+    logger.info(">>> ACIS-X shutdown complete.")
+
+if __name__ == "__main__":
+    main()
+
+\end{lstlisting}
 
 \clearpage
 
-\phantomsection
-\addcontentsline{toc}{section}{ANNEXURE B --- Conference Paper Acceptance Letter}
-\begin{center}
-    {\large\bfseries ANNEXURE B}\\[4pt]
-    {\normalsize\bfseries Conference Paper Acceptance Letter}
-\end{center}
-\renewcommand{\thesection}{B.\arabic{section}}
-\setcounter{section}{0}
-
+\section{Conference Paper Acceptance Letter}
 \vspace{0.5em}
 \begin{center}
     \includegraphics[page=1, width=\textwidth, height=0.80\textheight, keepaspectratio]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
 \end{center}
 
-\includepdf[pages=2-, width=\textwidth, pagecommand={\thispagestyle{fancy}}]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
+\includepdf[pages=1, width=\textwidth, pagecommand={\thispagestyle{fancy}}]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
+
 
 \clearpage
 \renewcommand{\bibname}{REFERENCES}
