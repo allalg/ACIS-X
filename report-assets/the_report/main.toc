@@ -12,73 +12,71 @@
 \contentsline {section}{\numberline {1.4}Organization of the Report}{4}{section.1.4}%
 \contentsline {chapter}{\numberline {2}LITERATURE SURVEY}{7}{chapter.2}%
 \contentsline {section}{\numberline {2.1}Introduction}{7}{section.2.1}%
-\contentsline {section}{\numberline {2.2}Objective of Literature Survey}{9}{section.2.2}%
-\contentsline {section}{\numberline {2.3}Summary of Literature Survey}{10}{section.2.3}%
-\contentsline {subsection}{\numberline {2.3.1}Scalability and Real-Time Detection Challenges}{16}{subsection.2.3.1}%
-\contentsline {section}{\numberline {2.4}Drawbacks of Existing Systems}{17}{section.2.4}%
-\contentsline {section}{\numberline {2.5}Problem Statement}{18}{section.2.5}%
-\contentsline {section}{\numberline {2.6}Proposed Solution}{20}{section.2.6}%
-\contentsline {subsection}{\numberline {2.6.1}Event and State Intelligence Layer}{20}{subsection.2.6.1}%
-\contentsline {subsection}{\numberline {2.6.2}Risk and Policy Intelligence Layer}{21}{subsection.2.6.2}%
-\contentsline {subsection}{\numberline {2.6.3}Real-Time Actioning and Monitoring Layer}{22}{subsection.2.6.3}%
-\contentsline {chapter}{\numberline {3}REQUIREMENT ENGINEERING}{24}{chapter.3}%
-\contentsline {section}{\numberline {3.1}Software and Hardware Tools Used}{24}{section.3.1}%
-\contentsline {subsection}{\numberline {3.1.1}Software Requirements}{24}{subsection.3.1.1}%
-\contentsline {subsection}{\numberline {3.1.2}Hardware Requirements}{25}{subsection.3.1.2}%
-\contentsline {section}{\numberline {3.2}Conceptual/Analysis Modeling}{25}{section.3.2}%
-\contentsline {subsection}{\numberline {3.2.1}Use Case Diagram}{25}{subsection.3.2.1}%
-\contentsline {subsection}{\numberline {3.2.2}Sequence Diagram}{26}{subsection.3.2.2}%
-\contentsline {subsection}{\numberline {3.2.3}Activity Diagram}{27}{subsection.3.2.3}%
-\contentsline {subsection}{\numberline {3.2.4}State Chart Diagram}{28}{subsection.3.2.4}%
-\contentsline {section}{\numberline {3.3}Software Requirement Specification}{29}{section.3.3}%
-\contentsline {subsection}{\numberline {3.3.1}Functional Requirements}{29}{subsection.3.3.1}%
-\contentsline {subsection}{\numberline {3.3.2}Non-Functional Requirements}{29}{subsection.3.3.2}%
-\contentsline {chapter}{\numberline {4}PROJECT PLANNING}{30}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Project Planning}{30}{section.4.1}%
-\contentsline {subsection}{\numberline {4.1.1}Scheduling}{31}{subsection.4.1.1}%
-\contentsline {chapter}{\numberline {5}SYSTEM DESIGN}{33}{chapter.5}%
-\contentsline {section}{\numberline {5.1}System Architecture}{33}{section.5.1}%
-\contentsline {section}{\numberline {5.2}Component Design / Module Decomposition}{34}{section.5.2}%
-\contentsline {section}{\numberline {5.3}Interface Design}{37}{section.5.3}%
-\contentsline {section}{\numberline {5.4}Data Structure Design}{39}{section.5.4}%
-\contentsline {section}{\numberline {5.5}Algorithm Design}{40}{section.5.5}%
-\contentsline {subsection}{\numberline {5.5.1}Event Ingestion and Persistence Algorithm}{40}{subsection.5.5.1}%
-\contentsline {subsection}{\numberline {5.5.2}Customer Metrics Computation Algorithm}{41}{subsection.5.5.2}%
-\contentsline {subsection}{\numberline {5.5.3}External Enrichment and Risk Aggregation Algorithm}{41}{subsection.5.5.3}%
-\contentsline {subsection}{\numberline {5.5.4}Payment Prediction and Final Risk Scoring Algorithm}{41}{subsection.5.5.4}%
-\contentsline {subsection}{\numberline {5.5.5}Collections Action and Self-Healing Algorithm}{42}{subsection.5.5.5}%
-\contentsline {chapter}{\numberline {6}IMPLEMENTATION}{43}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Implementation Approaches}{43}{section.6.1}%
-\contentsline {section}{\numberline {6.2}Code Snippets}{46}{section.6.2}%
-\contentsline {subsection}{\numberline {6.2.1}Event Ingestion and State Management Module}{46}{subsection.6.2.1}%
-\contentsline {subsection}{\numberline {6.2.2}Machine Learning Model Training and Inference Module}{47}{subsection.6.2.2}%
-\contentsline {subsection}{\numberline {6.2.3}Macroeconomic Stress Testing and Scenario Simulation Module}{48}{subsection.6.2.3}%
-\contentsline {subsection}{\numberline {6.2.4}Autonomous Self-Healing and Model Governance Module}{48}{subsection.6.2.4}%
-\contentsline {chapter}{\numberline {7}TESTING}{50}{chapter.7}%
-\contentsline {section}{\numberline {7.1}Testing Approach}{50}{section.7.1}%
-\contentsline {section}{\numberline {7.2}Definition and Types of Testing}{51}{section.7.2}%
-\contentsline {section}{\numberline {7.3}Test Case Analysis}{53}{section.7.3}%
-\contentsline {section}{\numberline {7.4}Test Cases for the Project}{54}{section.7.4}%
-\contentsline {section}{\numberline {7.5}Test Results Summary}{57}{section.7.5}%
-\contentsline {section}{\numberline {7.6}Testing Limitations}{59}{section.7.6}%
-\contentsline {chapter}{\numberline {8}RESULT AND DISCUSSION}{61}{chapter.8}%
-\contentsline {section}{\numberline {8.1}Result}{61}{section.8.1}%
-\contentsline {subsection}{\numberline {8.1.1}Pipeline Latency and Lifecycle Completion}{61}{subsection.8.1.1}%
-\contentsline {subsection}{\numberline {8.1.2}Risk Score Monotonicity}{62}{subsection.8.1.2}%
-\contentsline {subsection}{\numberline {8.1.3}Throughput Scaling with Replicas}{63}{subsection.8.1.3}%
-\contentsline {section}{\numberline {8.2}Discussion}{63}{section.8.2}%
-\contentsline {chapter}{\numberline {9}CONCLUSION, APPLICATIONS AND FUTURE SCOPE}{66}{chapter.9}%
-\contentsline {section}{\numberline {9.1}Conclusion}{66}{section.9.1}%
-\contentsline {section}{\numberline {9.2}Applications}{67}{section.9.2}%
-\contentsline {section}{\numberline {9.3}Future Scope}{68}{section.9.3}%
-\contentsline {chapter}{ANNEXURE}{70}{appendix*.26}%
-\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{70}{section.Alph0.1}%
-\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{70}{subsection.Alph0.1.1}%
-\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{73}{section.Alph0.2}%
-\contentsline {section}{\numberline {A.3}SWOT Analysis}{73}{section.Alph0.3}%
-\contentsline {subsection}{\numberline {A.3.1}Strengths}{73}{subsection.Alph0.3.1}%
-\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{74}{subsection.Alph0.3.2}%
-\contentsline {subsection}{\numberline {A.3.3}Opportunities}{74}{subsection.Alph0.3.3}%
-\contentsline {subsection}{\numberline {A.3.4}Threats}{74}{subsection.Alph0.3.4}%
-\contentsline {section}{ANNEXURE B --- Conference Paper Acceptance Letter}{75}{section*.31}%
-\contentsline {chapter}{REFERENCES}{77}{section*.31}%
+\contentsline {section}{\numberline {2.2}Objective of Literature Survey}{8}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Summary of Literature Survey}{8}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Scalability and Real-Time Detection Challenges}{12}{subsection.2.3.1}%
+\contentsline {section}{\numberline {2.4}Drawbacks of Existing Systems}{12}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Problem Statement}{13}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Proposed Solution}{13}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Event and State Intelligence Layer}{14}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Risk and Policy Intelligence Layer}{14}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Real-Time Actioning and Monitoring Layer}{14}{subsection.2.6.3}%
+\contentsline {chapter}{\numberline {3}REQUIREMENT ENGINEERING}{15}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Software and Hardware Tools Used}{15}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Software Requirements}{15}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Hardware Requirements}{16}{subsection.3.1.2}%
+\contentsline {section}{\numberline {3.2}Conceptual/Analysis Modeling}{16}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Use Case Diagram}{16}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Sequence Diagram}{17}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Activity Diagram}{18}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}State Chart Diagram}{19}{subsection.3.2.4}%
+\contentsline {section}{\numberline {3.3}Software Requirement Specification}{20}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Functional Requirements}{20}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Non-Functional Requirements}{20}{subsection.3.3.2}%
+\contentsline {chapter}{\numberline {4}PROJECT PLANNING}{21}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Project Planning}{21}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Scheduling}{22}{subsection.4.1.1}%
+\contentsline {chapter}{\numberline {5}SYSTEM DESIGN}{24}{chapter.5}%
+\contentsline {section}{\numberline {5.1}System Architecture}{24}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Component Design / Module Decomposition}{25}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Interface Design}{26}{section.5.3}%
+\contentsline {section}{\numberline {5.4}Data Structure Design}{28}{section.5.4}%
+\contentsline {section}{\numberline {5.5}Algorithm Design}{29}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}Event Ingestion and Persistence Algorithm}{29}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}Payment Prediction and Final Risk Scoring Algorithm}{30}{subsection.5.5.2}%
+\contentsline {subsection}{\numberline {5.5.3}Collections Action and Self-Healing Algorithm}{30}{subsection.5.5.3}%
+\contentsline {chapter}{\numberline {6}IMPLEMENTATION}{31}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Implementation Approaches}{31}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Code Snippets}{34}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Event Ingestion and State Management Module}{34}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Machine Learning Model Training and Inference Module}{35}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}Macroeconomic Stress Testing and Scenario Simulation Module}{35}{subsection.6.2.3}%
+\contentsline {subsection}{\numberline {6.2.4}Autonomous Self-Healing and Model Governance Module}{36}{subsection.6.2.4}%
+\contentsline {chapter}{\numberline {7}TESTING}{37}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Testing Approach}{37}{section.7.1}%
+\contentsline {section}{\numberline {7.2}Definition and Types of Testing}{37}{section.7.2}%
+\contentsline {section}{\numberline {7.3}Test Case Analysis}{39}{section.7.3}%
+\contentsline {section}{\numberline {7.4}Test Cases for the Project}{39}{section.7.4}%
+\contentsline {section}{\numberline {7.5}Test Results Summary}{42}{section.7.5}%
+\contentsline {section}{\numberline {7.6}Testing Limitations}{43}{section.7.6}%
+\contentsline {chapter}{\numberline {8}RESULT AND DISCUSSION}{44}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Result}{44}{section.8.1}%
+\contentsline {subsection}{\numberline {8.1.1}Pipeline Latency and Lifecycle Completion}{44}{subsection.8.1.1}%
+\contentsline {subsection}{\numberline {8.1.2}Risk Score Monotonicity}{45}{subsection.8.1.2}%
+\contentsline {subsection}{\numberline {8.1.3}Throughput Scaling with Replicas}{46}{subsection.8.1.3}%
+\contentsline {section}{\numberline {8.2}Discussion}{46}{section.8.2}%
+\contentsline {chapter}{\numberline {9}CONCLUSION, APPLICATIONS AND FUTURE SCOPE}{49}{chapter.9}%
+\contentsline {section}{\numberline {9.1}Conclusion}{49}{section.9.1}%
+\contentsline {section}{\numberline {9.2}Applications}{50}{section.9.2}%
+\contentsline {section}{\numberline {9.3}Future Scope}{51}{section.9.3}%
+\contentsline {chapter}{ANNEXURE}{53}{appendix*.21}%
+\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{53}{section.Alph0.1}%
+\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{53}{subsection.Alph0.1.1}%
+\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{56}{section.Alph0.2}%
+\contentsline {section}{\numberline {A.3}SWOT Analysis}{56}{section.Alph0.3}%
+\contentsline {subsection}{\numberline {A.3.1}Strengths}{56}{subsection.Alph0.3.1}%
+\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{57}{subsection.Alph0.3.2}%
+\contentsline {subsection}{\numberline {A.3.3}Opportunities}{57}{subsection.Alph0.3.3}%
+\contentsline {subsection}{\numberline {A.3.4}Threats}{57}{subsection.Alph0.3.4}%
+\contentsline {section}{ANNEXURE B --- Conference Paper Acceptance Letter}{58}{section*.26}%
+\contentsline {chapter}{REFERENCES}{60}{section*.26}%
