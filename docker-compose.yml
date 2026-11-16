@@ -119,6 +119,7 @@ services:
       ACIS_DB_PATH: /data/acis.db
       ACIS_LOG_PATH: /data/acis.log
       ACIS_OFFSET_RESET: latest
+      GROQ_API_KEY: ${GROQ_API_KEY}
     volumes:
       - ./:/app
       - acis-data:/data

@@ -973,7 +973,7 @@ class ExternalScrapingAgent(BaseAgent):
         system_prompt = "You are a financial risk intelligence system. Extract structured risk signals about a company from news articles. Be precise and avoid false positives."
         
         data = {
-            "model": "llama-3.3-70b-versatile",
+            "model": "qwen/qwen3.8-27b",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}

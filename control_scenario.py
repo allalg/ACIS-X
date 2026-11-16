@@ -1,8 +1,31 @@
 import sys
 import json
+import os
 import uuid
 from datetime import datetime, timezone
-from confluent_kafka import Producer
+
+# Load .env if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+BOOTSTRAP_SERVERS = os.environ.get("ACIS_KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+BACKEND = os.environ.get("ACIS_KAFKA_BACKEND", "kafka-python")
+
+
+def _make_producer():
+    if BACKEND == "confluent":
+        from confluent_kafka import Producer as ConfluentProducer
+        return "confluent", ConfluentProducer({"bootstrap.servers": BOOTSTRAP_SERVERS})
+    else:
+        from kafka import KafkaProducer
+        return "kafka-python", KafkaProducer(
+            bootstrap_servers=BOOTSTRAP_SERVERS.split(","),
+            value_serializer=lambda v: v,
+        )
+
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] not in ("pause", "resume"):
@@ -12,10 +35,7 @@ def main():
     action = sys.argv[1]
     event_type = f"scenario.{action}"
 
-    producer_config = {
-        "bootstrap.servers": "localhost:9092",
-    }
-    producer = Producer(producer_config)
+    backend, producer = _make_producer()
 
     event = {
         "event_id": f"evt_{uuid.uuid4().hex}",
@@ -29,14 +49,20 @@ def main():
         "metadata": {}
     }
 
+    payload = json.dumps(event).encode("utf-8")
+
     try:
-        producer.produce(
-            topic="acis.control",
-            key="scenario_generator",
-            value=json.dumps(event).encode("utf-8")
-        )
-        producer.flush()
-        print(f"Successfully published '{event_type}' control event to Kafka topic 'acis.control'")
+        if backend == "confluent":
+            producer.produce(
+                topic="acis.control",
+                key="scenario_generator",
+                value=payload,
+            )
+            producer.flush()
+        else:
+            producer.send("acis.control", key=b"scenario_generator", value=payload)
+            producer.flush()
+        print(f"[{backend}] Successfully published '{event_type}' control event to Kafka topic 'acis.control'")
     except Exception as e:
         print(f"Failed to publish control event: {e}")
         sys.exit(1)
