@@ -69,14 +69,12 @@
 \contentsline {section}{\numberline {9.1}Conclusion}{49}{section.9.1}%
 \contentsline {section}{\numberline {9.2}Applications}{50}{section.9.2}%
 \contentsline {section}{\numberline {9.3}Future Scope}{51}{section.9.3}%
-\contentsline {chapter}{ANNEXURE}{53}{appendix*.21}%
-\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{53}{section.Alph0.1}%
-\contentsline {subsection}{\numberline {A.1.1}Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}{53}{subsection.Alph0.1.1}%
-\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals mapping with project}{56}{section.Alph0.2}%
-\contentsline {section}{\numberline {A.3}SWOT Analysis}{56}{section.Alph0.3}%
-\contentsline {subsection}{\numberline {A.3.1}Strengths}{56}{subsection.Alph0.3.1}%
-\contentsline {subsection}{\numberline {A.3.2}Weaknesses}{57}{subsection.Alph0.3.2}%
-\contentsline {subsection}{\numberline {A.3.3}Opportunities}{57}{subsection.Alph0.3.3}%
-\contentsline {subsection}{\numberline {A.3.4}Threats}{57}{subsection.Alph0.3.4}%
-\contentsline {section}{ANNEXURE B --- Conference Paper Acceptance Letter}{58}{section*.26}%
-\contentsline {chapter}{REFERENCES}{60}{section*.26}%
+\contentsline {chapter}{ANNEXURE A}{53}{appendix*.21}%
+\contentsline {section}{\numberline {A.1}MAJOR PROJECT Mapping with CO and PO}{53}{section.AnnexA.1}%
+\contentsline {subsection}{\numberline {A.1.1}Strength of CO Mapping to PO/PSOs with Justification}{53}{subsection.AnnexA.1.1}%
+\contentsline {section}{\numberline {A.2}SDG -- Sustainable Development Goals Mapping with Project}{55}{section.AnnexA.2}%
+\contentsline {section}{\numberline {A.3}SWOT Analysis}{56}{section.AnnexA.3}%
+\contentsline {chapter}{ANNEXURE B}{58}{appendix*.28}%
+\contentsline {section}{\numberline {B.1}Code Snippet}{58}{section.AnnexB.1}%
+\contentsline {section}{\numberline {B.2}Conference Paper Acceptance Letter}{62}{section.AnnexB.2}%
+\contentsline {chapter}{REFERENCES}{64}{section.AnnexB.2}%

@@ -585,7 +585,7 @@ This report follows the standardized project documentation structure while detai
     Compiles all cited academic publications, books, technical standards, and documentation resources in standard IEEE citation format.
     
     \item \textbf{Annexures} \\
-    Provides supplementary project documentation, including Annexure A (SWOT Analysis and Project Mapping with Course Outcomes and Program Outcomes) and Annexure B (Conference Paper Acceptance Letter).
+    Provides supplementary project documentation, including Annexure A (SWOT Analysis and Project Mapping with Course Outcomes and Program Outcomes) and Annexure B (Code Snippet and Conference Paper Acceptance Letter).
 \end{enumerate}
 
 
@@ -1619,21 +1619,21 @@ The current implementation establishes a functionally complete and architectural
 \appendix
 
 
-\chapter*{ANNEXURE}
-\addcontentsline{toc}{chapter}{ANNEXURE}
+\chapter*{ANNEXURE A}
+\addcontentsline{toc}{chapter}{ANNEXURE A}
 \renewcommand{\thesection}{A.\arabic{section}}
+\renewcommand{\theHsection}{AnnexA.\arabic{section}}
 \renewcommand{\thetable}{A.\arabic{table}}
 \setcounter{table}{0}
 \setcounter{section}{0}
 
 \section{MAJOR PROJECT Mapping with CO and PO}
-
-Table \ref{tab:co_statements} maps the course outcomes required for the major project. These outcomes are carefully structured to build both theoretical knowledge and hands-on engineering capabilities. By actively addressing complex technical challenges, the project fosters a deep understanding of modern distributed software architectures. Furthermore, the outcomes emphasize the critical importance of effective team collaboration and ethical considerations in software product development. Collectively, these objectives ensure that the final technical deliverable strictly adheres to the rigorous standards expected of a capstone engineering endeavor.
+The capstone engineering project provides a comprehensive platform for integrating theoretical computer science principles with practical systems engineering and professional design methodologies. Table \ref{tab:co_statements} presents the Course Outcomes (COs) defined for the major project. These outcomes are formulated to cultivate deep algorithmic problem-solving capabilities, foster proficiency in modern distributed technologies, encourage collaborative team development, and ensure rigorous adherence to ethical standards in software product delivery.
 
 \begin{table}[H]
     \centering
     \caption{Course Outcomes (CO) Statements}\label{tab:co_statements}
-    \renewcommand{\arraystretch}{1.2}
+    \renewcommand{\arraystretch}{1.25}
     \makebox[\textwidth][c]{
     \begin{tabular}{|c|p{12cm}|}
         \hline
@@ -1643,7 +1643,7 @@ Table \ref{tab:co_statements} maps the course outcomes required for the major pr
         \hline
         CO2 & To provide an opportunity to learn about new ideas and concepts \\
         \hline
-        CO3 & To improve written and verbal communication skills. \\
+        CO3 & To improve written and verbal communication skills \\
         \hline
         CO4 & To Analyze, Design and Evaluate Engineering System \\
         \hline
@@ -1655,15 +1655,13 @@ Table \ref{tab:co_statements} maps the course outcomes required for the major pr
     }
 \end{table}
 
-\subsection{Strength of CO MAddresses ethical considerations in automated collectionsapping to PO/PSOs with Justification}
-
-Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcomes and Program Outcomes. This comprehensive mapping highlights how the project's technical execution fulfills the broader educational and professional engineering criteria. The numeric values indicate the degree to which each course outcome contributes to specific program goals, with a higher value representing a stronger correlation. By quantifying these relationships, the matrix provides a structured overview of the project's academic and practical alignment. This analytical approach ensures that the project not only solves complex architectural problems but also adheres strictly to established engineering guidelines.
-
+\subsection{Strength of CO Mapping to PO/PSOs with Justification}
+The correlation between Course Outcomes and Program Outcomes (POs/PSOs) is established using standard engineering accreditation rubrics: Level 3 indicates substantial (high) correlation, Level 2 indicates moderate (medium) correlation, and Level 1 indicates slight (low) correlation, with hyphens representing negligible linkage. Table \ref{tab:co_po_matrix} illustrates the mapping matrix across all project dimensions.
 
 \begin{table}[H]
     \centering
     \caption{CO-PO/PSO Mapping Matrix}\label{tab:co_po_matrix}
-    \renewcommand{\arraystretch}{1.3}
+    \renewcommand{\arraystretch}{1.25}
     \setlength{\tabcolsep}{4pt}
     \makebox[\textwidth][c]{
     \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
@@ -1688,110 +1686,275 @@ Table \ref{tab:co_po_matrix} maps the correlation strength between Course Outcom
     }
 \end{table}
 
-Table \ref{tab:co_po_justification} maps the justification for each mapping between Course Outcomes and Program Outcomes.
-This ensures compliance with engineering and professional standards.
-
-The justification matrix below illustrates how the implementation of ACIS-X systematically maps to core engineering competencies. In particular, the design of a decoupled, Kafka-driven architecture directly aligns with the program's requirement to analyze and construct complex, scalable systems. By decomposing the overarching problem into discrete, manageable layers—spanning from raw event ingestion to real-time collections actioning—the project demonstrates a rigorous translation of theoretical computer science principles into practical engineering solutions. This methodical approach not only validates the technical rigor of the system but also provides a clear trace from academic learning to industry-applicable skills in distributed computing and data streaming.
-
-Beyond the strictly technical achievements, the project fundamentally satisfies programmatic goals related to professional ethics, targeted communication, and collaborative teamwork. The implementation of transparent, reason-coded risk models explicitly addresses the ethical mandate for fairness and explainability in automated financial decisions. Furthermore, the meticulous project planning, continuous milestone tracking, and exhaustive documentation required to deliver this multi-agent prototype underscore the team's capacity to communicate complex architectural concepts effectively. 
+The mapping strength is grounded in the concrete architectural, algorithmic, and operational deliverables of the ACIS-X platform. From a systems perspective, implementing an asynchronous, event-driven multi-agent architecture using Apache Kafka, SQLite, and ensemble machine learning directly satisfies PO1 (Engineering Knowledge), PO2 (Problem Analysis), PO3 (Design/Development of Solutions), and PO5 (Modern Tool Usage). Organizationally, establishing milestone schedules, sprint planning, and thorough documentation satisfies PO9 (Individual and Team Work) and PO10 (Communication). Furthermore, incorporating explainable SHAP-based credit risk predictions and policy-governed collections outreach directly addresses PO8 (Ethics) and PO6 (The Engineer and Society). Table \ref{tab:co_po_justification} provides the detailed rationale for each mapping.
 
 \begin{table}[H]
     \centering
     \caption{Justification for CO-PO/PSO Mapping}\label{tab:co_po_justification}
-    \renewcommand{\arraystretch}{1.5}
-    \begin{tabular}{|c|c|p{10cm}|}
+    \renewcommand{\arraystretch}{1.3}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|c|c|p{11.5cm}|}
         \hline
         \textbf{CO} & \textbf{PO/PSO} & \textbf{Justification} \\
         \hline
-        CO1 & PO1, PO5 & Applies engineering knowledge to define event-driven architecture, Kafka-based orchestration, and multi-agent system design as detailed in the Introduction and System Design chapters. \\
+        CO1 & PO1, PO5 & Applies core engineering knowledge to formulate an asynchronous, Kafka-orchestrated multi-agent architecture for intelligent receivables monitoring. \\
         \hline
-        CO2 & PO2, PO4 & Analyzes existing credit-risk models and stream-processing frameworks in the Literature Survey, formulating risk-scoring and behavioral metric logic for the proposed solution. \\
+        CO2 & PO2, PO4 & Analyzes machine-learning credit risk scoring models and stream-processing architectures to design stateful behavioral customer metrics. \\
         \hline
-        CO3 & PO10 & Communicates system objectives, design rationale, and structured requirements through the report chapters, including the Introduction and Requirement Engineering documentation. \\
+        CO3 & PO10 & Communicates architectural trade-offs, interface specifications, and experimental validation results through structured technical documentation. \\
         \hline
-        CO4 & PO3, PO5 & Designs and evaluates system architecture, component decomposition, interface contracts, data structures, and algorithm specifications as covered in the System Design chapter. \\
+        CO4 & PO3, PO5 & Designs and evaluates system architecture, component contracts, streaming topologies, and automated recovery algorithms under operational constraints. \\
         \hline
-        CO5 & PO6, PO8 & Addresses ethical considerations in automated collections and responsible handling of sensitive financial data, reflected in the proposed solution design and requirement constraints. \\
+        CO5 & PO6, PO8 & Embeds ethical safeguards in debt collection through transparent reason codes, auditability, data privacy compliance, and fair escalation limits. \\
         \hline
-        CO6 & PO9, PO10 & Collaborates within the project team through structured Project Planning, milestone scheduling, and coordinated requirement consolidation across all chapters. \\
+        CO6 & PO9, PO10 & Demonstrates effective team collaboration through structured sprint planning, task partitioning, and synchronized system integration. \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
-\section{SDG -- Sustainable Development Goals mapping with project}
-
-Table \ref{tab:sdg_mapping} maps the relevance of the project to the United Nations Sustainable Development Goals.
-This alignment underscores our commitment to building technology that fosters economic growth and sustainable infrastructure.
-
-\vspace{0.5cm}
+\section{SDG -- Sustainable Development Goals Mapping with Project}
+Modern enterprise software must be evaluated not only on computational performance but also on its broader societal, economic, and institutional contributions. Table \ref{tab:sdg_mapping} outlines the alignment of ACIS-X with the United Nations Sustainable Development Goals (SDGs). By stabilizing working capital cash flows for B2B enterprises through predictive receivables intelligence, ACIS-X promotes commercial resilience and infrastructure innovation while actively discouraging predatory debt collection practices through transparent, policy-governed intervention tiers.
 
 \begin{table}[H]
     \centering
     \caption{Sustainable Development Goals (SDG) Mapping}\label{tab:sdg_mapping}
-    \renewcommand{\arraystretch}{1.5}
-    \begin{tabular}{|c|p{4cm}|p{9cm}|}
+    \renewcommand{\arraystretch}{1.3}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|c|p{4.2cm}|p{9.5cm}|}
         \hline
         \textbf{SDG No.} & \textbf{Goal} & \textbf{Relevance to Project} \\
         \hline
-        SDG 8 & Decent Work and Economic Growth & Enhances business productivity and financial stability by optimizing accounts receivable and mitigating credit defaults. \\
+        SDG 8 & Decent Work and Economic Growth & Enhances commercial liquidity and enterprise financial resilience by automating receivables monitoring and reducing bad-debt write-offs. \\
         \hline
-        SDG 9 & Industry, Innovation and Infrastructure & Utilizes distributed streaming, scalable microservices, and AI models to develop an innovative financial tracking infrastructure. \\
+        SDG 9 & Industry, Innovation and Infrastructure & Implements distributed event streaming, microservices orchestration, and applied machine learning to modernize financial IT infrastructure. \\
         \hline
-        SDG 12 & Responsible Consumption and Production & Promotes responsible and transparent collection practices by avoiding blind outreach and utilizing targeted, risk-aware escalation. \\
+        SDG 12 & Responsible Consumption and Production & Fosters ethical and transparent debt recovery practices by replacing blind outreach with explainable, risk-proportionate collections workflows. \\
         \hline
-        SDG 4 & Quality Education & Helps in understanding complex topics such as event-driven architecture, data engineering, and applied AI through practical implementation. \\
+        SDG 4 & Quality Education & Demonstrates practical engineering synthesis of event-driven architectures, predictive modeling, and autonomous self-healing distributed systems. \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
 \section{SWOT Analysis}
+A structured SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis evaluates the internal technical maturity of the ACIS-X platform alongside external environmental and operational opportunities. The system's internal architecture benefits from event-driven decoupling, multi-signal feature fusion, and autonomous runtime recovery. Conversely, operational adoption requires addressing developmental dependencies on synthetic simulation suites and cold-start prediction scenarios. Table \ref{tab:swot_analysis} details the four quadrants of the strategic analysis.
 
-\subsection{Strengths}
-\begin{itemize}[itemsep=2pt]
-    \item Highly scalable and decoupled event-driven architecture using Apache Kafka.
-    \item Real-time computation of customer risk profiles and continuous longitudinal monitoring.
-    \item Seamless integration of internal metrics and external enrichment data (e.g., market/litigation signals).
-    \item Robust fault tolerance with explicit dead-letter queues and self-healing agent pipelines.
-\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{SWOT Analysis Matrix of ACIS-X}\label{tab:swot_analysis}
+    \renewcommand{\arraystretch}{1.2}
+    \makebox[\textwidth][c]{
+    \begin{tabular}{|p{7.3cm}|p{7.3cm}|}
+        \hline
+        \textbf{Strengths} & \textbf{Weaknesses} \\
+        \hline
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Highly scalable, decoupled event-driven architecture powered by Apache Kafka message streaming.
+            \item Real-time computation of customer risk profiles with continuous longitudinal behavior tracking.
+            \item Seamless fusion of internal transaction metrics and external intelligence (litigation, market signals).
+            \item Robust fault tolerance with dead-letter queue isolation, circuit breakers, and automated self-healing.
+        \end{itemize}
+        &
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Reliance on simulated transaction data feeds during development rather than direct live ERP streams.
+            \item Cold-start limitations for newly onboarded clients lacking historical transaction depth for risk baselines.
+            \item Operational overhead associated with deploying and monitoring multiple distributed agent microservices.
+        \end{itemize}
+        \\[2pt]
+        \hline
+        \textbf{Opportunities} & \textbf{Threats} \\
+        \hline
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Native API integration connectors for major enterprise ERP platforms (SAP, Oracle NetSuite, Dynamics).
+            \item Incorporation of deep learning architectures (e.g., temporal transformers) for dynamic payment delay prediction.
+            \item Autonomous triggering of multi-channel customer outreach (email, SMS, debtor portal) based on policy rules.
+            \item Federated risk benchmarking across industry verticals while preserving enterprise data confidentiality.
+        \end{itemize}
+        &
+        \begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, partopsep=0pt]
+            \item Strict data privacy and financial compliance regulations concerning external litigation and debtor data.
+            \item Upstream schema changes by external data providers impacting intelligence extraction scrapers.
+            \item Network latency and message synchronization delays in resource-constrained deployment environments.
+            \item Unforeseen macroeconomic shocks distorting historical payment behavior assumptions.
+        \end{itemize}
+        \\[2pt]
+        \hline
+    \end{tabular}
+    }
+\end{table}
 
-\subsection{Weaknesses}
-\begin{itemize}[itemsep=2pt]
-    \item High dependency on simulated scenarios during testing phases rather than direct live commercial ERP streams.
-    \item Cold start challenges where newly acquired business clients lack historical invoice depth for confident initial risk baselines.
-    \item Complex deployment architecture requiring careful orchestration across multiple interconnected heuristic nodes.
-\end{itemize}
+\clearpage
+\phantomsection
+\chapter*{ANNEXURE B}
+\addcontentsline{toc}{chapter}{ANNEXURE B}
+\renewcommand{\thesection}{B.\arabic{section}}
+\renewcommand{\theHsection}{AnnexB.\arabic{section}}
+\setcounter{section}{0}
 
-\subsection{Opportunities}
-\begin{itemize}[itemsep=2pt]
-    \item Native API integration into major enterprise ERP systems (SAP, Oracle, NetSuite) for direct data ingestion.
-    \item Expansion of the analytical layer to incorporate more sophisticated deep-learning architectures for dynamic payment prediction.
-    \item Autonomous triggering of external communication gateways (e.g., automated email, SMS reminders) based directly on policy thresholds.
-\end{itemize}
+\section{Code Snippet}
+The following listing demonstrates the core bootstrap and multi-process supervisor pipeline of ACIS-X (\texttt{run\_acis.py}). The script manages Kafka topic initialization, consumer group offset resets, child process spawning with dynamic sentinel injection for \texttt{QueryAgent}, and runtime fault detection with automated self-healing restarts.
 
-\subsection{Threats}
-\begin{itemize}[itemsep=2pt]
-    \item Strict data privacy laws and compliance regulations concerning the handling of external litigation and core financial data.
-    \item Structural API changes in external enrichment providers causing parsing degradation in the intelligence agents.
-    \item Heightened latency and message synchronization issues in constrained, unstable network environments.
-\end{itemize}
+\begin{lstlisting}[language=Python, basicstyle=\fontfamily{qcr}\fontsize{10pt}{8.5pt}\selectfont, basewidth=0.52em, xleftmargin=20pt, xrightmargin=10pt, caption={ACIS-X Multi-Agent Runtime Bootstrap and Supervisor Implementation (run\_acis.py)}]
+class _JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        entry = {"ts": self.formatTime(record), "level": record.levelname, "logger": record.name, "msg": record.getMessage()}
+        if record.exc_info and record.exc_info[0]:
+            entry["exc"] = self.formatException(record.exc_info)
+        for k in ("agent_name", "event_type", "customer_id"):
+            if hasattr(record, k):
+                entry[k] = getattr(record, k)
+        return json.dumps(entry, default=str)
+
+_setup_logging()
+logger = logging.getLogger("run_acis")
+
+def _bootstrap_servers() -> List[str]:
+    return [s.strip() for s in os.getenv("ACIS_KAFKA_BOOTSTRAP_SERVERS", "localhost:9092").split(",") if s.strip()]
+
+def _build_kafka_client(auto_offset_reset: str = "earliest") -> KafkaClient:
+    from config.settings import get_settings
+    s = get_settings()
+    config = KafkaConfig(
+        bootstrap_servers=_bootstrap_servers(),
+        consumer_auto_offset_reset=auto_offset_reset,
+        security_protocol=s.kafka_security_protocol or "PLAINTEXT",
+        sasl_mechanism=s.kafka_sasl_mechanism,
+        sasl_username=s.kafka_sasl_username,
+        sasl_password=s.kafka_sasl_password,
+    )
+    return KafkaClient(config=config, backend=os.getenv("ACIS_KAFKA_BACKEND", "kafka-python"))
+
+def _create_topics() -> Dict[str, bool]:
+    try:
+        from config.settings import get_settings
+        s = get_settings()
+        admin = TopicAdmin(
+            bootstrap_servers=_bootstrap_servers(), backend=os.getenv("ACIS_KAFKA_BACKEND", "kafka-python"),
+            security_protocol=s.kafka_security_protocol or "PLAINTEXT", sasl_mechanism=s.kafka_sasl_mechanism,
+            sasl_username=s.kafka_sasl_username, sasl_password=s.kafka_sasl_password,
+        )
+        try:
+            return admin.create_all_acis_topics()
+        finally:
+            admin.close()
+    except Exception as e:
+        logger.warning("Topic initialization skipped: %s", e)
+        return {}
+
+def launch_agent(agent_class: type, kwargs: Dict[str, Any]) -> None:
+    try:
+        offset_reset = getattr(agent_class, "OFFSET_RESET", "latest")
+        kwargs["kafka_client"] = _build_kafka_client(auto_offset_reset=offset_reset)
+        agent = agent_class(**kwargs)
+        agent_name = getattr(agent, "agent_name", agent_class.__name__)
+
+        if isinstance(agent, QueryAgent) and hasattr(agent, "set_memory_agent"):
+            agent.set_memory_agent(True)  
+
+        def _handle_sigterm(signum: int, frame: Any) -> None:
+            logger.info("[%s] Received SIGTERM, stopping...", agent_name)
+            agent.stop()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, _handle_sigterm)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        agent.start()
+        while getattr(agent, "_running", True):
+            time.sleep(1)
+        agent.stop()
+    except Exception as e:
+        logger.error("Fatal error in agent process %s: %s", agent_class.__name__, e, exc_info=True)
+        sys.exit(1)
+
+def _build_components(supervisor_client: Any = None) -> List[Tuple[type, Dict[str, Any]]]:
+    gen_interval = float(os.getenv("ACIS_GENERATION_INTERVAL", "20.0"))
+    return [
+        (RegistryService, {}),
+        (QueryAgent, {}), (MemoryAgent, {}), (DBAgent, {}),
+        (CustomerStateAgent, {}), (OverdueDetectionAgent, {}), (CollectionsAgent, {}), (AggregatorAgent, {}),
+        (MonitoringAgent, {}), (SelfHealingAgent, {"supervisor": supervisor_client} if supervisor_client else {}),
+        (RuntimeManager, {}), (PlacementEngine, {}), (TimeTickAgent, {}), (DLQMonitorAgent, {}),
+        (ExternalDataAgent, {}), (ExternalScrapingAgent, {}),
+        (PaymentPredictionAgent, {}), (RiskScoringAgent, {}), (CustomerProfileAgent, {}), (ModelGovernanceAgent, {}),
+        (ScenarioGeneratorAgent, {"generation_interval_seconds": gen_interval}),
+    ]
+
+def main() -> None:
+    _create_topics()
+    _reset_consumer_groups(_bootstrap_servers())
+
+    manager = multiprocessing.Manager()
+    shared_dict = manager.dict({"restart_requests": []})
+    supervisor_client = SupervisorClient(shared_dict)
+    supervisor = AgentSupervisor(launch_fn=launch_agent)
+
+    agent_specs = _build_components(supervisor_client)
+    shutdown_requested = False
+
+    def _request_shutdown(signum: int, frame: Any) -> None:
+        nonlocal shutdown_requested
+        logger.info("\n>>> Received shutdown signal (%s), terminating components...", signum)
+        shutdown_requested = True
+
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGTERM, _request_shutdown)
+
+    for agent_class, kwargs in agent_specs:
+        name = agent_class.__name__
+        p = multiprocessing.Process(target=launch_agent, args=(agent_class, kwargs), name=name)
+        p.start()
+        supervisor.register(name, p, agent_class, kwargs)
+        logger.info("Started process for %s (PID: %d)", name, p.pid)
+
+    logger.info("ACIS-X Runtime Bootstrap Complete. System operational.")
+    process_reg = {p.name: p for p in supervisor.all_processes() if p is not None}
+    start_health_server(port=int(os.getenv("ACIS_HEALTH_PORT", "9090")), process_registry=process_reg)
+
+    try:
+        while not shutdown_requested:
+            requests = shared_dict.get("restart_requests", [])
+            if requests:
+                shared_dict["restart_requests"] = []
+                for agent_name in requests:
+                    logger.info("Restart request received for %s from SelfHealingAgent", agent_name)
+                    supervisor.restart_agent(agent_name)
+
+            for p in supervisor.all_processes():
+                if p and not p.is_alive() and p.exitcode not in (0, None):
+                    logger.warning("Process %s died unexpectedly (code %d). Restarting...", p.name, p.exitcode)
+                    supervisor.restart_agent(p.name)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        shutdown_requested = True
+
+    logger.info(">>> Shutting down ACIS-X multi-process agent pipeline...")
+    for p in supervisor.all_processes():
+        if p and p.is_alive(): p.terminate()
+    end_time = time.time() + 10
+    for p in supervisor.all_processes():
+        if p and p.is_alive():
+            p.join(timeout=max(0, end_time - time.time()))
+            if p.is_alive(): p.kill()
+    logger.info(">>> ACIS-X shutdown complete.")
+
+if __name__ == "__main__":
+    main()
+
+\end{lstlisting}
 
 \clearpage
 
-\phantomsection
-\addcontentsline{toc}{section}{ANNEXURE B --- Conference Paper Acceptance Letter}
-\begin{center}
-    {\large\bfseries ANNEXURE B}\\[4pt]
-    {\normalsize\bfseries Conference Paper Acceptance Letter}
-\end{center}
-\renewcommand{\thesection}{B.\arabic{section}}
-\setcounter{section}{0}
-
+\section{Conference Paper Acceptance Letter}
 \vspace{0.5em}
 \begin{center}
     \includegraphics[page=1, width=\textwidth, height=0.80\textheight, keepaspectratio]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
 \end{center}
 
 \includepdf[pages=2-, width=\textwidth, pagecommand={\thispagestyle{fancy}}]{../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf}
+
 
 \clearpage
 \renewcommand{\bibname}{REFERENCES}

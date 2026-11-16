@@ -441,7 +441,6 @@ INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/pub
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/tex-gyre/ts1-qtmr.tfm
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/enc/dvips/tex-gyre/q-ts1.enc
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Regular-tlf-t1.tfm
-INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Italic-tlf-t1.tfm
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Regular-tlf-t1.tfm
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Bold-tlf-t1.tfm
 INPUT ./images/use-case-diag.png
@@ -464,6 +463,7 @@ INPUT ./images/state-chart-diag.png
 INPUT ./images/state-chart-diag.png
 INPUT ./images/state-chart-diag.png
 INPUT ./images/state-chart-diag.png
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Italic-tlf-t1.tfm
 INPUT ./images/architecture-diag.png
 INPUT ./images/architecture-diag.png
 INPUT ./images/architecture-diag.png
@@ -539,6 +539,20 @@ INPUT ./images/chap8_img4.png
 INPUT ./images/chap8_img4.png
 INPUT ./images/chap8_img4.png
 INPUT ./images/chap8_img4.png
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/listings/lstlang1.sty
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/listings/lstlang1.sty
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/listings/lstlang1.sty
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/tex-gyre/t1qcr.fd
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/tex-gyre/t1qcr.fd
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/tex-gyre/t1qcr.fd
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/tex-gyre/ec-qcrr.tfm
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Regular-tlf-t1.tfm
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/newtx/ntx-Regular-tlf-t1.tfm
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/tex-gyre/ts1qcr.fd
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/tex-gyre/ts1qcr.fd
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/tex/latex/tex-gyre/ts1qcr.fd
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/tfm/public/tex-gyre/ts1-qcrr.tfm
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/enc/dvips/tex-gyre/q-ec.enc
 INPUT ../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf
 INPUT ../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf
 INPUT ../Gmail - ICCSDI 2026 – Paper Acceptance and Camera-Ready Submission.pdf
@@ -565,6 +579,7 @@ INPUT /Users/johangeorge/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jkn
 INPUT /Users/johangeorge/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1200.600pk
 INPUT /Users/johangeorge/Library/texlive/2026basic/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/type1/public/newtx/NewTXMI.pfb
+INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/type1/public/tex-gyre/qcrr.pfb
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/type1/public/tex-gyre/qtmr.pfb
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/type1/public/newtx/txexs.pfb
 INPUT /Users/johangeorge/.local/share/texlive/2026basic/texmf-dist/fonts/type1/public/newtx/txmiaX.pfb
