@@ -77,9 +77,12 @@ def start_health_server(
     _process_registry = process_registry
 
     def _serve() -> None:
-        server = HTTPServer(("0.0.0.0", port), _HealthHandler)
-        logger.info("Health server listening on http://0.0.0.0:%d/healthz", port)
-        server.serve_forever()
+        try:
+            server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+            logger.info("Health server listening on http://0.0.0.0:%d/healthz", port)
+            server.serve_forever()
+        except Exception as exc:
+            logger.warning("Could not bind health server on port %d: %s", port, exc)
 
     t = threading.Thread(target=_serve, daemon=True, name="health-server")
     t.start()
